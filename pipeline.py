@@ -40,14 +40,34 @@ from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 from duckduckgo_search import DDGS
 
+# max_retries + longer timeout: NVIDIA's free tier occasionally times out or
+# gets briefly overloaded. This makes CrewAI retry the call itself with
+# backoff instead of letting one slow moment kill the whole run.
 llm = LLM(
     model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
     api_key=NVIDIA_KEY,
     base_url="https://integrate.api.nvidia.com/v1",
-    timeout=120,
+    timeout=300,
+    max_retries=5,
 )
 
-test = llm.call("Reply with exactly one word: OK")
+# Belt-and-suspenders: also manually retry the initial connection test itself,
+# since a failure here should not silently kill the whole workflow before
+# the crew even starts.
+def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
+    last_error = None
+    for i in range(attempts):
+        try:
+            return llm_obj.call(prompt)
+        except Exception as e:
+            last_error = e
+            wait = base_delay * (i + 1)
+            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
+
+
+test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
 
 # ---------------------------------------------------------------------
