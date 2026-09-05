@@ -22,7 +22,8 @@ from PIL import Image, ImageDraw, ImageFont
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
 NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
-ELEVENLABS_KEY = os.environ["ELEVENLABS_API_KEY"]
+# ElevenLabs no longer used for voiceover — switched to Edge TTS (free, no API key,
+# no character limit). Left here only in case you ever want to switch back.
 
 # Write the two YouTube auth files to disk from secrets, so the rest of
 # the code can use them exactly like it did in Colab.
@@ -242,51 +243,25 @@ if not longform_script:
 print("Shorts script length:", len(shorts_script), "characters")
 print("Long-form script length:", len(longform_script), "characters")
 
-VOICE_ID = None  # resolved dynamically below, since hardcoded IDs can be library-only voices your plan can't use
+import edge_tts
+import asyncio
 
-
-def get_available_voice_id():
-    """Ask the account itself which voices it can actually use, rather than
-    guessing a hardcoded ID that might be a Voice Library voice blocked on free tier."""
-    resp = req.get(
-        "https://api.elevenlabs.io/v2/voices",
-        headers={"xi-api-key": ELEVENLABS_KEY},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    voices = resp.json().get("voices", [])
-    if not voices:
-        raise RuntimeError("No voices available on this ElevenLabs account at all — check the account in the dashboard.")
-    chosen = voices[0]
-    print(f"Using voice: {chosen.get('name')} ({chosen.get('voice_id')})")
-    return chosen["voice_id"]
-
-
-VOICE_ID = get_available_voice_id()
+VOICE_ID = "en-US-GuyNeural"  # deep, natural male voice — fits true crime/dark psychology tone
+# Other good options to try: "en-US-EricNeural" (calm), "en-GB-RyanNeural" (British), "en-US-AriaNeural" (female)
 
 
 def generate_voiceover(text, filename):
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
-    headers = {"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json"}
-    payload = {
-        "text": text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-    }
-    resp = req.post(url, headers=headers, json=payload, timeout=60)
-    if resp.status_code != 200:
-        raise RuntimeError(f"ElevenLabs error {resp.status_code}: {resp.text}")
-    with open(filename, "wb") as f:
-        f.write(resp.content)
-    print(f"Saved {filename} ({len(resp.content)} bytes)")
+    async def _run():
+        communicate = edge_tts.Communicate(text=text, voice=VOICE_ID)
+        await communicate.save(filename)
+
+    asyncio.run(_run())
+    size = os.path.getsize(filename)
+    print(f"Saved {filename} ({size} bytes) using Edge TTS voice '{VOICE_ID}'")
 
 
 generate_voiceover(shorts_script, "shorts_voiceover.mp3")
-# Long-form voiceover skipped for now — not used anywhere yet (no long-form video
-# assembly built), and free-tier ElevenLabs caps each request at 2,500 characters,
-# which the long-form script will likely exceed. Re-enable once long-form video
-# assembly exists and you're on a plan that supports longer requests.
-# generate_voiceover(longform_script, "longform_voiceover.mp3")
+generate_voiceover(longform_script, "longform_voiceover.mp3")
 
 # ---------------------------------------------------------------------
 # 6. Video assembly (images + captions + voiceover)
