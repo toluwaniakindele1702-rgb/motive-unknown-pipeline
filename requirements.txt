@@ -7,3 +7,4 @@ pillow
 google-auth-oauthlib
 google-api-python-client
 requests
+edge-tts
