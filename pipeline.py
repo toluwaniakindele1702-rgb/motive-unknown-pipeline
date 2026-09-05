@@ -242,7 +242,27 @@ if not longform_script:
 print("Shorts script length:", len(shorts_script), "characters")
 print("Long-form script length:", len(longform_script), "characters")
 
-VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
+VOICE_ID = None  # resolved dynamically below, since hardcoded IDs can be library-only voices your plan can't use
+
+
+def get_available_voice_id():
+    """Ask the account itself which voices it can actually use, rather than
+    guessing a hardcoded ID that might be a Voice Library voice blocked on free tier."""
+    resp = req.get(
+        "https://api.elevenlabs.io/v2/voices",
+        headers={"xi-api-key": ELEVENLABS_KEY},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    voices = resp.json().get("voices", [])
+    if not voices:
+        raise RuntimeError("No voices available on this ElevenLabs account at all — check the account in the dashboard.")
+    chosen = voices[0]
+    print(f"Using voice: {chosen.get('name')} ({chosen.get('voice_id')})")
+    return chosen["voice_id"]
+
+
+VOICE_ID = get_available_voice_id()
 
 
 def generate_voiceover(text, filename):
