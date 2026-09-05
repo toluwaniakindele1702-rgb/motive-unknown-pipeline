@@ -282,7 +282,11 @@ def generate_voiceover(text, filename):
 
 
 generate_voiceover(shorts_script, "shorts_voiceover.mp3")
-generate_voiceover(longform_script, "longform_voiceover.mp3")
+# Long-form voiceover skipped for now — not used anywhere yet (no long-form video
+# assembly built), and free-tier ElevenLabs caps each request at 2,500 characters,
+# which the long-form script will likely exceed. Re-enable once long-form video
+# assembly exists and you're on a plan that supports longer requests.
+# generate_voiceover(longform_script, "longform_voiceover.mp3")
 
 # ---------------------------------------------------------------------
 # 6. Video assembly (images + captions + voiceover)
