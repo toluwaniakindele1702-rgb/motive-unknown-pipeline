@@ -174,9 +174,11 @@ research_task = Task(
 script_task = Task(
     description=(
         "Using the research, write two scripts.\n\n"
-        "IMPORTANT: Output ONLY the actual finished scripts. Do NOT repeat, "
-        "paraphrase, or describe these instructions back. Do NOT explain what "
-        "you're about to write — just write it.\n\n"
+        "CRITICAL: This is a fully automated pipeline. There is no human available "
+        "to answer questions, confirm details, or pick from options. You must decide "
+        "everything yourself and output the finished scripts directly, right now, in "
+        "this response. Never ask a question. Never say 'let me know' or offer choices. "
+        "Never describe what you are about to write — just write it.\n\n"
         "Write in short, punchy sentences for AI voiceover pacing.\n\n"
         "First, write a header line: SHORTS SCRIPT\n"
         "Then write the actual 60-second script as a numbered list of timed lines, "
@@ -192,7 +194,7 @@ script_task = Task(
     ),
     expected_output=(
         "The literal finished text of both scripts under their header lines — "
-        "not a description of what the scripts should contain."
+        "not a description of what the scripts should contain, and not a question."
     ),
     agent=scriptwriter,
     context=[research_task],
@@ -257,14 +259,19 @@ if not longform_script:
 print("Shorts script length:", len(shorts_script), "characters")
 print("Long-form script length:", len(longform_script), "characters")
 
-# Safety check: if the model echoed the instructions back instead of writing a
-# real script, stop here with a clear error instead of silently uploading garbage.
-red_flags = ["timestamp headers", "hard hook", "150-170 words", "900-1100 words", "do not repeat"]
+# Safety check: if the model echoed instructions, asked a question, or hedged
+# instead of writing an actual script, stop here with a clear error instead of
+# silently uploading garbage.
+red_flags = [
+    "timestamp headers", "hard hook", "150-170 words", "900-1100 words", "do not repeat",
+    "let me know", "i can suggest", "please provide", "would you like", "just let me know",
+    "or i can", "which would you", "should i",
+]
 lowered = shorts_script.lower()
-if any(flag in lowered for flag in red_flags) or len(shorts_script) < 50:
+if any(flag in lowered for flag in red_flags) or "?" in shorts_script or len(shorts_script) < 50:
     raise RuntimeError(
-        "The Scriptwriter agent appears to have echoed the task instructions instead of "
-        "writing an actual script. Raw output was:\n\n" + raw_task_out[:1000]
+        "The Scriptwriter agent appears to have asked a question or echoed instructions "
+        "instead of writing an actual script. Raw output was:\n\n" + raw_task_out[:1000]
     )
 
 import edge_tts
