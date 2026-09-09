@@ -7,6 +7,7 @@ import os
 import re
 import time
 import json
+import gc
 import asyncio
 import numpy as np
 from typing import List, Literal, Optional
@@ -273,84 +274,107 @@ def compose_character(expression, hair, beard, outfit, mouth_state, is_flipped=F
     return canvas
 
 # ---------------------------------------------------------------------
-# 5. Video Stage & Animation Loop
+# 5. Dynamic Memory-Efficient Video Stage
 # ---------------------------------------------------------------------
 def generate_video(script, audio_info):
-    from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
-    
+    from moviepy.editor import VideoClip, AudioFileClip, concatenate_videoclips
+
     movie_clips = []
     VIDEO_W, VIDEO_H = 1920, 1080
-    
+
     for idx, (seg, audio) in enumerate(zip(script, audio_info)):
         sample_rate, data = wavfile.read(audio["file"])
         if len(data.shape) > 1:
             data = data.mean(axis=1)
-            
-        fps = 12
-        total_frames = int(audio["duration"] * fps)
-        samples_per_frame = int(len(data) / max(total_frames, 1))
-        
-        frame_clips = []
+
+        duration = audio["duration"]
+        total_samples = len(data)
         speaker = seg["speaker"]
-        
-        for f in range(total_frames):
-            start_i = f * samples_per_frame
-            end_i = min((f + 1) * samples_per_frame, len(data))
-            chunk = data[start_i:end_i]
+
+        # Cache static components per segment to reduce rendering overhead
+        if seg["display_mode"] == "narration_focus":
+            char_center = compose_character(
+                expression=seg.get("expression_A", "eyes_neutral"),
+                hair="hair_short",
+                beard="no_beard",
+                outfit=seg.get("outfit_A", "rome_commoner_tunic"),
+                mouth_state="mouth_closed",
+                is_flipped=False
+            )
+        else:
+            char_a_base = compose_character(
+                expression=seg.get("expression_A", "eyes_neutral"),
+                hair="hair_short",
+                beard="no_beard",
+                outfit=seg.get("outfit_A", "rome_commoner_tunic"),
+                mouth_state="mouth_closed",
+                is_flipped=False
+            )
+            char_b_base = compose_character(
+                expression=seg.get("expression_B", "eyes_neutral"),
+                hair="hair_long",
+                beard="beard",
+                outfit=seg.get("outfit_B", "rome_soldier_armor"),
+                mouth_state="mouth_closed",
+                is_flipped=True
+            )
+
+        # Dynamic frame generator (renders frames directly without disk writing or RAM leaks)
+        def make_frame(t):
+            sample_idx = int((t / max(duration, 0.01)) * total_samples)
+            chunk = data[max(0, sample_idx - 500):min(total_samples, sample_idx + 500)]
             amplitude = np.max(np.abs(chunk)) if len(chunk) > 0 else 0
-            
+
             if amplitude > 10000:
                 mouth = "mouth_fully_open"
             elif amplitude > 3000:
                 mouth = "mouth_half_open"
             else:
                 mouth = "mouth_closed"
-                
-            mouth_a = mouth if speaker == "CHARACTER_A" else "mouth_closed"
-            mouth_b = mouth if speaker == "CHARACTER_B" else "mouth_closed"
-            
+
             bg = Image.new("RGBA", (VIDEO_W, VIDEO_H), (240, 240, 245, 255))
-            
+
             if seg["display_mode"] == "narration_focus":
-                char_center = compose_character(
-                    expression=seg.get("expression_A", "eyes_neutral"),
-                    hair="hair_short",
-                    beard="no_beard",
-                    outfit=seg.get("outfit_A", "rome_commoner_tunic"),
-                    mouth_state="mouth_closed",
-                    is_flipped=False
-                )
                 bg.alpha_composite(char_center, (560, 80))
             else:
-                char_a = compose_character(
+                mouth_a = mouth if speaker == "CHARACTER_A" else "mouth_closed"
+                mouth_b = mouth if speaker == "CHARACTER_B" else "mouth_closed"
+
+                cA = compose_character(
                     expression=seg.get("expression_A", "eyes_neutral"),
-                    hair="hair_short",
-                    beard="no_beard",
+                    hair="hair_short", beard="no_beard",
                     outfit=seg.get("outfit_A", "rome_commoner_tunic"),
-                    mouth_state=mouth_a,
-                    is_flipped=False
+                    mouth_state=mouth_a, is_flipped=False
                 )
-                char_b = compose_character(
+                cB = compose_character(
                     expression=seg.get("expression_B", "eyes_neutral"),
-                    hair="hair_long",
-                    beard="beard",
+                    hair="hair_long", beard="beard",
                     outfit=seg.get("outfit_B", "rome_soldier_armor"),
-                    mouth_state=mouth_b,
-                    is_flipped=True
+                    mouth_state=mouth_b, is_flipped=True
                 )
-                bg.alpha_composite(char_a, (100, 80))
-                bg.alpha_composite(char_b, (1020, 80))
-                
-            frame_file = f"frame_{idx}_{f}.png"
-            bg.convert("RGB").save(frame_file)
-            frame_clips.append(ImageClip(frame_file).set_duration(1.0 / fps))
-            
-        line_video = concatenate_videoclips(frame_clips, method="compose")
-        line_video = line_video.set_audio(AudioFileClip(audio["file"]))
-        movie_clips.append(line_video)
-        
+                bg.alpha_composite(cA, (100, 80))
+                bg.alpha_composite(cB, (1020, 80))
+
+            return np.array(bg.convert("RGB"))
+
+        clip = VideoClip(make_frame, duration=duration)
+        clip = clip.set_audio(AudioFileClip(audio["file"]))
+        movie_clips.append(clip)
+
     final_video = concatenate_videoclips(movie_clips, method="compose")
-    final_video.write_videofile("final_video.mp4", fps=12, codec="libx264", audio_codec="aac")
+    final_video.write_videofile(
+        "final_video.mp4", 
+        fps=12, 
+        codec="libx264", 
+        audio_codec="aac", 
+        preset="ultrafast",
+        threads=2
+    )
+
+    final_video.close()
+    for c in movie_clips:
+        c.close()
+    gc.collect()
 
 generate_video(script_data, audio_segments)
 
