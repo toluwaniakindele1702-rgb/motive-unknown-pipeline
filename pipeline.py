@@ -44,12 +44,11 @@ from crewai.tools import tool
 from duckduckgo_search import DDGS
 
 llm = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    custom_openai=True,
+    model="nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b",
     api_key=NVIDIA_KEY,
     base_url="https://integrate.api.nvidia.com/v1",
-    timeout=300,
-    max_retries=3,
+    timeout=120,
+    max_retries=5,
 )
 
 @tool("Web Search")
