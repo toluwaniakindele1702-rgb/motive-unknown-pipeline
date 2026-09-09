@@ -37,15 +37,15 @@ print("Secrets loaded.")
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 from duckduckgo_search import DDGS
-
+# Updated LLM config with explicit strict timeouts and retries
 llm = LLM(
     model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
     api_key=NVIDIA_KEY,
     base_url="https://integrate.api.nvidia.com/v1",
-    timeout=300,
-    max_retries=5,
+    timeout=120,          # Force request timeout after 2 minutes so it doesn't hang forever
+    max_retries=3,        # Retry automatically if connection drops
+    temperature=0.7,
 )
-
 @tool("Web Search")
 def search_tool(query: str) -> str:
     """Searches the web using DuckDuckGo."""
@@ -80,15 +80,12 @@ researcher = Agent(
 
 scriptwriter = Agent(
     role="Narrative Scriptwriter",
-    goal="Write an engaging historical story driven by a Narrator, featuring brief comedic character dialogues.",
-    backstory=(
-        "You write animated history scripts like OverSimplified. A central Narrator tells the main story, "
-        "and you frequently cut to short, funny dialogue scenes between named historical characters before returning to the story."
-    ),
+    goal="Write an engaging historical story driven by a Narrator with brief comedic dialogue scenes.",
+    backstory="You write fast-paced animated history scripts matching channel formats like OverSimplified.",
     llm=llm,
     verbose=True,
+    max_iter=3,  # Prevent infinite loops if LLM fails structured parsing
 )
-
 seo_specialist = Agent(
     role="YouTube SEO Specialist",
     goal="Generate high-CTR history channel titles, descriptions, tags, and thumbnail prompts.",
@@ -127,10 +124,11 @@ research_task = Task(
 
 script_task = Task(
     description=(
-        "Write a 12-18 scene animated history script.\n"
-        "- Most lines MUST be spoken by NARRATOR (telling the story).\n"
-        "- Insert short 1-2 line comedy interactions between CHARACTER_A and CHARACTER_B throughout the story.\n"
-        "- Set display_mode to 'narration_focus' when Narrator speaks, and 'character_dialogue' when characters speak."
+        "Write a short, engaging animated history script.\n"
+        "- Generate 12 to 16 scene segments in total.\n"
+        "- Use 'NARRATOR' for general story narration.\n"
+        "- Use 'CHARACTER_A' and 'CHARACTER_B' for funny character interactions.\n"
+        "- Ensure 'display_mode' is set to 'narration_focus' for Narrator lines, and 'character_dialogue' for character lines."
     ),
     expected_output="Valid JSON matching AnimatedStoryScript schema.",
     agent=scriptwriter,
