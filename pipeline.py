@@ -399,8 +399,8 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
-credentials = Credentials.from_authorized_user_file("youtube_token.json", SCOPES)
+# Load credentials directly from file without enforcing hardcoded scopes that trigger scope mismatch errors
+credentials = Credentials.from_authorized_user_file("youtube_token.json")
 
 if credentials.expired and credentials.refresh_token:
     credentials.refresh(Request())
