@@ -24,6 +24,10 @@ import pydub
 # ---------------------------------------------------------------------
 NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
 
+# Force LiteLLM to route OpenAI calls directly to NVIDIA NIM without timing out
+os.environ["OPENAI_API_KEY"] = NVIDIA_KEY
+os.environ["OPENAI_API_BASE"] = "https://integrate.api.nvidia.com/v1"
+
 with open("youtube_token.json", "w") as f:
     f.write(os.environ["YOUTUBE_TOKEN_JSON"])
 with open("client_secret.json", "w") as f:
@@ -37,15 +41,16 @@ print("Secrets loaded.")
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 from duckduckgo_search import DDGS
-# Updated LLM config with explicit strict timeouts and retries
+
 llm = LLM(
     model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
+    custom_openai=True,
     api_key=NVIDIA_KEY,
     base_url="https://integrate.api.nvidia.com/v1",
-    timeout=120,          # Force request timeout after 2 minutes so it doesn't hang forever
-    max_retries=3,        # Retry automatically if connection drops
-    temperature=0.7,
+    timeout=300,
+    max_retries=3,
 )
+
 @tool("Web Search")
 def search_tool(query: str) -> str:
     """Searches the web using DuckDuckGo."""
@@ -80,12 +85,16 @@ researcher = Agent(
 
 scriptwriter = Agent(
     role="Narrative Scriptwriter",
-    goal="Write an engaging historical story driven by a Narrator with brief comedic dialogue scenes.",
-    backstory="You write fast-paced animated history scripts matching channel formats like OverSimplified.",
+    goal="Write an engaging historical story driven by a Narrator, featuring brief comedic character dialogues.",
+    backstory=(
+        "You write animated history scripts like OverSimplified. A central Narrator tells the main story, "
+        "and you frequently cut to short, funny dialogue scenes between named historical characters before returning to the story."
+    ),
     llm=llm,
     verbose=True,
-    max_iter=3,  # Prevent infinite loops if LLM fails structured parsing
+    max_iter=3,
 )
+
 seo_specialist = Agent(
     role="YouTube SEO Specialist",
     goal="Generate high-CTR history channel titles, descriptions, tags, and thumbnail prompts.",
@@ -156,7 +165,7 @@ script_data = script_task.output.pydantic.model_dump()["segments"]
 # ---------------------------------------------------------------------
 # 3. Audio Engine (Narrator + Character Voices)
 # ---------------------------------------------------------------------
-VOICE_NARRATOR = "en-US-AndrewNeural"     # Energetic storytelling voice
+VOICE_NARRATOR = "en-US-AndrewNeural"     # Storytelling Narrator voice
 VOICE_CHAR_A   = "en-US-GuyNeural"        # Character A voice
 VOICE_CHAR_B   = "en-US-ChristopherNeural"# Character B voice
 
@@ -303,7 +312,6 @@ def generate_video(script, audio_info):
             bg = Image.new("RGBA", (VIDEO_W, VIDEO_H), (240, 240, 245, 255))
             
             if seg["display_mode"] == "narration_focus":
-                # Center a single character during narrator explanations
                 char_center = compose_character(
                     expression=seg.get("expression_A", "eyes_neutral"),
                     hair="hair_short",
@@ -314,7 +322,6 @@ def generate_video(script, audio_info):
                 )
                 bg.alpha_composite(char_center, (560, 80))
             else:
-                # Stage two characters for comedy dialogue scenes
                 char_a = compose_character(
                     expression=seg.get("expression_A", "eyes_neutral"),
                     hair="hair_short",
