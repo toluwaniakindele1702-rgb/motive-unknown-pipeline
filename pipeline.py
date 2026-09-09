@@ -25,7 +25,7 @@ import pydub
 # ---------------------------------------------------------------------
 NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
 
-# Force LiteLLM to route OpenAI calls directly to NVIDIA NIM without timing out
+# Force LiteLLM to route calls via OpenAI-compatible route directly to NVIDIA NIM
 os.environ["OPENAI_API_KEY"] = NVIDIA_KEY
 os.environ["OPENAI_API_BASE"] = "https://integrate.api.nvidia.com/v1"
 
@@ -43,12 +43,14 @@ from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 from duckduckgo_search import DDGS
 
+# Using standard openai/ prefix with custom_openai=True to route through native OpenAI handler
 llm = LLM(
-    model="nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b",
+    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
+    custom_openai=True,
     api_key=NVIDIA_KEY,
     base_url="https://integrate.api.nvidia.com/v1",
-    timeout=120,
-    max_retries=5,
+    timeout=300,
+    max_retries=3,
 )
 
 @tool("Web Search")
@@ -165,9 +167,9 @@ script_data = script_task.output.pydantic.model_dump()["segments"]
 # ---------------------------------------------------------------------
 # 3. Audio Engine (Narrator + Character Voices)
 # ---------------------------------------------------------------------
-VOICE_NARRATOR = "en-US-AndrewNeural"     # Storytelling Narrator voice
-VOICE_CHAR_A   = "en-US-GuyNeural"        # Character A voice
-VOICE_CHAR_B   = "en-US-ChristopherNeural"# Character B voice
+VOICE_NARRATOR = "en-US-AndrewNeural"
+VOICE_CHAR_A   = "en-US-GuyNeural"
+VOICE_CHAR_B   = "en-US-ChristopherNeural"
 
 async def generate_script_audio(segments):
     combined = pydub.AudioSegment.empty()
@@ -290,7 +292,6 @@ def generate_video(script, audio_info):
         total_samples = len(data)
         speaker = seg["speaker"]
 
-        # Cache static components per segment to reduce rendering overhead
         if seg["display_mode"] == "narration_focus":
             char_center = compose_character(
                 expression=seg.get("expression_A", "eyes_neutral"),
@@ -318,7 +319,6 @@ def generate_video(script, audio_info):
                 is_flipped=True
             )
 
-        # Dynamic frame generator (renders frames directly without disk writing or RAM leaks)
         def make_frame(t):
             sample_idx = int((t / max(duration, 0.01)) * total_samples)
             chunk = data[max(0, sample_idx - 500):min(total_samples, sample_idx + 500)]
@@ -398,7 +398,6 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# Load credentials directly from file without enforcing hardcoded scopes that trigger scope mismatch errors
 credentials = Credentials.from_authorized_user_file("youtube_token.json")
 
 if credentials.expired and credentials.refresh_token:
