@@ -43,12 +43,10 @@ from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 from duckduckgo_search import DDGS
 
-# Using standard openai/ prefix with custom_openai=True to route through native OpenAI handler
+# Make sure "crewai[litellm]" is in your requirements.txt for this format
 llm = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    custom_openai=True,
+    model="nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b",
     api_key=NVIDIA_KEY,
-    base_url="https://integrate.api.nvidia.com/v1",
     timeout=300,
     max_retries=3,
 )
