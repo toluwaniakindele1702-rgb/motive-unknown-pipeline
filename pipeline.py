@@ -208,7 +208,10 @@ script_task = Task(
         "answer questions or confirm details. Decide everything yourself and output the "
         "finished JSON directly, right now. Never ask a question, never say 'let me know', "
         "never wrap the JSON in markdown code fences, never write anything before or after "
-        "the JSON object.\n\n"
+        "the JSON object. Do NOT include a thinking process, analysis, reasoning section, or "
+        "any notes about your approach — not even a short one. Your entire response must be "
+        "nothing but the JSON object itself: the very first character you output must be '{' "
+        "and the very last character must be '}'.\n\n"
         f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
         "Output a single JSON object with this exact shape:\n"
         "{\n"
@@ -280,22 +283,51 @@ print(result)
 # ---------------------------------------------------------------------
 # 7. Parse + validate the Scriptwriter's JSON output
 # ---------------------------------------------------------------------
+def _extract_json_object(raw_text: str) -> dict:
+    """Some models (this NVIDIA Nemotron model included, in practice) write
+    out a 'thinking process' before the real answer no matter how firmly
+    you tell them not to — and that reasoning text can itself contain
+    brace-like snippets ('keys: {"era", "segments"}') that break a naive
+    first-brace/last-brace slice. This scans for every *balanced* {...}
+    block in the text and tries them from LAST to FIRST (the real answer
+    comes after the reasoning, not before it), returning the first one
+    that both parses as JSON and actually looks like our script shape."""
+    candidates = []
+    stack = []
+    start = None
+    for i, ch in enumerate(raw_text):
+        if ch == "{":
+            if not stack:
+                start = i
+            stack.append(ch)
+        elif ch == "}":
+            if stack:
+                stack.pop()
+                if not stack and start is not None:
+                    candidates.append(raw_text[start:i + 1])
+                    start = None
+
+    last_error = None
+    for cand in reversed(candidates):
+        try:
+            data = json.loads(cand)
+            if isinstance(data, dict) and "segments" in data:
+                return data
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+
+    raise RuntimeError(
+        f"No valid JSON object with a 'segments' key found anywhere in the output "
+        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error}). "
+        f"Raw output:\n{raw_text[:1500]}"
+    )
+
+
 def parse_script_json(raw_text: str) -> dict:
     text = raw_text.strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE)
-
-    first_brace = text.find("{")
-    last_brace = text.rfind("}")
-    if first_brace == -1 or last_brace == -1 or last_brace < first_brace:
-        raise RuntimeError(
-            "Scriptwriter output contained no JSON object. Raw output:\n" + raw_text[:1000]
-        )
-    text = text[first_brace:last_brace + 1]
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Scriptwriter output was not valid JSON ({e}). Raw output:\n{raw_text[:1000]}")
+    data = _extract_json_object(text)
 
     era = data.get("era")
     if era not in CHARACTER_ROSTER:
