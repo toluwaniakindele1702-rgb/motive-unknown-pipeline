@@ -1,13 +1,15 @@
-crewai[litellm]
+crewai
 duckduckgo-search
-requests
-pillow
-moviepy
 edge-tts
-pydub
-scipy
+Pillow
 numpy
-google-api-python-client
-google-auth-httplib2
+requests
+google-auth
 google-auth-oauthlib
-pydantic
+google-api-python-client
+
+# NOTE: moviepy has been dropped. The new video assembly renders PNG frames
+# with Pillow and stitches them with a direct ffmpeg call (subprocess), which
+# is what was actually tested — fewer moving parts than moviepy for a frame-
+# sequence + audio-track job like this one. ffmpeg itself is preinstalled on
+# GitHub Actions ubuntu-latest runners, no apt-get step needed.
