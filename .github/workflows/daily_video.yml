@@ -32,7 +32,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # ffmpeg ships preinstalled on ubuntu-latest runners — no apt-get step needed.
+      # Turns out ffmpeg is NOT reliably preinstalled on ubuntu-latest runners
+      # (confirmed by an actual failed run) — install it explicitly instead
+      # of assuming.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Confirm ffmpeg is available
         run: ffmpeg -version
 
