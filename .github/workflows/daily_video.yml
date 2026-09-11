@@ -29,11 +29,9 @@ jobs:
       searxng:
         image: searxng/searxng:latest
         ports:
-          - 8888:8888
-        # Health check so the job waits for SearXNG to actually be ready
-        # instead of racing it on the first search call.
+          - 8888:8080
         options: >-
-          --health-cmd "wget -q -O- http://localhost:8888/healthz || exit 1"
+          --health-cmd "wget -q -O- http://localhost:8080/healthz || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 6
