@@ -1,15 +1,8 @@
-crewai
-requests
-edge-tts
-Pillow
-numpy
-requests
-google-auth
-google-auth-oauthlib
-google-api-python-client
-
-# NOTE: moviepy has been dropped. The new video assembly renders PNG frames
-# with Pillow and stitches them with a direct ffmpeg call (subprocess), which
-# is what was actually tested — fewer moving parts than moviepy for a frame-
-# sequence + audio-track job like this one. ffmpeg itself is preinstalled on
-# GitHub Actions ubuntu-latest runners, no apt-get step needed.
+crewai>=0.28.0
+requests>=2.31.0
+numpy>=1.24.0
+Pillow>=10.0.0
+edge-tts>=6.1.9
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
