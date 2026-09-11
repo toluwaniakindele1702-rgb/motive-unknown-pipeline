@@ -352,10 +352,8 @@ def parse_script_json(raw_text: str) -> dict:
                 raise RuntimeError(f"Segment {i} is type 'dialogue' but has no lines.")
             for line in lines:
                 total_words += len(line.get("text", "").split())
-                _validate_character(
-                    {"character": line.get("speaker"), "expression": line.get("expression")},
-                    allowed_for_era, i,
-                )
+                line["character"] = line.get("speaker")  # so _validate_character can read it uniformly
+                _validate_character(line, allowed_for_era, i)
         else:
             raise RuntimeError(f"Segment {i} has invalid type: {seg_type!r}")
 
@@ -369,18 +367,23 @@ def parse_script_json(raw_text: str) -> dict:
     return data
 
 
-def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int):
+def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int, expr_key: str = "expression"):
+    """Character name has no safe fallback (there's no art for a name that
+    doesn't exist), so that still fails hard. An unrecognized expression
+    DOES have a safe fallback (neutral) — so rather than throw away a full
+    ~25-30 minute crew run over one made-up word like 'proud', we just warn
+    and downgrade it to neutral, and keep going."""
     name = char_entry.get("character")
-    expr = char_entry.get("expression")
     if name not in allowed_for_era:
         raise RuntimeError(
             f"Segment {seg_index} uses character {name!r}, which isn't in this era's "
             f"roster ({sorted(allowed_for_era)})."
         )
+    expr = char_entry.get(expr_key)
     if expr not in VALID_EXPRESSIONS:
-        raise RuntimeError(
-            f"Segment {seg_index} uses invalid expression {expr!r} for {name!r}."
-        )
+        print(f"WARNING: segment {seg_index}, character {name!r} used unrecognized "
+              f"expression {expr!r} — falling back to 'neutral'.")
+        char_entry[expr_key] = "neutral"
 
 
 def flatten_script_to_text(parsed_script: dict) -> str:
