@@ -25,7 +25,7 @@ from PIL import Image, ImageDraw, ImageFont
 # ---------------------------------------------------------------------
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
-NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
+GEMINI_KEY = os.environ["GEMINI_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
     f.write(os.environ["YOUTUBE_TOKEN_JSON"])
@@ -35,36 +35,22 @@ with open("client_secret.json", "w") as f:
 print("Secrets loaded.")
 
 # ---------------------------------------------------------------------
-# 1. LLM connection (NVIDIA NIM)
+# 1. LLM connection (Google Gemini)
 # ---------------------------------------------------------------------
 import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
+# Set environment variable expected by LiteLLM / Gemini SDK
+os.environ["GEMINI_API_KEY"] = GEMINI_KEY
+
 llm = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    api_key=NVIDIA_KEY,
-    base_url="https://integrate.api.nvidia.com/v1",
-    timeout=300,
-    max_retries=5,
+    model="gemini/gemini-2.5-flash",
+    api_key=GEMINI_KEY,
+    temperature=0.5,
 )
 
-
-def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
-    last_error = None
-    for i in range(attempts):
-        try:
-            return llm_obj.call(prompt)
-        except Exception as e:
-            last_error = e
-            wait = base_delay * (i + 1)
-            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
-
-
-test = call_with_retry(llm, "Reply with exactly one word: OK")
-print("LLM connection test:", test)
+print("LLM connection ready.")
 
 # ---------------------------------------------------------------------
 # 2. Search tools
