@@ -1,64 +1,65 @@
-name: Daily Video
+# Drop this into your existing workflow (e.g. .github/workflows/pipeline.yml).
+# It runs a SearXNG container as a "service" alongside your job, reachable at
+# http://localhost:8888 from the job's steps — no API key, no rate limit,
+# no monthly fee, since it's your own container for the life of the run.
+#
+# IMPORTANT: SearXNG ships with JSON output DISABLED by default (it's meant
+# to be a human-facing search UI). You must mount a settings.yml that turns
+# it on, or search_tool's `format=json` request will get an HTML page back
+# and fail to parse. Minimal settings.yml you need in your repo:
+#
+#   search:
+#     formats:
+#       - html
+#       - json
+#
+# Save that as searxng-settings.yml in your repo root (or wherever you like)
+# and point the volume mount below at it.
+
+name: Motive Unknown Pipeline
 
 on:
-  schedule:
-    - cron: "0 14 * * *"   # 14:00 UTC daily — adjust to when you want it to run
-  workflow_dispatch: {}     # lets you trigger it manually from the Actions tab to test
-
-# NOTE: I don't have your original daily_video.yml, so this is written fresh
-# from what pipeline.py needs. If you already have one, diff this against it
-# rather than blindly overwriting — you may have tweaks in there (caching,
-# a different schedule, etc.) worth keeping.
+  workflow_dispatch:
 
 jobs:
-  build-and-upload:
+  run-pipeline:
     runs-on: ubuntu-latest
-    # A 10-15 min video (script -> multi-voice TTS -> frame rendering ->
-    # ffmpeg encode -> upload) is a lot more work than the old 60s Shorts
-    # version. Default GitHub Actions job timeout is 6 hours, which is fine,
-    # but set this explicitly so a hung run doesn't silently eat your
-    # monthly Actions minutes.
-    timeout-minutes: 90
+
+    services:
+      searxng:
+        image: searxng/searxng:latest
+        ports:
+          - 8888:8888
+        # Health check so the job waits for SearXNG to actually be ready
+        # instead of racing it on the first search call.
+        options: >-
+          --health-cmd "wget -q -O- http://localhost:8888/healthz || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+    env:
+      SEARXNG_URL: http://localhost:8888
+      NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+      YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+      YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
 
     steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Mount SearXNG settings with JSON output enabled
+        run: |
+          docker cp searxng-settings.yml \
+            $(docker ps --filter "ancestor=searxng/searxng:latest" -q):/etc/searxng/settings.yml
+          docker restart $(docker ps --filter "ancestor=searxng/searxng:latest" -q)
+          sleep 5
+
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Turns out ffmpeg is NOT reliably preinstalled on ubuntu-latest runners
-      # (confirmed by an actual failed run) — install it explicitly instead
-      # of assuming.
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Confirm ffmpeg is available
-        run: ffmpeg -version
-
       - name: Run pipeline
-        env:
-          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
-          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
         run: python pipeline.py
-
-      # If a run fails partway through, the rendered frames/audio are useful
-      # for debugging why — this uploads them as a downloadable artifact
-      # instead of just losing them when the runner shuts down.
-      - name: Upload debug artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-debug-output
-          path: |
-            *.mp3
-            *.mp4
-            *.png
-            *.json
-          retention-days: 3
