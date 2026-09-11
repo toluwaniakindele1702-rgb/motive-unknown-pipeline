@@ -45,21 +45,26 @@ jobs:
       YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4[cite: 2]
 
-      - name: Mount SearXNG settings with JSON output enabled
+      - name: Mount SearXNG settings with JSON output enabled[cite: 2]
         run: |
           docker cp searxng-settings.yml \
             $(docker ps --filter "ancestor=searxng/searxng:latest" -q):/etc/searxng/settings.yml
           docker restart $(docker ps --filter "ancestor=searxng/searxng:latest" -q)
-          sleep 5
+          sleep 5[cite: 2]
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5[cite: 2]
         with:
-          python-version: "3.11"
+          python-version: "3.11"[cite: 2]
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install System Dependencies (FFmpeg)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
-      - name: Run pipeline
-        run: python pipeline.py
+      - name: Install dependencies[cite: 2]
+        run: pip install -r requirements.txt[cite: 2]
+
+      - name: Run pipeline[cite: 2]
+        run: python pipeline.py[cite: 2]
