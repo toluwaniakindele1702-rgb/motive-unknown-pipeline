@@ -37,9 +37,9 @@ print("Secrets loaded.")
 # ---------------------------------------------------------------------
 # 1. LLM connection (NVIDIA NIM)
 # ---------------------------------------------------------------------
+import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
-from duckduckgo_search import DDGS
 
 llm = LLM(
     model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -67,26 +67,102 @@ test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
 
 # ---------------------------------------------------------------------
-# 2. Search tool
+# 2. Search tools
+#
+# DDGS (duckduckgo_search) is gone. It scrapes DDG's HTML endpoint with no
+# official API, and GitHub Actions runner IPs get bot-challenged/rate-limited
+# on it constantly — which doesn't just cost the 3 retries in this function,
+# it also makes the CrewAI agent re-issue the search several more times on
+# its own, burning full LLM calls each time. That combo is most of why a run
+# can still be stuck on an early task after 90 minutes.
+#
+# Replaced with two genuinely free (not free-tier-capped) sources:
+#   - SearXNG: a self-hosted metasearch engine (Google/Bing/DDG/70+ engines
+#     merged). No API key, no rate limit, no monthly fee, because you're
+#     running it yourself. Needs a SearXNG instance reachable at
+#     SEARXNG_URL (see the GitHub Actions service block in
+#     searxng-github-actions.yml). It also needs `search.formats: [html, json]`
+#     enabled in SearXNG's settings.yml — JSON output is off by default.
+#   - Wikipedia's REST/API: official, free, unlimited for reasonable use, no
+#     key. Since every topic here is a specific Ancient Egypt / Ancient Rome
+#     figure or event, Wikipedia is a much more reliable primary source for
+#     the Researcher than search snippets are — use SearXNG mainly for the
+#     Topic Scout's "what's trending" angle instead.
 # ---------------------------------------------------------------------
+SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:8888")
+WIKI_USER_AGENT = "MotiveUnknownBot/1.0 (automated video pipeline; contact: replace-with-your-email@example.com)"
+
+
 @tool("Web Search")
 def search_tool(query: str) -> str:
-    """Searches the web using DuckDuckGo and returns top results with titles, snippets, and links."""
+    """Searches the web via a self-hosted SearXNG instance and returns top results with titles, snippets, and links. Best for trending topics, angles, and general web context."""
     last_error = None
     for attempt in range(3):
         try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(keywords=query, max_results=6))
+            resp = requests.get(
+                f"{SEARXNG_URL}/search",
+                params={"q": query, "format": "json"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            results = resp.json().get("results", [])[:6]
             if not results:
                 return "No results found for this query. Try a different angle."
             formatted = []
             for r in results:
-                formatted.append(f"{r.get('title','')}\n{r.get('body','')}\n{r.get('href','')}")
+                formatted.append(f"{r.get('title','')}\n{r.get('content','')}\n{r.get('url','')}")
             return "\n\n".join(formatted)
         except Exception as e:
             last_error = e
             time.sleep(2 * (attempt + 1))
     return f"Search failed after 3 attempts ({last_error}). Proceed using general knowledge instead."
+
+
+@tool("Wikipedia Lookup")
+def wikipedia_tool(query: str) -> str:
+    """Looks up a topic, figure, or event on Wikipedia and returns summaries of the top matching pages. Best for verifying specific historical facts, figures, and events — use this before falling back to general web search."""
+    last_error = None
+    for attempt in range(3):
+        try:
+            search_resp = requests.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "format": "json",
+                    "srlimit": 3,
+                },
+                headers={"User-Agent": WIKI_USER_AGENT},
+                timeout=15,
+            )
+            search_resp.raise_for_status()
+            hits = search_resp.json().get("query", {}).get("search", [])
+            if not hits:
+                return "No Wikipedia results found for this query. Try a different angle or use Web Search instead."
+
+            formatted = []
+            for hit in hits:
+                title = hit["title"]
+                summary_resp = requests.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(title)}",
+                    headers={"User-Agent": WIKI_USER_AGENT},
+                    timeout=15,
+                )
+                if summary_resp.status_code != 200:
+                    continue
+                summary = summary_resp.json()
+                extract = summary.get("extract", "")
+                url = summary.get("content_urls", {}).get("desktop", {}).get("page", "")
+                formatted.append(f"{title}\n{extract}\n{url}")
+
+            if not formatted:
+                return "Found matching titles but couldn't fetch summaries. Try Web Search instead."
+            return "\n\n".join(formatted)
+        except Exception as e:
+            last_error = e
+            time.sleep(2 * (attempt + 1))
+    return f"Wikipedia lookup failed after 3 attempts ({last_error}). Proceed using general knowledge instead."
 
 
 # ---------------------------------------------------------------------
@@ -131,9 +207,12 @@ researcher = Agent(
     backstory=(
         "You're an obsessive researcher for a history storytelling channel. You dig up "
         "real, verifiable, surprising details and put them in the order they'd be told "
-        "as a story. You avoid generic facts everyone already knows."
+        "as a story. You avoid generic facts everyone already knows. You always check "
+        "Wikipedia Lookup first for the topic and any figures/events it mentions — it's "
+        "your primary, most reliable source. Only reach for Web Search when Wikipedia "
+        "doesn't have enough detail on a specific angle."
     ),
-    tools=[search_tool],
+    tools=[wikipedia_tool, search_tool],
     llm=llm,
     verbose=True,
 )
