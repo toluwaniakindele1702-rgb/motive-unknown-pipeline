@@ -3,6 +3,14 @@
 # http://localhost:8888 from the job's steps — no API key, no rate limit,
 # no monthly fee, since it's your own container for the life of the run.
 #
+# NOTE: SearXNG's container always listens on port 8080 INTERNALLY, no
+# matter what host port you expose it on. Host port 8888 -> container port
+# 8080 below. Your pipeline (running directly on the runner) talks to it via
+# the host-side port 8888; the health check (running inside the container)
+# has to talk to it via the internal port 8080. Mixing these up is exactly
+# what made the container register as "unhealthy" and fail the job before
+# any of your actual steps even ran.
+#
 # IMPORTANT: SearXNG ships with JSON output DISABLED by default (it's meant
 # to be a human-facing search UI). You must mount a settings.yml that turns
 # it on, or search_tool's `format=json` request will get an HTML page back
@@ -29,17 +37,22 @@ jobs:
       searxng:
         image: searxng/searxng:latest
         ports:
-          - 8888:8888
+          - 8888:8080  # host:container — SearXNG ALWAYS listens on 8080
+                       # internally, no matter what host port you pick.
         # Health check so the job waits for SearXNG to actually be ready
-        # instead of racing it on the first search call.
+        # instead of racing it on the first search call. This command runs
+        # INSIDE the container, so it must hit the container's own internal
+        # port (8080) — not the host-side 8888 mapping above.
         options: >-
-          --health-cmd "wget -q -O- http://localhost:8888/healthz || exit 1"
+          --health-cmd "wget -q --spider http://localhost:8080/healthz || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 6
 
     env:
-      SEARXNG_URL: http://localhost:8888
+      SEARXNG_URL: http://localhost:8888  # host-side — this one IS 8888, since
+                                            # your pipeline steps run on the
+                                            # runner itself, outside the container
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
       YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
