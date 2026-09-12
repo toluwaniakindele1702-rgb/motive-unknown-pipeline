@@ -3,7 +3,7 @@ Motive Unknown — automated video pipeline (puppet-animation format).
 Runs unattended on GitHub Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
-  GEMINI_API_KEY        - your Google AI Studio Gemini API key
+  NVIDIA_NIM_API_KEY    - your NVIDIA NIM key
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
@@ -25,7 +25,12 @@ from PIL import Image, ImageDraw, ImageFont
 # ---------------------------------------------------------------------
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
-GEMINI_KEY = os.environ["GEMINI_API_KEY"]
+# REVERTED from Gemini back to NVIDIA NIM — Gemini's free-tier quota kept
+# getting fully exhausted (not just per-minute, since even 60s waits after
+# a 429 kept failing again), and no amount of pacing fixes a quota that's
+# actually used up. NIM is slower per call but is the one provider that's
+# proven to run a full crew to completion without this wall.
+NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
     f.write(os.environ["YOUTUBE_TOKEN_JSON"])
@@ -35,82 +40,35 @@ with open("client_secret.json", "w") as f:
 print("Secrets loaded.")
 
 # ---------------------------------------------------------------------
-# 1. LLM connection (Google Gemini)
+# 1. LLM connection (NVIDIA NIM)
 # ---------------------------------------------------------------------
 import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
-# Set environment variable expected by LiteLLM / Gemini SDK
-os.environ["GEMINI_API_KEY"] = GEMINI_KEY
-
 llm = LLM(
-    model="gemini/gemini-flash-latest",
-    api_key=GEMINI_KEY,
-    temperature=0.5,
+    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
+    api_key=NVIDIA_KEY,
+    base_url="https://integrate.api.nvidia.com/v1",
     timeout=300,
     max_retries=5,
 )
 
-# ---------------------------------------------------------------------
-# Rate limiting — the actual fix for the 429 "quota exceeded" failures.
-#
-# Your free tier is capped at 5 requests/minute. CrewAI's own internal
-# retry doesn't know that number and doesn't read Google's "please retry
-# in X seconds" from the error — it just retries blind and can still lose.
-# This patches llm.call() itself (the method CrewAI's agents actually use
-# internally for every generation step, not just my one-off test call
-# below) so EVERY call the crew makes — not just the ones I wrote — is
-# paced to stay under 5/minute, and if a 429 slips through anyway, it
-# reads the real wait time Google gives you and sleeps exactly that long
-# instead of guessing.
-# ---------------------------------------------------------------------
-_last_call_time = [0.0]
-MIN_SECONDS_BETWEEN_CALLS = 13  # 60s / 5 requests, plus a small safety margin
 
-
-def _wait_for_rate_limit():
-    elapsed = time.time() - _last_call_time[0]
-    remaining = MIN_SECONDS_BETWEEN_CALLS - elapsed
-    if remaining > 0:
-        time.sleep(remaining)
-    _last_call_time[0] = time.time()
-
-
-def _parse_retry_after(error_text: str):
-    match = re.search(r"retry in ([\d.]+)s", error_text, re.IGNORECASE)
-    return float(match.group(1)) if match else None
-
-
-_original_llm_call = llm.call
-
-
-def _rate_limited_call(*args, **kwargs):
-    attempts = 6
+def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
+    last_error = None
     for i in range(attempts):
-        _wait_for_rate_limit()
         try:
-            return _original_llm_call(*args, **kwargs)
+            return llm_obj.call(prompt)
         except Exception as e:
-            msg = str(e)
-            retry_after = _parse_retry_after(msg)
-            if retry_after is not None:
-                wait = retry_after + 2
-                print(f"Rate limited (429) — waiting {wait:.1f}s (Google's own suggested wait) "
-                      f"before retry {i+1}/{attempts}...")
-                time.sleep(wait)
-                continue
-            if i == attempts - 1:
-                raise
-            wait = 10 * (i + 1)
-            print(f"LLM call failed (attempt {i+1}/{attempts}): {msg[:200]}\nRetrying in {wait}s...")
+            last_error = e
+            wait = base_delay * (i + 1)
+            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
             time.sleep(wait)
-    raise RuntimeError("LLM call failed after all rate-limit-aware retries.")
+    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
 
 
-llm.call = _rate_limited_call
-
-test = llm.call("Reply with exactly one word: OK")
+test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
 
 # ---------------------------------------------------------------------
