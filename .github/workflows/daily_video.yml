@@ -49,6 +49,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unpack character assets
+        run: unzip -o motive_unknown_clean_assets.zip -d assets
+      
       - name: Mount SearXNG settings with JSON output enabled
         run: |
           docker cp searxng-settings.yml \
