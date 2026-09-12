@@ -3,7 +3,7 @@ Motive Unknown — automated video pipeline (puppet-animation format).
 Runs unattended on GitHub Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
-  NVIDIA_NIM_API_KEY   - your NVIDIA NIM key
+  GEMINI_API_KEY        - your Google AI Studio Gemini API key
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
@@ -48,9 +48,30 @@ llm = LLM(
     model="gemini/gemini-2.5-flash",
     api_key=GEMINI_KEY,
     temperature=0.5,
+    timeout=300,
+    max_retries=5,
 )
 
-print("LLM connection ready.")
+
+def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
+    """Restored — this got dropped in the Gemini switch. Gemini is likely
+    more reliable than the old NVIDIA NIM free tier, but 'more reliable'
+    isn't 'never fails', and a run failing at minute 1 because of one bad
+    API call is a cheap thing to guard against."""
+    last_error = None
+    for i in range(attempts):
+        try:
+            return llm_obj.call(prompt)
+        except Exception as e:
+            last_error = e
+            wait = base_delay * (i + 1)
+            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
+
+
+test = call_with_retry(llm, "Reply with exactly one word: OK")
+print("LLM connection test:", test)
 
 # ---------------------------------------------------------------------
 # 2. Search tools
@@ -631,63 +652,147 @@ def _render_frame(on_screen: list, speaking_amp: dict) -> Image.Image:
     return canvas.convert("RGB")
 
 
-def render_segment_frames(seg: dict, start_frame_idx: int) -> int:
-    os.makedirs(SCENE_DIR, exist_ok=True)
-    frame_idx = start_frame_idx
-
-    if seg["type"] == "narration":
-        on_screen = seg.get("on_screen", [])
-        envelope, duration = get_amplitude_envelope(seg["audio_file"])
-        n_frames = max(1, round(duration * FPS))
-        for i in range(n_frames):
-            frame = _render_frame(on_screen, speaking_amp={c["character"]: 0.0 for c in on_screen})
-            frame.save(os.path.join(SCENE_DIR, f"f{frame_idx:06d}.png"))
-            frame_idx += 1
-    else:
-        speakers = [{"character": l["speaker"], "expression": l["expression"]} for l in seg["lines"]]
-        for line in seg["lines"]:
-            envelope, duration = get_amplitude_envelope(line["audio_file"])
-            n_frames = max(1, round(duration * FPS))
-            for i in range(n_frames):
-                a = envelope[min(i, len(envelope) - 1)]
-                amp_map = {s["character"]: (a if s["character"] == line["speaker"] else 0.0) for s in speakers}
-                frame = _render_frame(speakers, speaking_amp=amp_map)
-                frame.save(os.path.join(SCENE_DIR, f"f{frame_idx:06d}.png"))
-                frame_idx += 1
-
-    return frame_idx
-
-
 # ---------------------------------------------------------------------
-# 12. Full video assembly
+# 12. Full video assembly — CACHED FRAMES, NOT ONE FILE PER 1/12s
+#
+# WHY THIS CHANGED: the previous version wrote one PNG per video frame for
+# the ENTIRE video — 7,000-11,000 individual composited files for a 10-15
+# minute video at 12fps. That's almost certainly what actually caused the
+# 90-minute timeouts (the crew itself finishes in ~25-30 min even on a slow
+# run — the rest of the time was unaccounted for, and this was the only
+# part of the pipeline that scales with video LENGTH rather than segment
+# COUNT). A puppet's mouth only changes a handful of times per second, so
+# most of those frames were exact duplicates of the one before them.
+#
+# Fix: render each unique (character, expression, mouth-shape) combination
+# ONCE, cache it, and tell ffmpeg to hold that single image for however
+# long it's needed via the concat demuxer's `duration` directive — instead
+# of writing the same image to disk over and over. Verified this actually
+# works (correct total duration, correct visual output) before shipping it.
 # ---------------------------------------------------------------------
-def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
-    frame_idx = 0
+_frame_cache = {}
+
+
+def _get_or_render_frame(state: tuple) -> str:
+    """state = tuple of (character, expression, mouth_key) tuples, one per
+    on-screen character. Returns a file path, rendering + saving only the
+    first time a given state is ever needed."""
+    if state in _frame_cache:
+        return _frame_cache[state]
+    on_screen = [{"character": c, "expression": e} for c, e, _m in state]
+    speaking_amp = {}  # unused now — we pass mouth_key directly below instead
+    canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (235, 225, 200, 255))
+    n = max(1, len(state))
+    slot_w = VIDEO_W // (n + 1)
+    for i, (char, expr, mouth_key) in enumerate(state):
+        sprite = compose_character(char, expr, mouth_key)
+        target_h = int(VIDEO_H * 0.6)
+        scale = target_h / sprite.height
+        sprite = sprite.resize((int(sprite.width * scale), target_h))
+        x = slot_w * (i + 1) - sprite.width // 2
+        y = VIDEO_H - sprite.height - 40
+        canvas.alpha_composite(sprite, (x, y))
+
+    os.makedirs("unique_frames", exist_ok=True)
+    path = f"unique_frames/{abs(hash(state))}.png"
+    canvas.convert("RGB").save(path)
+    _frame_cache[state] = path
+    return path
+
+
+def _get_audio_duration(path: str) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", path],
+        capture_output=True, text=True, check=True,
+    )
+    return float(out.stdout.strip())
+
+
+def _build_render_plan(parsed_script: dict):
+    """Walks the script once, producing (image_path, hold_duration) pairs
+    for ffmpeg's concat demuxer, plus the ordered list of audio files to
+    concatenate. No per-video-frame files are written here at all — only
+    as many unique images as the script actually needs."""
+    plan = []
     audio_files_in_order = []
+
     for seg in parsed_script["segments"]:
-        frame_idx = render_segment_frames(seg, frame_idx)
         if seg["type"] == "narration":
+            on_screen = seg.get("on_screen", [])
+            # Narrator isn't a rendered character, and on-screen characters
+            # stay silent/closed-mouth during narration — so this is ONE
+            # static image for the whole segment, not per-frame amplitude
+            # analysis at all. Getting duration via ffprobe is much cheaper
+            # than decoding the full PCM waveform for something we don't
+            # even use here.
+            state = tuple(sorted((c["character"], c.get("expression", "neutral"), "closed") for c in on_screen))
+            duration = _get_audio_duration(seg["audio_file"])
+            plan.append((_get_or_render_frame(state), duration))
             audio_files_in_order.append(seg["audio_file"])
         else:
-            audio_files_in_order.extend(line["audio_file"] for line in seg["lines"])
+            speakers = [{"character": l["speaker"], "expression": l["expression"]} for l in seg["lines"]]
+            for line in seg["lines"]:
+                # Dialogue DOES need the real amplitude envelope, since the
+                # speaking character's mouth actually needs to move — but
+                # we collapse consecutive identical mouth-shapes into ONE
+                # held image instead of one file per 1/12s slot.
+                envelope, duration = get_amplitude_envelope(line["audio_file"])
+                mouth_keys = [amplitude_to_mouth(a) for a in envelope]
+                frame_dur = duration / len(mouth_keys) if mouth_keys else duration
+                i = 0
+                while i < len(mouth_keys):
+                    j = i
+                    while j + 1 < len(mouth_keys) and mouth_keys[j + 1] == mouth_keys[i]:
+                        j += 1
+                    hold_duration = (j - i + 1) * frame_dur
+                    state = tuple(sorted(
+                        (s["character"], s.get("expression", "neutral"),
+                         mouth_keys[i] if s["character"] == line["speaker"] else "closed")
+                        for s in speakers
+                    ))
+                    plan.append((_get_or_render_frame(state), hold_duration))
+                    i = j + 1
+                audio_files_in_order.append(line["audio_file"])
 
-    concat_list_path = "audio_concat_list.txt"
-    with open(concat_list_path, "w") as f:
+    return plan, audio_files_in_order
+
+
+def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
+    plan, audio_files_in_order = _build_render_plan(parsed_script)
+    print(f"Render plan: {len(plan)} timeline entries, only {len(_frame_cache)} unique images "
+          f"actually rendered (this is the number that used to be 7,000-11,000).")
+
+    video_concat_path = "video_concat_list.txt"
+    with open(video_concat_path, "w") as f:
+        for path, dur in plan:
+            f.write(f"file '{os.path.abspath(path)}'\n")
+            f.write(f"duration {dur:.3f}\n")
+        if plan:
+            # ffmpeg's concat demuxer quirk: the LAST file's `duration` line
+            # is ignored unless the file is listed once more after it.
+            f.write(f"file '{os.path.abspath(plan[-1][0])}'\n")
+
+    audio_concat_path = "audio_concat_list.txt"
+    with open(audio_concat_path, "w") as f:
         for path in audio_files_in_order:
             f.write(f"file '{os.path.abspath(path)}'\n")
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list_path,
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", audio_concat_path,
          "-c", "copy", "full_audio.mp3"],
         check=True, capture_output=True,
     )
 
     subprocess.run(
-        ["ffmpeg", "-y", "-framerate", str(FPS), "-i", os.path.join(SCENE_DIR, "f%06d.png"),
-         "-i", "full_audio.mp3", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", video_concat_path,
+         "-i", "full_audio.mp3",
+         "-vf", f"pad=ceil(iw/2)*2:ceil(ih/2)*2,fps={FPS}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-shortest", out_path],
         check=True, capture_output=True,
     )
-    print(f"Video ready: {out_path} ({frame_idx} frames at {FPS}fps = ~{frame_idx/FPS:.0f}s)")
+    total_duration = sum(d for _, d in plan)
+    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(_frame_cache)} unique frames)")
     return out_path
 
 
