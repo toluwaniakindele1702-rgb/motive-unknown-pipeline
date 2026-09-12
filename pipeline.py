@@ -194,6 +194,7 @@ topic_scout = Agent(
         "with character art available right now."
     ),
     backstory=(
+        "detailed thinking off\n\n"
         "You track trending searches, Reddit threads, and history content that performs "
         "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
         "particular event, figure, or moment — that has strong curiosity-gap potential. "
@@ -210,6 +211,7 @@ researcher = Agent(
     role="Video Researcher",
     goal="Find the most surprising, well-sourced facts or story beats on the chosen historical topic",
     backstory=(
+        "detailed thinking off\n\n"
         "You're an obsessive researcher for a history storytelling channel. You dig up "
         "real, verifiable, surprising details and put them in the order they'd be told "
         "as a story. You avoid generic facts everyone already knows. You always check "
@@ -230,6 +232,7 @@ scriptwriter = Agent(
         "their own dialogue or jokes only occasionally."
     ),
     backstory=(
+        "detailed thinking off\n\n"
         "You write for a 2D cutout/puppet animation history channel, similar in style "
         "to 'Chat History' and 'Peanut'. A narrator voice carries most of the runtime. "
         "The characters on screen are simple archetypes (commoner, soldier, royal) for "
@@ -246,6 +249,7 @@ seo_specialist = Agent(
     role="YouTube SEO Specialist",
     goal="Generate a high-CTR title, description, and tag list for the video",
     backstory=(
+        "detailed thinking off\n\n"
         "You've studied thousands of high-performing history-channel uploads and know "
         "how to write curiosity-driven titles and keyword-rich descriptions."
     ),
