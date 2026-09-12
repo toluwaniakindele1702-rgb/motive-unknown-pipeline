@@ -3,7 +3,7 @@ Motive Unknown — automated video pipeline (puppet-animation format).
 Runs unattended on GitHub Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
-  NVIDIA_NIM_API_KEY    - your NVIDIA NIM key
+  GROQ_API_KEY          - your Groq API key
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
@@ -25,12 +25,14 @@ from PIL import Image, ImageDraw, ImageFont
 # ---------------------------------------------------------------------
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
-# REVERTED from Gemini back to NVIDIA NIM — Gemini's free-tier quota kept
-# getting fully exhausted (not just per-minute, since even 60s waits after
-# a 429 kept failing again), and no amount of pacing fixes a quota that's
-# actually used up. NIM is slower per call but is the one provider that's
-# proven to run a full crew to completion without this wall.
-NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
+# Switched from NVIDIA NIM to Groq. NIM's Nemotron model needed a
+# "detailed thinking off" system prompt to avoid dumping its whole reasoning
+# process instead of JSON, but that same setting also made it stubbornly
+# undershoot the requested script length (699 words, then 313, against a
+# 1600-2400 target) — fighting one problem reintroduced the other. Groq's
+# llama-3.3-70b-versatile isn't a reasoning model, so neither issue applies:
+# no forced "thinking" preamble, and no built-in terseness to fight.
+GROQ_KEY = os.environ["GROQ_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
     f.write(os.environ["YOUTUBE_TOKEN_JSON"])
@@ -40,22 +42,18 @@ with open("client_secret.json", "w") as f:
 print("Secrets loaded.")
 
 # ---------------------------------------------------------------------
-# 1. LLM connection (NVIDIA NIM)
+# 1. LLM connection (Groq)
 # ---------------------------------------------------------------------
 import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
 llm = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    api_key=NVIDIA_KEY,
-    base_url="https://integrate.api.nvidia.com/v1",
+    model="groq/llama-3.3-70b-versatile",
+    api_key=GROQ_KEY,
     timeout=300,
     max_retries=5,
-    max_tokens=8192,  # no cap before = provider default, likely truncating the
-                       # scriptwriter before it finishes (this model burns tokens
-                       # on a "thinking" preamble first even with "detailed
-                       # thinking off" in the backstory, per the 699-word run)
+    max_tokens=8192,
 )
 
 
@@ -72,54 +70,43 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
     raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
 
 
-NIM_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NIM_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b"  # no "openai/" prefix here — that
-                                                          # prefix is a CrewAI/litellm
-                                                          # routing convention, not part
-                                                          # of the actual NIM model id
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL_ID = "llama-3.3-70b-versatile"
 
 
-def _call_nim_direct(messages, max_tokens=8192, temperature=0, attempts=5, base_delay=10):
-    """Calls NVIDIA NIM's chat/completions endpoint directly with raw `requests`,
-    bypassing CrewAI/litellm entirely.
-
-    Why this exists: NVIDIA's own docs for Nemotron reasoning models are explicit
-    that the 'detailed thinking off' control phrase only reliably suppresses the
-    model's chain-of-thought dump when it is sent as its OWN message with
-    role='system', and that message must be first in the conversation. CrewAI's
-    Agent always builds one combined system message like "You are Scriptwriter.
-    <backstory text...>", so even with 'detailed thinking off' as the first line
-    of the backstory, it's never actually the first *message* — just the first
-    line of a longer one. That's almost certainly why the Scriptwriter kept
-    sliding into a full 'Here's a thinking process...' essay instead of JSON,
-    even after being told not to, and why raising max_tokens alone didn't fix it
-    (it just gave the thinking process more room to run before cutting off).
-    """
+def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, base_delay=10):
+    """Calls Groq's chat/completions endpoint directly with raw `requests`,
+    bypassing CrewAI/litellm entirely — used for the Scriptwriter's outline
+    and per-beat generation calls, same reasoning as before: full control
+    over exactly what's sent, independent of CrewAI's system-prompt
+    templating. Unlike the old NIM setup, llama-3.3-70b-versatile is a plain
+    (non-reasoning) chat model, so there's no "detailed thinking off" system
+    message needed here — it doesn't have that failure mode."""
     last_error = None
     for i in range(attempts):
         try:
             resp = requests.post(
-                NIM_CHAT_URL,
+                GROQ_CHAT_URL,
                 headers={
-                    "Authorization": f"Bearer {NVIDIA_KEY}",
+                    "Authorization": f"Bearer {GROQ_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": NIM_MODEL_ID,
+                    "model": GROQ_MODEL_ID,
                     "messages": messages,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
                 },
-                timeout=300,
+                timeout=120,
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
             last_error = e
             wait = base_delay * (i + 1)
-            print(f"NIM direct call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            print(f"Groq direct call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
             time.sleep(wait)
-    raise RuntimeError(f"NIM direct call failed after {attempts} attempts: {last_error}")
+    raise RuntimeError(f"Groq direct call failed after {attempts} attempts: {last_error}")
 
 
 test = call_with_retry(llm, "Reply with exactly one word: OK")
@@ -280,7 +267,6 @@ topic_scout = Agent(
         "with character art available right now."
     ),
     backstory=(
-        "detailed thinking off\n\n"
         "You track trending searches, Reddit threads, and history content that performs "
         "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
         "particular event, figure, or moment — that has strong curiosity-gap potential. "
@@ -298,7 +284,6 @@ researcher = Agent(
     role="Video Researcher",
     goal="Find the most surprising, well-sourced facts or story beats on the chosen historical topic",
     backstory=(
-        "detailed thinking off\n\n"
         "You're an obsessive researcher for a history storytelling channel. You dig up "
         "real, verifiable, surprising details and put them in the order they'd be told "
         "as a story. You avoid generic facts everyone already knows. You always check "
@@ -313,16 +298,15 @@ researcher = Agent(
 )
 
 # NOTE: there is deliberately no CrewAI Agent for the Scriptwriter anymore.
-# See _call_nim_direct's docstring above — the JSON-only output requirement
+# See _call_groq_direct's docstring above — the JSON-only output requirement
 # was too strict for CrewAI's system-prompt templating to reliably satisfy,
-# so script generation is done via a direct API call further down instead
+# so script generation is done via direct API calls further down instead
 # (right after the crew below finishes Topic Scout + Research).
 
 seo_specialist = Agent(
     role="YouTube SEO Specialist",
     goal="Generate a high-CTR title, description, and tag list for the video",
     backstory=(
-        "detailed thinking off\n\n"
         "You've studied thousands of high-performing history-channel uploads and know "
         "how to write curiosity-driven titles and keyword-rich descriptions."
     ),
@@ -429,7 +413,7 @@ print(result)
 # 7. Parse + validate the Scriptwriter's JSON output
 # ---------------------------------------------------------------------
 def _extract_json_object(raw_text: str) -> dict:
-    """Some models (this NVIDIA Nemotron model included, in practice) write
+    """Some models (Nemotron did this in practice, and any model still can) write
     out a 'thinking process' before the real answer no matter how firmly
     you tell them not to — and that reasoning text can itself contain
     brace-like snippets ('keys: {"era", "segments"}') that break a naive
@@ -469,11 +453,7 @@ def _extract_json_object(raw_text: str) -> dict:
     )
 
 
-def parse_script_json(raw_text: str) -> dict:
-    text = raw_text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE)
-    data = _extract_json_object(text)
-
+def validate_script_dict(data: dict) -> dict:
     era = data.get("era")
     if era not in CHARACTER_ROSTER:
         raise RuntimeError(f"Script has invalid/missing era: {era!r}")
@@ -512,6 +492,13 @@ def parse_script_json(raw_text: str) -> dict:
     return data
 
 
+def parse_script_json(raw_text: str) -> dict:
+    text = raw_text.strip()
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE)
+    data = _extract_json_object(text)
+    return validate_script_dict(data)
+
+
 def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int, expr_key: str = "expression"):
     """Character name has no safe fallback (there's no art for a name that
     doesn't exist), so that still fails hard. An unrecognized expression
@@ -542,50 +529,190 @@ def flatten_script_to_text(parsed_script: dict) -> str:
     return "\n".join(parts)
 
 
-def _generate_script_json_direct(research_text: str, extra_note: str = "") -> str:
-    """Generates the script via a direct NIM call — see _call_nim_direct's
-    docstring for why this bypasses CrewAI's Agent/Task system entirely."""
-    description = SCRIPT_TASK_DESCRIPTION
+OUTLINE_TASK_DESCRIPTION = (
+    "Using the research, plan a 10-15 minute puppet-animation video script as a BEAT "
+    "OUTLINE — structure only, not the full prose yet.\n\n"
+    f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
+    "Output ONLY a single JSON object with this exact shape, nothing else:\n"
+    "{\n"
+    '  "era": "ancient_egypt" | "ancient_rome",\n'
+    '  "characters_used": ["<character_name>", ...],\n'
+    '  "beats": [\n'
+    "    {\n"
+    '      "type": "narration",\n'
+    '      "gist": "<1 sentence: what happens in this beat>",\n'
+    '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
+    "    },\n"
+    "    {\n"
+    '      "type": "dialogue",\n'
+    '      "gist": "<1 sentence: what this exchange is about>",\n'
+    '      "speakers": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}, ...]\n'
+    "    }\n"
+    "  ]\n"
+    "}\n\n"
+    "Rules:\n"
+    "- Produce 12-16 beats total, covering the full story arc from the research, in order.\n"
+    "- Most beats should be type 'narration'.\n"
+    "- Use type 'dialogue' only occasionally (roughly every 3-5 narration beats), between "
+    "2 characters already on screen nearby.\n"
+    "- Every character name must come from the allowed list above, matching the chosen era.\n"
+    "- The first beat should be a hook.\n"
+    "- Output must be ONLY the JSON object — first character '{', last character '}'."
+)
+
+
+def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
+    """Step 1 of 2: ask for a compact structural outline, not the full script.
+    Kept as a chunked outline-then-beats generation even though Groq's
+    llama-3.3 doesn't have the reasoning-preamble/terseness issues Nemotron
+    did — chunking is just more reliable in general for hitting an aggregate
+    word-count target than one big single-shot generation."""
+    description = OUTLINE_TASK_DESCRIPTION
     if extra_note:
-        description += (
-            "\n\nIMPORTANT — this is a retry. Your previous attempt was rejected: "
-            f"{extra_note}\nFix this specifically. If it was too short, cover more "
-            "of the research in more detail per segment — do not just pad with "
-            "filler. If your previous attempt wrote out a thinking/analysis process "
-            "instead of JSON, do not do that again — output ONLY the JSON object, "
-            "nothing else."
-        )
+        description += f"\n\nIMPORTANT — this is a retry. Previous attempt was rejected: {extra_note}"
     messages = [
-        {"role": "system", "content": "detailed thinking off"},
-        {"role": "user", "content": f"Research to base the script on:\n{research_text}\n\n{description}"},
+        {"role": "system", "content": "You are a precise JSON generator. Output ONLY the requested JSON object, nothing else."},
+        {"role": "user", "content": f"Research to base the outline on:\n{research_text}\n\n{description}"},
     ]
-    return _call_nim_direct(messages, max_tokens=8192, temperature=0)
+    raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.2)
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+    data = _extract_json_object(text)
+
+    era = data.get("era")
+    if era not in CHARACTER_ROSTER:
+        raise RuntimeError(f"Outline has invalid/missing era: {era!r}")
+    beats = data.get("beats")
+    if not isinstance(beats, list) or len(beats) < 10:
+        raise RuntimeError(f"Outline has too few beats ({len(beats) if isinstance(beats, list) else 0}, need >=10).")
+
+    allowed_for_era = set(CHARACTER_ROSTER[era])
+    for i, beat in enumerate(beats):
+        if beat.get("type") == "narration":
+            for char in beat.get("on_screen", []):
+                _validate_character(char, allowed_for_era, i)
+        elif beat.get("type") == "dialogue":
+            for sp in beat.get("speakers", []):
+                _validate_character(sp, allowed_for_era, i)
+        else:
+            raise RuntimeError(f"Outline beat {i} has invalid type: {beat.get('type')!r}")
+
+    return data
+
+
+NARRATION_MIN_WORDS, NARRATION_MAX_WORDS = 110, 170
+
+
+def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
+    """Step 2, per narration beat: one short, concrete generation. Small,
+    bounded asks like this are reliable regardless of model — this just
+    keeps the same chunked structure that's already proven out."""
+    text = ""
+    for attempt in range(1, attempts + 1):
+        messages = [
+            {"role": "system", "content": "You write narration for a history video. Output ONLY the narration text, nothing else."},
+            {"role": "user", "content": (
+                f"Write {NARRATION_MIN_WORDS}-{NARRATION_MAX_WORDS} words of narration for a "
+                f"puppet-animation history video (era: {era}). This is ONE beat of a larger "
+                "script — write ONLY the narration text itself, nothing else: no JSON, no "
+                "labels, no preamble, no markdown.\n\n"
+                f"What happens in this beat: {gist}\n\n"
+                "Keep sentences short — this is read aloud by AI voiceover. Write in an "
+                "engaging storytelling narrator voice."
+            )},
+        ]
+        text = _call_groq_direct(messages, max_tokens=800, temperature=0.6).strip()
+        text = re.sub(r"^```\s*|\s*```$", "", text)
+        if len(text.split()) >= NARRATION_MIN_WORDS * 0.7:
+            return text
+        print(f"[BEAT RETRY] narration beat too short ({len(text.split())} words), "
+              f"retrying ({attempt}/{attempts})...")
+    return text  # best effort after all attempts — still better than crashing the run
+
+
+def _generate_dialogue_lines(gist: str, speakers: list, era: str, attempts: int = 3) -> list:
+    """Step 2, per dialogue beat: ask for plain 'SPEAKER: line' text instead of
+    JSON — simpler for the model to get exactly right, and simpler for us to
+    parse than nested JSON for a 2-4 line exchange."""
+    speaker_names = [s["character"] for s in speakers]
+    expr_by_name = {s["character"]: s.get("expression", "neutral") for s in speakers}
+    lines = []
+    for attempt in range(1, attempts + 1):
+        messages = [
+            {"role": "system", "content": "You write short dialogue for a history video. Output ONLY the requested lines, nothing else."},
+            {"role": "user", "content": (
+                f"Write a short 2-4 line dialogue exchange between {', '.join(speaker_names)} "
+                f"for a puppet-animation history video (era: {era}).\n\n"
+                f"What this exchange is about: {gist}\n\n"
+                "Output ONLY the lines, one per line, in this exact format:\n"
+                "SPEAKER_NAME: line text\n\n"
+                f"Only use these exact speaker names: {', '.join(speaker_names)}. No JSON, no "
+                "preamble, no extra commentary — just the lines."
+            )},
+        ]
+        raw = _call_groq_direct(messages, max_tokens=400, temperature=0.6).strip()
+        lines = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or ":" not in line:
+                continue
+            speaker, _, spoken_text = line.partition(":")
+            speaker, spoken_text = speaker.strip(), spoken_text.strip()
+            if speaker in speaker_names and spoken_text:
+                lines.append({"speaker": speaker, "text": spoken_text, "expression": expr_by_name[speaker]})
+        if len(lines) >= 2:
+            return lines
+        print(f"[BEAT RETRY] dialogue beat produced too few valid lines, retrying ({attempt}/{attempts})...")
+    return lines  # best effort
+
+
+def _assemble_script_from_outline(outline: dict) -> dict:
+    era = outline["era"]
+    segments = []
+    for beat in outline["beats"]:
+        if beat["type"] == "narration":
+            segments.append({
+                "type": "narration",
+                "text": _generate_narration_text(beat["gist"], era),
+                "on_screen": beat.get("on_screen", []),
+            })
+        else:
+            lines = _generate_dialogue_lines(beat["gist"], beat.get("speakers", []), era)
+            if lines:
+                segments.append({"type": "dialogue", "lines": lines})
+    return {
+        "era": era,
+        "characters_used": outline.get("characters_used", []),
+        "segments": segments,
+    }
 
 
 research_text = getattr(research_task.output, "raw", str(research_task.output))
 
-MAX_SCRIPT_ATTEMPTS = 3
-raw_task_out = None
-parsed_script = None
+MAX_OUTLINE_ATTEMPTS = 3
+outline = None
 last_error = None
 
-for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
-    print(f"[SCRIPT] Generating script via direct NIM call (attempt {attempt}/{MAX_SCRIPT_ATTEMPTS})...")
+for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
+    print(f"[OUTLINE] Generating outline (attempt {attempt}/{MAX_OUTLINE_ATTEMPTS})...")
     t0 = time.time()
-    raw_task_out = _generate_script_json_direct(research_text, extra_note=str(last_error) if last_error else "")
-    print(f"[TIMING] 'Scriptwriter (direct, attempt {attempt})' finished — took {time.time() - t0:.1f}s")
     try:
-        parsed_script = parse_script_json(raw_task_out)
+        outline = _generate_outline_direct(research_text, extra_note=str(last_error) if last_error else "")
+        print(f"[TIMING] 'Outline (attempt {attempt})' finished — took {time.time() - t0:.1f}s, "
+              f"{len(outline['beats'])} beats")
         break
     except RuntimeError as e:
         last_error = e
-        print(f"[SCRIPT RETRY] Attempt {attempt}/{MAX_SCRIPT_ATTEMPTS} failed validation: {e}")
+        print(f"[OUTLINE RETRY] Attempt {attempt}/{MAX_OUTLINE_ATTEMPTS} failed: {e}")
 
-if parsed_script is None:
-    raise RuntimeError(
-        f"Scriptwriter failed validation after {MAX_SCRIPT_ATTEMPTS} attempts. "
-        f"Last error: {last_error}"
-    )
+if outline is None:
+    raise RuntimeError(f"Outline generation failed after {MAX_OUTLINE_ATTEMPTS} attempts. Last error: {last_error}")
+
+print(f"[SCRIPT] Generating {len(outline['beats'])} beats individually...")
+t0 = time.time()
+script_dict = _assemble_script_from_outline(outline)
+print(f"[TIMING] 'All beats generated' finished — took {time.time() - t0:.1f}s")
+
+parsed_script = validate_script_dict(script_dict)
 
 # ---------------------------------------------------------------------
 # 7b. SEO — runs AFTER the script is validated, using the actual finished
