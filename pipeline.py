@@ -45,7 +45,7 @@ from crewai.tools import tool
 os.environ["GEMINI_API_KEY"] = GEMINI_KEY
 
 llm = LLM(
-    model="gemini/gemini-flash-latest",
+    model="gemini/gemini-2.0-flash",
     api_key=GEMINI_KEY,
     temperature=0.5,
     timeout=300,
