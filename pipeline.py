@@ -52,6 +52,10 @@ llm = LLM(
     base_url="https://integrate.api.nvidia.com/v1",
     timeout=300,
     max_retries=5,
+    max_tokens=8192,  # no cap before = provider default, likely truncating the
+                       # scriptwriter before it finishes (this model burns tokens
+                       # on a "thinking" preamble first even with "detailed
+                       # thinking off" in the backstory, per the 699-word run)
 )
 
 
@@ -70,6 +74,38 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
 
 test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
+
+# ---------------------------------------------------------------------
+# 1b. Timing instrumentation
+#
+# The whole point of this block: next time a run stalls, the GitHub Actions
+# log tells you exactly which task/step it died on and how long each prior
+# stage took, instead of just "still running" until the 90-minute timeout.
+# ---------------------------------------------------------------------
+PIPELINE_START = time.time()
+_last_checkpoint = {"t": PIPELINE_START}
+
+
+def _timing_callback(task_label):
+    """Attach to a Task's `callback=` — fires when that task finishes."""
+    def _cb(output):
+        now = time.time()
+        since_last = now - _last_checkpoint["t"]
+        since_start = now - PIPELINE_START
+        print(f"[TIMING] '{task_label}' finished — took {since_last:.1f}s "
+              f"(total elapsed {since_start:.1f}s)")
+        _last_checkpoint["t"] = now
+    return _cb
+
+
+def _step_callback(step):
+    """Attach to the Crew's `step_callback=` — fires on every agent
+    thought/tool-call/action. This is what actually shows you an agent
+    looping (e.g. retrying a search 6 times) instead of it looking like
+    the whole run is just silently hanging."""
+    since_start = time.time() - PIPELINE_START
+    print(f"[STEP] t+{since_start:.1f}s — {type(step).__name__}")
+
 
 # ---------------------------------------------------------------------
 # 2. Search tools
@@ -204,6 +240,7 @@ topic_scout = Agent(
     ),
     tools=[search_tool],
     llm=llm,
+    max_iter=8,  # caps tool-retry loops (CrewAI default is unbounded-ish, 15/20)
     verbose=True,
 )
 
@@ -221,6 +258,7 @@ researcher = Agent(
     ),
     tools=[wikipedia_tool, search_tool],
     llm=llm,
+    max_iter=10,  # slightly higher than Topic Scout since it juggles 2 tools
     verbose=True,
 )
 
@@ -242,6 +280,7 @@ scriptwriter = Agent(
         "no commentary before or after the JSON."
     ),
     llm=llm,
+    max_iter=5,  # no tools here, so this only guards against self-revision loops
     verbose=True,
 )
 
@@ -254,6 +293,7 @@ seo_specialist = Agent(
         "how to write curiosity-driven titles and keyword-rich descriptions."
     ),
     llm=llm,
+    max_iter=5,
     verbose=True,
 )
 
@@ -272,6 +312,7 @@ topic_task = Task(
     ),
     expected_output="One clearly stated topic, its era, and a short justification.",
     agent=topic_scout,
+    callback=_timing_callback("Topic Scout"),
 )
 
 research_task = Task(
@@ -283,6 +324,7 @@ research_task = Task(
     expected_output="A bullet list of 8-12 facts/story beats in story order, each with a short source note.",
     agent=researcher,
     context=[topic_task],
+    callback=_timing_callback("Researcher"),
 )
 
 CHARACTER_LIST_TEXT = "\n".join(
@@ -338,6 +380,7 @@ script_task = Task(
     ),
     agent=scriptwriter,
     context=[research_task],
+    callback=_timing_callback("Scriptwriter"),
 )
 
 seo_task = Task(
@@ -350,6 +393,7 @@ seo_task = Task(
     expected_output="Titles, description, and tags clearly labeled.",
     agent=seo_specialist,
     context=[script_task],
+    callback=_timing_callback("SEO Specialist"),
 )
 
 print("Tasks ready.")
@@ -362,6 +406,7 @@ crew = Crew(
     tasks=[topic_task, research_task, script_task, seo_task],
     process=Process.sequential,
     verbose=True,
+    step_callback=_step_callback,
 )
 
 result = crew.kickoff()
@@ -485,8 +530,55 @@ def flatten_script_to_text(parsed_script: dict) -> str:
     return "\n".join(parts)
 
 
+def _run_scriptwriter_retry(extra_note: str) -> str:
+    """Re-runs ONLY the Scriptwriter task (not Topic Scout/Researcher again —
+    those already succeeded and their output is reused via context=) with an
+    added note about what was wrong last time. Much cheaper than failing the
+    whole ~30+ minute run over one short/malformed generation."""
+    retry_task = Task(
+        description=script_task.description + (
+            "\n\nIMPORTANT — this is a retry. Your previous attempt was rejected: "
+            f"{extra_note}\nFix this specifically. If it was too short, cover more "
+            "of the research in more detail per segment — do not just pad with "
+            "filler."
+        ),
+        expected_output=script_task.expected_output,
+        agent=scriptwriter,
+        context=[research_task],
+        callback=_timing_callback("Scriptwriter (retry)"),
+    )
+    mini_crew = Crew(
+        agents=[scriptwriter],
+        tasks=[retry_task],
+        process=Process.sequential,
+        verbose=True,
+        step_callback=_step_callback,
+    )
+    mini_crew.kickoff()
+    return getattr(retry_task.output, "raw", str(retry_task.output))
+
+
+MAX_SCRIPT_ATTEMPTS = 3
 raw_task_out = getattr(script_task.output, "raw", str(script_task.output))
-parsed_script = parse_script_json(raw_task_out)
+parsed_script = None
+last_error = None
+
+for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
+    try:
+        parsed_script = parse_script_json(raw_task_out)
+        break
+    except RuntimeError as e:
+        last_error = e
+        print(f"[SCRIPT RETRY] Attempt {attempt}/{MAX_SCRIPT_ATTEMPTS} failed validation: {e}")
+        if attempt < MAX_SCRIPT_ATTEMPTS:
+            print(f"[SCRIPT RETRY] Regenerating script (attempt {attempt + 1}/{MAX_SCRIPT_ATTEMPTS})...")
+            raw_task_out = _run_scriptwriter_retry(str(e))
+
+if parsed_script is None:
+    raise RuntimeError(
+        f"Scriptwriter failed validation after {MAX_SCRIPT_ATTEMPTS} attempts. "
+        f"Last error: {last_error}"
+    )
 
 # ---------------------------------------------------------------------
 # 8. Character assembly config
