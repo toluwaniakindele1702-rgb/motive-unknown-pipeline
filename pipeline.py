@@ -72,6 +72,56 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
     raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
 
 
+NIM_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+NIM_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b"  # no "openai/" prefix here — that
+                                                          # prefix is a CrewAI/litellm
+                                                          # routing convention, not part
+                                                          # of the actual NIM model id
+
+
+def _call_nim_direct(messages, max_tokens=8192, temperature=0, attempts=5, base_delay=10):
+    """Calls NVIDIA NIM's chat/completions endpoint directly with raw `requests`,
+    bypassing CrewAI/litellm entirely.
+
+    Why this exists: NVIDIA's own docs for Nemotron reasoning models are explicit
+    that the 'detailed thinking off' control phrase only reliably suppresses the
+    model's chain-of-thought dump when it is sent as its OWN message with
+    role='system', and that message must be first in the conversation. CrewAI's
+    Agent always builds one combined system message like "You are Scriptwriter.
+    <backstory text...>", so even with 'detailed thinking off' as the first line
+    of the backstory, it's never actually the first *message* — just the first
+    line of a longer one. That's almost certainly why the Scriptwriter kept
+    sliding into a full 'Here's a thinking process...' essay instead of JSON,
+    even after being told not to, and why raising max_tokens alone didn't fix it
+    (it just gave the thinking process more room to run before cutting off).
+    """
+    last_error = None
+    for i in range(attempts):
+        try:
+            resp = requests.post(
+                NIM_CHAT_URL,
+                headers={
+                    "Authorization": f"Bearer {NVIDIA_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": NIM_MODEL_ID,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+                timeout=300,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            wait = base_delay * (i + 1)
+            print(f"NIM direct call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"NIM direct call failed after {attempts} attempts: {last_error}")
+
+
 test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
 
@@ -262,27 +312,11 @@ researcher = Agent(
     verbose=True,
 )
 
-scriptwriter = Agent(
-    role="Scriptwriter",
-    goal=(
-        "Turn research into a 10-15 minute puppet-animation video script: a narrator "
-        "tells the story while on-screen characters silently act along, breaking into "
-        "their own dialogue or jokes only occasionally."
-    ),
-    backstory=(
-        "detailed thinking off\n\n"
-        "You write for a 2D cutout/puppet animation history channel, similar in style "
-        "to 'Chat History' and 'Peanut'. A narrator voice carries most of the runtime. "
-        "The characters on screen are simple archetypes (commoner, soldier, royal) for "
-        "the era of the story — they are not named historical figures, they're stand-ins "
-        "acting out the story and occasionally cracking a joke or reacting to each other. "
-        "You output ONLY valid JSON, nothing else — no preamble, no markdown code fences, "
-        "no commentary before or after the JSON."
-    ),
-    llm=llm,
-    max_iter=5,  # no tools here, so this only guards against self-revision loops
-    verbose=True,
-)
+# NOTE: there is deliberately no CrewAI Agent for the Scriptwriter anymore.
+# See _call_nim_direct's docstring above — the JSON-only output requirement
+# was too strict for CrewAI's system-prompt templating to reliably satisfy,
+# so script generation is done via a direct API call further down instead
+# (right after the crew below finishes Topic Scout + Research).
 
 seo_specialist = Agent(
     role="YouTube SEO Specialist",
@@ -331,69 +365,47 @@ CHARACTER_LIST_TEXT = "\n".join(
     f"  {era}: {', '.join(names)}" for era, names in CHARACTER_ROSTER.items()
 )
 
-script_task = Task(
-    description=(
-        "Using the research, write a 10-15 minute puppet-animation video script as JSON.\n\n"
-        "CRITICAL: This is a fully automated pipeline. There is no human available to "
-        "answer questions or confirm details. Decide everything yourself and output the "
-        "finished JSON directly, right now. Never ask a question, never say 'let me know', "
-        "never wrap the JSON in markdown code fences, never write anything before or after "
-        "the JSON object. Do NOT include a thinking process, analysis, reasoning section, or "
-        "any notes about your approach — not even a short one. Your entire response must be "
-        "nothing but the JSON object itself: the very first character you output must be '{' "
-        "and the very last character must be '}'.\n\n"
-        f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
-        "Output a single JSON object with this exact shape:\n"
-        "{\n"
-        '  "era": "ancient_egypt" | "ancient_rome",\n'
-        '  "characters_used": ["<character_name>", ...],\n'
-        '  "segments": [\n'
-        "    {\n"
-        '      "type": "narration",\n'
-        '      "text": "<narrator line, 1-3 sentences>",\n'
-        '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
-        "    },\n"
-        "    {\n"
-        '      "type": "dialogue",\n'
-        '      "lines": [\n'
-        '        {"speaker": "<character_name>", "text": "<line>", "expression": "<neutral|happy|angry|worried>"},\n'
-        "        ...\n"
-        "      ]\n"
-        "    }\n"
-        "  ]\n"
-        "}\n\n"
-        "Rules:\n"
-        "- Most segments should be type 'narration' — this carries the story.\n"
-        "- Use type 'dialogue' only occasionally (roughly every 4-8 narration segments), "
-        "for a short back-and-forth exchange or joke between 2 characters already "
-        "established as on_screen nearby.\n"
-        "- Total narration + dialogue text combined should be roughly 1600-2400 words "
-        "(this is a 10-15 minute voiceover at normal pacing).\n"
-        "- Every character name used must come from the allowed list above, and must "
-        "match the chosen era.\n"
-        "- Open with a hook in the first narration segment.\n"
-        "- Keep sentences short — this is read aloud by AI voiceover."
-    ),
-    expected_output=(
-        "A single valid JSON object matching the schema above — nothing else, no "
-        "markdown fences, no explanation text."
-    ),
-    agent=scriptwriter,
-    context=[research_task],
-    callback=_timing_callback("Scriptwriter"),
-)
-
-seo_task = Task(
-    description=(
-        "Based on the script, write:\n"
-        "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
-        "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
-        "3. A list of 15 relevant tags"
-    ),
-    expected_output="Titles, description, and tags clearly labeled.",
-    agent=seo_specialist,
-    context=[script_task],
-    callback=_timing_callback("SEO Specialist"),
+SCRIPT_TASK_DESCRIPTION = (
+    "Using the research, write a 10-15 minute puppet-animation video script as JSON.\n\n"
+    "CRITICAL: This is a fully automated pipeline. There is no human available to "
+    "answer questions or confirm details. Decide everything yourself and output the "
+    "finished JSON directly, right now. Never ask a question, never say 'let me know', "
+    "never wrap the JSON in markdown code fences, never write anything before or after "
+    "the JSON object. Do NOT include a thinking process, analysis, reasoning section, or "
+    "any notes about your approach — not even a short one. Your entire response must be "
+    "nothing but the JSON object itself: the very first character you output must be '{' "
+    "and the very last character must be '}'.\n\n"
+    f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
+    "Output a single JSON object with this exact shape:\n"
+    "{\n"
+    '  "era": "ancient_egypt" | "ancient_rome",\n'
+    '  "characters_used": ["<character_name>", ...],\n'
+    '  "segments": [\n'
+    "    {\n"
+    '      "type": "narration",\n'
+    '      "text": "<narrator line, 1-3 sentences>",\n'
+    '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
+    "    },\n"
+    "    {\n"
+    '      "type": "dialogue",\n'
+    '      "lines": [\n'
+    '        {"speaker": "<character_name>", "text": "<line>", "expression": "<neutral|happy|angry|worried>"},\n'
+    "        ...\n"
+    "      ]\n"
+    "    }\n"
+    "  ]\n"
+    "}\n\n"
+    "Rules:\n"
+    "- Most segments should be type 'narration' — this carries the story.\n"
+    "- Use type 'dialogue' only occasionally (roughly every 4-8 narration segments), "
+    "for a short back-and-forth exchange or joke between 2 characters already "
+    "established as on_screen nearby.\n"
+    "- Total narration + dialogue text combined should be roughly 1600-2400 words "
+    "(this is a 10-15 minute voiceover at normal pacing).\n"
+    "- Every character name used must come from the allowed list above, and must "
+    "match the chosen era.\n"
+    "- Open with a hook in the first narration segment.\n"
+    "- Keep sentences short — this is read aloud by AI voiceover."
 )
 
 print("Tasks ready.")
@@ -402,15 +414,15 @@ print("Tasks ready.")
 # 6. Run the crew
 # ---------------------------------------------------------------------
 crew = Crew(
-    agents=[topic_scout, researcher, scriptwriter, seo_specialist],
-    tasks=[topic_task, research_task, script_task, seo_task],
+    agents=[topic_scout, researcher],
+    tasks=[topic_task, research_task],
     process=Process.sequential,
     verbose=True,
     step_callback=_step_callback,
 )
 
 result = crew.kickoff()
-print("\n\n===== FINAL OUTPUT =====\n")
+print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
 print(result)
 
 # ---------------------------------------------------------------------
@@ -530,55 +542,77 @@ def flatten_script_to_text(parsed_script: dict) -> str:
     return "\n".join(parts)
 
 
-def _run_scriptwriter_retry(extra_note: str) -> str:
-    """Re-runs ONLY the Scriptwriter task (not Topic Scout/Researcher again —
-    those already succeeded and their output is reused via context=) with an
-    added note about what was wrong last time. Much cheaper than failing the
-    whole ~30+ minute run over one short/malformed generation."""
-    retry_task = Task(
-        description=script_task.description + (
+def _generate_script_json_direct(research_text: str, extra_note: str = "") -> str:
+    """Generates the script via a direct NIM call — see _call_nim_direct's
+    docstring for why this bypasses CrewAI's Agent/Task system entirely."""
+    description = SCRIPT_TASK_DESCRIPTION
+    if extra_note:
+        description += (
             "\n\nIMPORTANT — this is a retry. Your previous attempt was rejected: "
             f"{extra_note}\nFix this specifically. If it was too short, cover more "
             "of the research in more detail per segment — do not just pad with "
-            "filler."
-        ),
-        expected_output=script_task.expected_output,
-        agent=scriptwriter,
-        context=[research_task],
-        callback=_timing_callback("Scriptwriter (retry)"),
-    )
-    mini_crew = Crew(
-        agents=[scriptwriter],
-        tasks=[retry_task],
-        process=Process.sequential,
-        verbose=True,
-        step_callback=_step_callback,
-    )
-    mini_crew.kickoff()
-    return getattr(retry_task.output, "raw", str(retry_task.output))
+            "filler. If your previous attempt wrote out a thinking/analysis process "
+            "instead of JSON, do not do that again — output ONLY the JSON object, "
+            "nothing else."
+        )
+    messages = [
+        {"role": "system", "content": "detailed thinking off"},
+        {"role": "user", "content": f"Research to base the script on:\n{research_text}\n\n{description}"},
+    ]
+    return _call_nim_direct(messages, max_tokens=8192, temperature=0)
 
+
+research_text = getattr(research_task.output, "raw", str(research_task.output))
 
 MAX_SCRIPT_ATTEMPTS = 3
-raw_task_out = getattr(script_task.output, "raw", str(script_task.output))
+raw_task_out = None
 parsed_script = None
 last_error = None
 
 for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
+    print(f"[SCRIPT] Generating script via direct NIM call (attempt {attempt}/{MAX_SCRIPT_ATTEMPTS})...")
+    t0 = time.time()
+    raw_task_out = _generate_script_json_direct(research_text, extra_note=str(last_error) if last_error else "")
+    print(f"[TIMING] 'Scriptwriter (direct, attempt {attempt})' finished — took {time.time() - t0:.1f}s")
     try:
         parsed_script = parse_script_json(raw_task_out)
         break
     except RuntimeError as e:
         last_error = e
         print(f"[SCRIPT RETRY] Attempt {attempt}/{MAX_SCRIPT_ATTEMPTS} failed validation: {e}")
-        if attempt < MAX_SCRIPT_ATTEMPTS:
-            print(f"[SCRIPT RETRY] Regenerating script (attempt {attempt + 1}/{MAX_SCRIPT_ATTEMPTS})...")
-            raw_task_out = _run_scriptwriter_retry(str(e))
 
 if parsed_script is None:
     raise RuntimeError(
         f"Scriptwriter failed validation after {MAX_SCRIPT_ATTEMPTS} attempts. "
         f"Last error: {last_error}"
     )
+
+# ---------------------------------------------------------------------
+# 7b. SEO — runs AFTER the script is validated, using the actual finished
+# script text embedded directly in the prompt (not CrewAI's context=, since
+# there's no upstream CrewAI Task for the script anymore).
+# ---------------------------------------------------------------------
+seo_task = Task(
+    description=(
+        "Based on the following finished script, write:\n"
+        "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
+        "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
+        "3. A list of 15 relevant tags\n\n"
+        f"SCRIPT:\n{flatten_script_to_text(parsed_script)}"
+    ),
+    expected_output="Titles, description, and tags clearly labeled.",
+    agent=seo_specialist,
+    callback=_timing_callback("SEO Specialist"),
+)
+seo_crew = Crew(
+    agents=[seo_specialist],
+    tasks=[seo_task],
+    process=Process.sequential,
+    verbose=True,
+    step_callback=_step_callback,
+)
+seo_crew.kickoff()
+seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 
 # ---------------------------------------------------------------------
 # 8. Character assembly config
@@ -981,7 +1015,6 @@ def upload_video(video_path: str, thumbnail_path: str, title: str, description: 
 parsed_script = generate_all_voiceovers(parsed_script)
 video_path = build_video(parsed_script)
 
-seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 video_title = extract_seo_title(seo_output)[:100]
 thumb_path = generate_thumbnail(parsed_script, video_title)
 
