@@ -45,32 +45,72 @@ from crewai.tools import tool
 os.environ["GEMINI_API_KEY"] = GEMINI_KEY
 
 llm = LLM(
-    model="gemini/gemini-2.0-flash",
+    model="gemini/gemini-flash-latest",
     api_key=GEMINI_KEY,
     temperature=0.5,
     timeout=300,
     max_retries=5,
 )
 
+# ---------------------------------------------------------------------
+# Rate limiting — the actual fix for the 429 "quota exceeded" failures.
+#
+# Your free tier is capped at 5 requests/minute. CrewAI's own internal
+# retry doesn't know that number and doesn't read Google's "please retry
+# in X seconds" from the error — it just retries blind and can still lose.
+# This patches llm.call() itself (the method CrewAI's agents actually use
+# internally for every generation step, not just my one-off test call
+# below) so EVERY call the crew makes — not just the ones I wrote — is
+# paced to stay under 5/minute, and if a 429 slips through anyway, it
+# reads the real wait time Google gives you and sleeps exactly that long
+# instead of guessing.
+# ---------------------------------------------------------------------
+_last_call_time = [0.0]
+MIN_SECONDS_BETWEEN_CALLS = 13  # 60s / 5 requests, plus a small safety margin
 
-def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
-    """Restored — this got dropped in the Gemini switch. Gemini is likely
-    more reliable than the old NVIDIA NIM free tier, but 'more reliable'
-    isn't 'never fails', and a run failing at minute 1 because of one bad
-    API call is a cheap thing to guard against."""
-    last_error = None
+
+def _wait_for_rate_limit():
+    elapsed = time.time() - _last_call_time[0]
+    remaining = MIN_SECONDS_BETWEEN_CALLS - elapsed
+    if remaining > 0:
+        time.sleep(remaining)
+    _last_call_time[0] = time.time()
+
+
+def _parse_retry_after(error_text: str):
+    match = re.search(r"retry in ([\d.]+)s", error_text, re.IGNORECASE)
+    return float(match.group(1)) if match else None
+
+
+_original_llm_call = llm.call
+
+
+def _rate_limited_call(*args, **kwargs):
+    attempts = 6
     for i in range(attempts):
+        _wait_for_rate_limit()
         try:
-            return llm_obj.call(prompt)
+            return _original_llm_call(*args, **kwargs)
         except Exception as e:
-            last_error = e
-            wait = base_delay * (i + 1)
-            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            msg = str(e)
+            retry_after = _parse_retry_after(msg)
+            if retry_after is not None:
+                wait = retry_after + 2
+                print(f"Rate limited (429) — waiting {wait:.1f}s (Google's own suggested wait) "
+                      f"before retry {i+1}/{attempts}...")
+                time.sleep(wait)
+                continue
+            if i == attempts - 1:
+                raise
+            wait = 10 * (i + 1)
+            print(f"LLM call failed (attempt {i+1}/{attempts}): {msg[:200]}\nRetrying in {wait}s...")
             time.sleep(wait)
-    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
+    raise RuntimeError("LLM call failed after all rate-limit-aware retries.")
 
 
-test = call_with_retry(llm, "Reply with exactly one word: OK")
+llm.call = _rate_limited_call
+
+test = llm.call("Reply with exactly one word: OK")
 print("LLM connection test:", test)
 
 # ---------------------------------------------------------------------
