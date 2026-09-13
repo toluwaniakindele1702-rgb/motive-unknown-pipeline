@@ -30,10 +30,13 @@ from PIL import Image, ImageDraw, ImageFont
 # process instead of JSON, but that same setting also made it stubbornly
 # undershoot the requested script length (699 words, then 313, against a
 # 1600-2400 target) — fighting one problem reintroduced the other.
-# Using moonshotai/kimi-k2-instruct-0905 here (not Groq's suggested
-# llama-3.3-70b-versatile, which was decommissioned Aug 16 2026) — it's a
-# plain instruct model, not a reasoning model, so neither issue applies: no
-# forced "thinking" preamble, and no built-in terseness to fight.
+# Using openai/gpt-oss-120b — Kimi K2 (moonshotai/kimi-k2-instruct-0905)
+# returned "model_not_found" from Groq's own API despite being a real,
+# documented model ID; that means it needs to be enabled for the account
+# (Settings -> Model Access in the Groq console), not a code problem.
+# gpt-oss-120b is one of Groq's flagship models with no such gating, and its
+# reasoning output goes into a separate "reasoning" field, not mixed into
+# content — so it shouldn't repeat the Nemotron "thinking dump" problem.
 GROQ_KEY = os.environ["GROQ_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
@@ -51,7 +54,7 @@ from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
 llm = LLM(
-    model="groq/moonshotai/kimi-k2-instruct-0905",
+    model="groq/openai/gpt-oss-120b",
     api_key=GROQ_KEY,
     timeout=300,
     max_retries=5,
@@ -73,7 +76,7 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
 
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL_ID = "moonshotai/kimi-k2-instruct-0905"
+GROQ_MODEL_ID = "openai/gpt-oss-120b"
 
 
 def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, base_delay=10):
@@ -81,9 +84,12 @@ def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, ba
     bypassing CrewAI/litellm entirely — used for the Scriptwriter's outline
     and per-beat generation calls, same reasoning as before: full control
     over exactly what's sent, independent of CrewAI's system-prompt
-    templating. moonshotai/kimi-k2-instruct-0905 is a plain (non-reasoning)
-    chat model, so there's no "detailed thinking off" system message needed
-    here — it doesn't have that failure mode."""
+    templating. openai/gpt-oss-120b IS a reasoning model, but unlike
+    Nemotron, Groq puts its reasoning trace in a separate "reasoning" field
+    on the response rather than mixing it into "content" — include_reasoning:
+    false below tells Groq to drop that field entirely, and we only ever
+    read "content" anyway, so no reasoning text should leak into the JSON
+    we're trying to parse."""
     last_error = None
     for i in range(attempts):
         try:
@@ -98,6 +104,7 @@ def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, ba
                     "messages": messages,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
+                    "include_reasoning": False,
                 },
                 timeout=120,
             )
