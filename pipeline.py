@@ -1056,12 +1056,22 @@ def _get_or_render_frame(state: tuple) -> str:
 
 
 def _get_audio_duration(path: str) -> float:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", path],
-        capture_output=True, text=True, check=True,
+    """Uses ffmpeg itself (not ffprobe) to get duration. ffprobe isn't
+    guaranteed to be installed alongside ffmpeg on every runner image even
+    though they're normally bundled together — and since ffmpeg is already
+    confirmed working elsewhere in this pipeline, this avoids adding a
+    second binary dependency: running ffmpeg with no real output and
+    reading the 'Duration: HH:MM:SS.xx' line it prints to stderr works
+    anywhere ffmpeg itself works."""
+    result = subprocess.run(
+        ["ffmpeg", "-i", path, "-f", "null", "-"],
+        capture_output=True, text=True,
     )
-    return float(out.stdout.strip())
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", result.stderr)
+    if not match:
+        raise RuntimeError(f"Could not determine duration of '{path}' from ffmpeg output:\n{result.stderr[-500:]}")
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
 def _build_render_plan(parsed_script: dict):
@@ -1078,9 +1088,9 @@ def _build_render_plan(parsed_script: dict):
             # Narrator isn't a rendered character, and on-screen characters
             # stay silent/closed-mouth during narration — so this is ONE
             # static image for the whole segment, not per-frame amplitude
-            # analysis at all. Getting duration via ffprobe is much cheaper
-            # than decoding the full PCM waveform for something we don't
-            # even use here.
+            # analysis at all. Getting duration via ffmpeg's stderr output is
+            # much cheaper than decoding the full PCM waveform for something
+            # we don't even use here.
             state = tuple(sorted((c["character"], c.get("expression", "neutral"), "closed") for c in on_screen))
             duration = _get_audio_duration(seg["audio_file"])
             plan.append((_get_or_render_frame(state), duration))
