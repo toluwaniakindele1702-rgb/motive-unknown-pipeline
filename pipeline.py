@@ -69,7 +69,11 @@ llm = LLM(
     api_key=GROQ_KEY,
     timeout=300,
     max_retries=5,
-    max_tokens=8192,
+    max_tokens=2048,  # Groq's free tier caps openai/gpt-oss-120b at 8000
+                       # TOKENS PER MINUTE total — 8192 alone was nearly the
+                       # entire budget for ONE call. Topic Scout/Researcher/
+                       # SEO only need short outputs (a topic pick, a bullet
+                       # list, titles+tags) so this still leaves headroom.
 )
 
 
@@ -90,7 +94,7 @@ GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL_ID = "openai/gpt-oss-120b"
 
 
-def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, base_delay=10):
+def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=6, base_delay=15):
     """Calls Groq's chat/completions endpoint directly with raw `requests`,
     bypassing CrewAI/litellm entirely — used for the Scriptwriter's outline
     and per-beat generation calls, same reasoning as before: full control
@@ -100,7 +104,13 @@ def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, ba
     on the response rather than mixing it into "content" — include_reasoning:
     false below tells Groq to drop that field entirely, and we only ever
     read "content" anyway, so no reasoning text should leak into the JSON
-    we're trying to parse."""
+    we're trying to parse.
+
+    On a 429 (rate limit — Groq's free tier is only 8000 tokens/minute for
+    this model), this parses the actual suggested wait time out of Groq's
+    error response ("Please try again in 12.915s") rather than guessing,
+    since a fixed short backoff can retry before the per-minute window has
+    actually reset."""
     last_error = None
     for i in range(attempts):
         try:
@@ -119,6 +129,22 @@ def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=5, ba
                 },
                 timeout=120,
             )
+            if resp.status_code == 429:
+                wait = base_delay * (i + 1)
+                retry_after = resp.headers.get("retry-after")
+                if retry_after:
+                    try:
+                        wait = max(wait, float(retry_after) + 2)
+                    except ValueError:
+                        pass
+                else:
+                    match = re.search(r"try again in ([\d.]+)s", resp.text)
+                    if match:
+                        wait = max(wait, float(match.group(1)) + 2)
+                print(f"Groq rate limit hit (attempt {i+1}/{attempts}), waiting {wait:.1f}s: {resp.text[:200]}")
+                last_error = f"429 rate limited: {resp.text[:300]}"
+                time.sleep(wait)
+                continue
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
@@ -425,7 +451,23 @@ crew = Crew(
     step_callback=_step_callback,
 )
 
-result = crew.kickoff()
+MAX_CREW_ATTEMPTS = 3
+result = None
+for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
+    try:
+        result = crew.kickoff()
+        break
+    except Exception as e:
+        # A rate-limit error here previously killed the whole run instantly —
+        # CrewAI doesn't retry these on its own before propagating up. Groq's
+        # free tier TPM window resets every 60s, so wait a bit over that
+        # before trying the whole crew again.
+        wait = 70
+        print(f"[CREW RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
+        if attempt == MAX_CREW_ATTEMPTS:
+            raise
+        time.sleep(wait)
+
 print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
 print(result)
 
@@ -758,7 +800,16 @@ seo_crew = Crew(
     verbose=True,
     step_callback=_step_callback,
 )
-seo_crew.kickoff()
+for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
+    try:
+        seo_crew.kickoff()
+        break
+    except Exception as e:
+        wait = 70
+        print(f"[SEO CREW RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
+        if attempt == MAX_CREW_ATTEMPTS:
+            raise
+        time.sleep(wait)
 seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 
 # ---------------------------------------------------------------------
