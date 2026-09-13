@@ -1,14 +1,21 @@
 """
 Motive Unknown — automated video pipeline (Ken Burns / cartoon-illustration
-format). Runs unattended on GitHub Actions. No interactive input anywhere.
+format, fast-cut with burned-in subtitles). Runs unattended on GitHub
+Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
   GROQ_API_KEY          - your Groq API key
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
-No local character assets required anymore — every scene's image is
-generated on the fly (Pollinations.ai, free, no key) from that beat's gist.
+Optional: drop a royalty-free music file at assets/music/background.mp3
+(e.g. from YouTube Audio Library or Pixabay Music) to enable background
+music — the pipeline skips music gracefully if that file isn't present.
+
+No local character assets required — every clip's image is generated on
+the fly (Pollinations.ai, free, no key) from a short phrase of narration,
+so images change roughly every 2-3 seconds in step with the voiceover, and
+that same phrase is burned in as a subtitle.
 """
 
 import os
@@ -17,6 +24,7 @@ import time
 import json
 import asyncio
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -244,7 +252,7 @@ def wikipedia_tool(query: str) -> str:
 #
 # SCOPE NOTE: still scoped to Ancient Egypt / Ancient Rome for now — that
 # was originally because only those eras had character art, but since
-# images are generated per-beat now, that constraint could be lifted
+# images are generated per-clip now, that constraint could be lifted
 # whenever you want to broaden the topic pool. Left in place until you
 # decide to widen it.
 # ---------------------------------------------------------------------
@@ -257,9 +265,9 @@ topic_scout = Agent(
     backstory=(
         "You track trending searches, Reddit threads, and history content that performs "
         "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
-        "particular event, figure, or moment — that has strong curiosity-gap potential. "
-        "You only pick topics from Ancient Egypt or Ancient Rome. You pick ONE topic and "
-        "justify why it will perform well."
+        "particular event, figure, or moment — that has strong curiosity-gap potential, "
+        "ideally with a twist, mystery, or unresolved question. You only pick topics from "
+        "Ancient Egypt or Ancient Rome. You pick ONE topic and justify why it will perform well."
     ),
     tools=[search_tool],
     llm=llm,
@@ -310,9 +318,10 @@ topic_task = Task(
     description=(
         "Search for a specific, under-covered historical story, event, or figure from "
         "Ancient Egypt or Ancient Rome ONLY — no other eras, and no non-historical "
-        "curiosity topics. Pick ONE specific angle. State the topic clearly, name which "
-        "era it's from (ancient_egypt or ancient_rome), and give 2-3 sentences on why it "
-        "will perform well."
+        "curiosity topics. Favor stories with genuine mystery, conflict, or a twist — not "
+        "just a dry historical fact. Pick ONE specific angle. State the topic clearly, "
+        "name which era it's from (ancient_egypt or ancient_rome), and give 2-3 sentences "
+        "on why it will perform well."
     ),
     expected_output="One clearly stated topic, its era, and a short justification.",
     agent=topic_scout,
@@ -323,6 +332,8 @@ research_task = Task(
     description=(
         "Using the topic chosen by the Topic Scout, research 8-12 specific, surprising, "
         "and verifiable facts or story beats, each with a one-line source or context. "
+        "Prioritize facts with real dramatic weight — betrayals, unsolved mysteries, "
+        "shocking reversals, vivid physical detail — over dry background information. "
         "Put them roughly in the order they'd be told as a story."
     ),
     expected_output="A bullet list of 8-12 facts/story beats in story order, each with a short source note.",
@@ -426,17 +437,9 @@ def validate_script_dict(data: dict) -> dict:
 
     total_words = 0
     for i, seg in enumerate(segments):
-        seg_type = seg.get("type")
-        if seg_type == "narration":
-            total_words += len(seg.get("text", "").split())
-        elif seg_type == "dialogue":
-            lines = seg.get("lines", [])
-            if not lines:
-                raise RuntimeError(f"Segment {i} is type 'dialogue' but has no lines.")
-            for line in lines:
-                total_words += len(line.get("text", "").split())
-        else:
-            raise RuntimeError(f"Segment {i} has invalid type: {seg_type!r}")
+        if seg.get("type") != "narration":
+            raise RuntimeError(f"Segment {i} has invalid type: {seg.get('type')!r} (only 'narration' is used now).")
+        total_words += len(seg.get("text", "").split())
         if not seg.get("image_file"):
             raise RuntimeError(f"Segment {i} is missing its generated image_file.")
 
@@ -446,19 +449,12 @@ def validate_script_dict(data: dict) -> dict:
             "word range — likely a truncated or malformed generation."
         )
 
-    print(f"Script validated: era={era}, {len(segments)} segments, ~{total_words} words.")
+    print(f"Script validated: era={era}, {len(segments)} clips, ~{total_words} words.")
     return data
 
 
 def flatten_script_to_text(parsed_script: dict) -> str:
-    parts = []
-    for seg in parsed_script["segments"]:
-        if seg["type"] == "narration":
-            parts.append(seg["text"])
-        else:
-            for line in seg["lines"]:
-                parts.append(f'{line["speaker"]}: {line["text"]}')
-    return "\n".join(parts)
+    return "\n".join(seg["text"] for seg in parsed_script["segments"])
 
 
 OUTLINE_TASK_DESCRIPTION = (
@@ -469,18 +465,19 @@ OUTLINE_TASK_DESCRIPTION = (
     '  "era": "ancient_egypt" | "ancient_rome",\n'
     '  "beats": [\n'
     '    {"type": "narration", "gist": "<1 sentence: what happens in this beat, described '
-    'concretely and visually enough to base an illustration on>"},\n'
-    '    {"type": "dialogue", "gist": "<1 sentence: what this exchange is about>"}\n'
+    'concretely and visually enough to base an illustration on>"}\n'
     "  ]\n"
     "}\n\n"
     "Rules:\n"
-    "- Produce 12-16 beats total, covering the full story arc from the research, in order.\n"
-    "- Most beats should be type 'narration'.\n"
-    "- Use type 'dialogue' only occasionally (roughly every 3-5 narration beats).\n"
+    "- Produce 12-16 beats total, covering the full story arc from the research, in order. "
+    "Every beat is narration — there's just a narrator over illustrated scenes.\n"
+    "- Frame this like a suspenseful mystery/true-crime documentary, not a dry timeline of "
+    "facts. Build curiosity and tension — favor beats that reveal something surprising, "
+    "unsettling, or that raise a new question, especially in the middle and toward the end.\n"
     "- Each 'gist' must describe a concrete, visualizable moment (a place, an action, "
     "people doing something specific) — it's used to generate an illustration, so avoid "
     "vague or abstract gists like 'tensions rise'.\n"
-    "- The first beat should be a hook.\n"
+    "- The first beat should be a strong hook.\n"
     "- Output must be ONLY the JSON object — first character '{', last character '}'."
 )
 
@@ -497,7 +494,7 @@ def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
         {"role": "system", "content": "You are a precise JSON generator. Output ONLY the requested JSON object, nothing else."},
         {"role": "user", "content": f"Research to base the outline on:\n{research_text}\n\n{description}"},
     ]
-    raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.2)
+    raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.3)
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
     data = _extract_json_object(text, required_key="beats")
 
@@ -508,7 +505,7 @@ def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
     if not isinstance(beats, list) or len(beats) < 10:
         raise RuntimeError(f"Outline has too few beats ({len(beats) if isinstance(beats, list) else 0}, need >=10).")
     for i, beat in enumerate(beats):
-        if beat.get("type") not in ("narration", "dialogue"):
+        if beat.get("type") != "narration":
             raise RuntimeError(f"Outline beat {i} has invalid type: {beat.get('type')!r}")
         if not beat.get("gist"):
             raise RuntimeError(f"Outline beat {i} is missing a 'gist'.")
@@ -523,18 +520,25 @@ def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
     text = ""
     for attempt in range(1, attempts + 1):
         messages = [
-            {"role": "system", "content": "You write narration for a history video. Output ONLY the narration text, nothing else."},
+            {"role": "system", "content": (
+                "You write narration for a suspenseful history documentary — think true-crime "
+                "or mystery-show narrator, not a textbook. Output ONLY the narration text, "
+                "nothing else."
+            )},
             {"role": "user", "content": (
                 f"Write {NARRATION_MIN_WORDS}-{NARRATION_MAX_WORDS} words of narration for a "
                 f"cartoon-illustrated history video (era: {era}). This is ONE beat of a larger "
                 "script — write ONLY the narration text itself, nothing else: no JSON, no "
                 "labels, no preamble, no markdown.\n\n"
                 f"What happens in this beat: {gist}\n\n"
-                "Keep sentences short — this is read aloud by AI voiceover. Write in an "
-                "engaging storytelling narrator voice."
+                "Write in a punchy, suspenseful documentary-narrator voice. Use vivid, concrete "
+                "sensory detail. Keep sentences SHORT — this is read aloud by AI voiceover, and "
+                "short sentences also make for punchier on-screen captions. Where it fits "
+                "naturally, use a rhetorical question or a line that raises tension. Avoid dry, "
+                "encyclopedic phrasing — make the listener want to know what happens next."
             )},
         ]
-        text = _call_groq_direct(messages, max_tokens=800, temperature=0.6).strip()
+        text = _call_groq_direct(messages, max_tokens=800, temperature=0.75).strip()
         text = re.sub(r"^```\s*|\s*```$", "", text)
         if len(text.split()) >= NARRATION_MIN_WORDS * 0.7:
             return text
@@ -543,64 +547,65 @@ def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
     return text
 
 
-DIALOGUE_SPEAKER_LABELS = ["Speaker 1", "Speaker 2"]
-
-
-def _generate_dialogue_lines(gist: str, era: str, attempts: int = 3) -> list:
-    """No named characters anymore — just two generic speaker labels. Voice
-    variety comes from mapping these two labels to two fixed TTS voices."""
-    lines = []
-    for attempt in range(1, attempts + 1):
-        messages = [
-            {"role": "system", "content": "You write short dialogue for a history video. Output ONLY the requested lines, nothing else."},
-            {"role": "user", "content": (
-                "Write a short 2-4 line dialogue exchange between two people for a "
-                f"cartoon-illustrated history video (era: {era}). Label the speakers exactly "
-                "'Speaker 1' and 'Speaker 2'.\n\n"
-                f"What this exchange is about: {gist}\n\n"
-                "Output ONLY the lines, one per line, in this exact format:\n"
-                "Speaker 1: line text\n"
-                "Speaker 2: line text\n\n"
-                "No JSON, no preamble, no extra commentary — just the alternating lines."
-            )},
-        ]
-        raw = _call_groq_direct(messages, max_tokens=400, temperature=0.6).strip()
-        lines = []
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line or ":" not in line:
-                continue
-            speaker, _, spoken_text = line.partition(":")
-            speaker, spoken_text = speaker.strip(), spoken_text.strip()
-            if speaker in DIALOGUE_SPEAKER_LABELS and spoken_text:
-                lines.append({"speaker": speaker, "text": spoken_text})
-        if len(lines) >= 2:
-            return lines
-        print(f"[BEAT RETRY] dialogue beat produced too few valid lines, retrying ({attempt}/{attempts})...")
-    return lines
+def _split_into_phrases(text: str, target_words: int = 8) -> list:
+    """Splits narration into short phrases (~2-3 seconds of speech each at
+    normal speaking pace) — each phrase gets its own image AND is the
+    subtitle burned onto that image, so caption timing is automatically
+    exact instead of needing separate alignment."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    phrases = []
+    for sentence in sentences:
+        words = sentence.split()
+        if not words:
+            continue
+        if len(words) <= target_words + 4:
+            phrases.append(sentence.strip())
+            continue
+        # Long sentence — split on comma boundaries first, then just chunk by
+        # word count if there weren't enough commas to work with.
+        parts = re.split(r"(?<=,)\s+", sentence)
+        buffer = []
+        for part in parts:
+            buffer.extend(part.split())
+            if len(buffer) >= target_words:
+                phrases.append(" ".join(buffer))
+                buffer = []
+        if buffer:
+            if phrases and len(buffer) < 3:
+                phrases[-1] = phrases[-1] + " " + " ".join(buffer)
+            else:
+                phrases.append(" ".join(buffer))
+    return [p for p in phrases if p]
 
 
 # ---------------------------------------------------------------------
 # 6b. Image generation — Pollinations.ai (free, no API key)
 #
-# One generated cartoon-illustration image per beat, based on that beat's
-# gist. A fixed style suffix keeps the look consistent across the whole
-# video instead of each image looking like a different art style.
+# One generated cartoon-illustration image per short phrase (not per whole
+# beat) — this is what makes images change every 2-3 seconds in step with
+# what's actually being said, instead of one image sitting on screen for a
+# whole 30-45 second beat. A fixed style suffix keeps the look consistent
+# across the whole video.
 # ---------------------------------------------------------------------
 STYLE_SUFFIX = (
     "flat vector cartoon illustration, bold clean outlines, warm vibrant colors, "
-    "educational children's storybook art style, no text, no watermark, no logo"
+    "detailed and clear, educational storybook art style, no text, no watermark, no logo"
 )
 ERA_LABELS = {"ancient_egypt": "Ancient Egypt", "ancient_rome": "Ancient Rome"}
+IMAGE_GEN_WORKERS = 5
+TTS_GEN_WORKERS = 5
 
 
-def generate_beat_image(gist: str, era: str, filename: str, attempts: int = 4) -> str:
+def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
     """Pollinations.ai has no formal SLA and can be rate-limited/flaky like
     every other free service in this pipeline — same retry-with-backoff
     pattern as everywhere else. A too-small response is treated as a
-    failure too, since that's usually an error page, not a real image."""
+    failure too, since that's usually an error page, not a real image.
+    Generated at a higher resolution than the final video so the Ken Burns
+    zoom has detail to crop into instead of visibly pixelating."""
     era_label = ERA_LABELS.get(era, era)
-    prompt = f"{era_label} scene: {gist}. {STYLE_SUFFIX}"
+    context_part = f" Broader scene context: {context_gist}." if context_gist else ""
+    prompt = f"{era_label} scene, illustrating exactly this moment: {phrase}.{context_part} {STYLE_SUFFIX}"
     encoded_prompt = requests.utils.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
@@ -609,7 +614,7 @@ def generate_beat_image(gist: str, era: str, filename: str, attempts: int = 4) -
         try:
             resp = requests.get(
                 url,
-                params={"width": 1280, "height": 720, "nologo": "true"},
+                params={"width": 1600, "height": 900, "nologo": "true"},
                 timeout=90,
             )
             resp.raise_for_status()
@@ -629,19 +634,39 @@ def generate_beat_image(gist: str, era: str, filename: str, attempts: int = 4) -
 def _assemble_script_from_outline(outline: dict) -> dict:
     era = outline["era"]
     os.makedirs("beat_images", exist_ok=True)
-    segments = []
-    for i, beat in enumerate(outline["beats"]):
-        image_file = generate_beat_image(beat["gist"], era, f"beat_images/beat_{i:03d}.jpg")
-        if beat["type"] == "narration":
-            segments.append({
-                "type": "narration",
-                "text": _generate_narration_text(beat["gist"], era),
-                "image_file": image_file,
-            })
-        else:
-            lines = _generate_dialogue_lines(beat["gist"], era)
-            if lines:
-                segments.append({"type": "dialogue", "lines": lines, "image_file": image_file})
+
+    # Step 1: generate the full narration text per BIG beat (sequential —
+    # these are real LLM calls against Groq's rate limit).
+    beat_texts = []
+    for beat in outline["beats"]:
+        beat_texts.append((beat["gist"], _generate_narration_text(beat["gist"], era)))
+
+    # Step 2: flatten into short phrase-level clips (~2-3s of speech each).
+    clip_specs = []
+    idx = 0
+    for beat_gist, text in beat_texts:
+        for phrase in _split_into_phrases(text, target_words=8):
+            clip_specs.append((idx, phrase, beat_gist))
+            idx += 1
+
+    print(f"[SCRIPT] Split into {len(clip_specs)} short clips (~2-3s each) for image generation.")
+
+    # Step 3: generate all images in parallel — Pollinations calls are
+    # independent per clip, and with 150-250+ of them now, sequential would
+    # be far too slow.
+    segments = [None] * len(clip_specs)
+
+    def _gen_one(spec):
+        i, phrase, beat_gist = spec
+        image_file = generate_beat_image(phrase, era, f"beat_images/clip_{i:04d}.jpg", context_gist=beat_gist)
+        return i, {"type": "narration", "text": phrase, "image_file": image_file}
+
+    with ThreadPoolExecutor(max_workers=IMAGE_GEN_WORKERS) as executor:
+        futures = [executor.submit(_gen_one, spec) for spec in clip_specs]
+        for future in as_completed(futures):
+            i, seg = future.result()
+            segments[i] = seg
+
     return {"era": era, "segments": segments}
 
 
@@ -666,63 +691,83 @@ for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
 if outline is None:
     raise RuntimeError(f"Outline generation failed after {MAX_OUTLINE_ATTEMPTS} attempts. Last error: {last_error}")
 
-print(f"[SCRIPT] Generating {len(outline['beats'])} beats (text + image) individually...")
+print(f"[SCRIPT] Generating narration text + clips for {len(outline['beats'])} beats...")
 t0 = time.time()
 script_dict = _assemble_script_from_outline(outline)
-print(f"[TIMING] 'All beats generated' finished — took {time.time() - t0:.1f}s")
+print(f"[TIMING] 'All clips generated' finished — took {time.time() - t0:.1f}s")
 
 parsed_script = validate_script_dict(script_dict)
 
 # ---------------------------------------------------------------------
-# 6c. SEO — runs AFTER the script is validated, using the actual finished
-# script text embedded directly in the prompt.
+# 6c. SEO — runs AFTER the script is validated. Locked into a strict,
+# parseable format instead of hoping to regex-match free-form natural
+# language — that's what was causing the video title to fall back to
+# "Automated Video" before.
 # ---------------------------------------------------------------------
 seo_task = Task(
     description=(
-        "Based on the following finished script, write:\n"
-        "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
-        "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
-        "3. A list of 15 relevant tags\n\n"
+        "Based on the following finished script, write SEO metadata.\n\n"
+        "Output in EXACTLY this format, nothing else — no extra commentary, no markdown, "
+        "no headers:\n"
+        "TITLE_1: <title, under 60 characters, curiosity-driven, no clickbait flags>\n"
+        "TITLE_2: <title>\n"
+        "TITLE_3: <title>\n"
+        "DESCRIPTION: <YouTube description — first 2 lines keyword-rich, then a short summary>\n"
+        "TAGS: <15 relevant tags, comma-separated>\n\n"
         f"SCRIPT:\n{flatten_script_to_text(parsed_script)}"
     ),
-    expected_output="Titles, description, and tags clearly labeled.",
+    expected_output="Exactly the TITLE_1/TITLE_2/TITLE_3/DESCRIPTION/TAGS format described above, nothing else.",
     agent=seo_specialist,
     callback=_timing_callback("SEO Specialist"),
 )
 _run_single_task_crew(seo_specialist, seo_task, "SEO")
 seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 
+
+def extract_seo_title(text: str) -> str:
+    for pattern in [r"TITLE_1:\s*(.+)", r"Title\s*1[:\-]\s*(.+)", r"^1\.\s*(.+)"]:
+        match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
+        if match:
+            return match.group(1).strip().strip("\"'\u201c\u201d").strip()
+    return "Automated Video"
+
+
 # ---------------------------------------------------------------------
-# 7. Voiceover — one file per narration block / dialogue line
+# 7. Voiceover — one narration file per short clip
 # ---------------------------------------------------------------------
 import edge_tts
 
-NARRATOR_VOICE = "en-US-GuyNeural"
-DIALOGUE_VOICES = {
-    "Speaker 1": "en-US-DavisNeural",
-    "Speaker 2": "en-US-JennyNeural",
-}
+# Deeper, more mysterious voice for a documentary tone. Rate slowed and
+# pitch lowered further on top of the voice's natural pitch, for weight.
+NARRATOR_VOICE = "en-US-DavisNeural"
+NARRATION_RATE = "-8%"
+NARRATION_PITCH = "-15Hz"
 TTS_FALLBACK_VOICE = "en-US-AriaNeural"
 
 VIDEO_W, VIDEO_H = 1280, 720
 VIDEO_FPS = 30
 
 
-def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4):
+def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4,
+                 rate: str = NARRATION_RATE, pitch: str = NARRATION_PITCH):
     """edge-tts's NoAudioReceived error is a known, still-unresolved issue
     upstream (it's an unofficial wrapper around Edge's internal "Read Aloud"
     service, not a real public API). Plain retries don't always help since
     it can be voice-specific throttling, so after 2 failures we also switch
-    to a fallback voice."""
-    async def _run(v):
-        communicate = edge_tts.Communicate(text=text, voice=v)
+    to a fallback voice (at that point the rate/pitch tweak is dropped too,
+    since it's more important to get SOME audio than the exact tone)."""
+    async def _run(v, use_rate, use_pitch):
+        communicate = edge_tts.Communicate(text=text, voice=v, rate=use_rate, pitch=use_pitch)
         await communicate.save(filename)
 
     last_error = None
     for attempt in range(1, attempts + 1):
-        use_voice = voice if attempt <= 2 else TTS_FALLBACK_VOICE
+        if attempt <= 2:
+            use_voice, use_rate, use_pitch = voice, rate, pitch
+        else:
+            use_voice, use_rate, use_pitch = TTS_FALLBACK_VOICE, "+0%", "+0Hz"
         try:
-            asyncio.run(_run(use_voice))
+            asyncio.run(_run(use_voice, use_rate, use_pitch))
             return
         except Exception as e:
             last_error = e
@@ -734,22 +779,23 @@ def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4):
 
 
 def generate_all_voiceovers(parsed_script: dict, out_dir: str = "audio"):
+    """Parallelized — with 150-250+ short clips now instead of ~15 beats,
+    sequential TTS generation would be far too slow."""
     os.makedirs(out_dir, exist_ok=True)
-    clip_index = 0
-    for seg in parsed_script["segments"]:
-        if seg["type"] == "narration":
-            fname = os.path.join(out_dir, f"clip_{clip_index:04d}_narration.mp3")
-            tts_to_file(seg["text"], NARRATOR_VOICE, fname)
-            seg["audio_file"] = fname
-            clip_index += 1
-        else:
-            for line in seg["lines"]:
-                voice = DIALOGUE_VOICES.get(line["speaker"], NARRATOR_VOICE)
-                fname = os.path.join(out_dir, f"clip_{clip_index:04d}_dialogue.mp3")
-                tts_to_file(line["text"], voice, fname)
-                line["audio_file"] = fname
-                clip_index += 1
-    print(f"Generated {clip_index} voiceover clips in {out_dir}/")
+    segments = parsed_script["segments"]
+
+    def _gen_one(i):
+        fname = os.path.join(out_dir, f"clip_{i:04d}_narration.mp3")
+        tts_to_file(segments[i]["text"], NARRATOR_VOICE, fname)
+        return i, fname
+
+    with ThreadPoolExecutor(max_workers=TTS_GEN_WORKERS) as executor:
+        futures = [executor.submit(_gen_one, i) for i in range(len(segments))]
+        for future in as_completed(futures):
+            i, fname = future.result()
+            segments[i]["audio_file"] = fname
+
+    print(f"Generated {len(segments)} voiceover clips in {out_dir}/")
     return parsed_script
 
 
@@ -768,15 +814,42 @@ def _get_audio_duration(path: str) -> float:
 
 
 # ---------------------------------------------------------------------
-# 8. Ken Burns rendering — one generated image per beat, slow zoom/pan for
-# the duration of that beat's voiceover, instead of a static frame.
+# 8. Ken Burns rendering + burned-in subtitles
+#
+# One generated image per short clip, a faster/more noticeable zoom given
+# clips are now only ~2-3s each (the old slow zoom was tuned for 30-45s
+# beats and would barely be visible now), plus the clip's own narration
+# text burned in as a caption — timing is automatically exact since both
+# the image AND the caption come from the same phrase-level split.
 # ---------------------------------------------------------------------
-def _render_ken_burns_clip(image_path: str, duration: float, out_path: str, fps: int = VIDEO_FPS):
+CAPTION_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+ZOOM_TARGET = 1.35  # ~35% zoom over each clip's duration — much faster/more
+                     # noticeable than before, appropriate for a 2-3s clip
+                     # instead of a 30-45s one
+
+
+def _ffmpeg_escape_text(text: str) -> str:
+    """Escapes characters that break ffmpeg's drawtext filter syntax.
+    Apostrophes are swapped for a visually-identical unicode character
+    instead of escaped, since backslash-escaping apostrophes inside
+    drawtext's own quoting is unreliable across ffmpeg builds."""
+    return (
+        text.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\u2019")
+            .replace("%", "\\%")
+    )
+
+
+def _render_ken_burns_clip(image_path: str, duration: float, caption_text: str, out_path: str, fps: int = VIDEO_FPS):
     total_frames = max(1, int(round(duration * fps)))
-    zoom_per_frame = 0.15 / max(total_frames, 1)  # ~15% zoom over the clip's full duration
+    zoom_per_frame = (ZOOM_TARGET - 1.0) / max(total_frames, 1)
+    escaped = _ffmpeg_escape_text(caption_text)
     vf = (
-        f"scale=1600:-1,zoompan=z='min(zoom+{zoom_per_frame:.6f},1.2)':"
-        f"d={total_frames}:s={VIDEO_W}x{VIDEO_H}:fps={fps}"
+        f"scale=2000:-1,zoompan=z='min(zoom+{zoom_per_frame:.6f},{ZOOM_TARGET})':"
+        f"d={total_frames}:s={VIDEO_W}x{VIDEO_H}:fps={fps},"
+        f"drawtext=fontfile={CAPTION_FONT}:text='{escaped}':fontsize=46:fontcolor=white:"
+        f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-160"
     )
     subprocess.run(
         ["ffmpeg", "-y", "-loop", "1", "-i", image_path,
@@ -787,37 +860,58 @@ def _render_ken_burns_clip(image_path: str, duration: float, out_path: str, fps:
 
 
 def _build_render_plan(parsed_script: dict):
-    """Returns (image_path, duration) pairs (one per beat) plus the ordered
-    list of audio files to concatenate. A dialogue beat holds on its one
-    image for the combined duration of all its lines, while the audio
-    plays each line in sequence underneath."""
+    """Returns (image_path, duration, caption_text) triples plus the
+    ordered list of audio files to concatenate."""
     plan = []
     audio_files_in_order = []
 
     for seg in parsed_script["segments"]:
-        if seg["type"] == "narration":
-            duration = _get_audio_duration(seg["audio_file"])
-            plan.append((seg["image_file"], duration))
-            audio_files_in_order.append(seg["audio_file"])
-        else:
-            total_duration = 0.0
-            for line in seg["lines"]:
-                total_duration += _get_audio_duration(line["audio_file"])
-                audio_files_in_order.append(line["audio_file"])
-            plan.append((seg["image_file"], total_duration))
+        duration = _get_audio_duration(seg["audio_file"])
+        plan.append((seg["image_file"], duration, seg["text"]))
+        audio_files_in_order.append(seg["audio_file"])
 
     return plan, audio_files_in_order
 
 
+# ---------------------------------------------------------------------
+# 8b. Background music (optional — skips gracefully if no file is present)
+#
+# Drop a royalty-free track (YouTube Audio Library, Pixabay Music, etc.)
+# at the path below. Not something this pipeline can source on its own —
+# music licensing needs a human picking a track they're actually cleared
+# to use, not an automated download of whatever's easiest to find.
+# ---------------------------------------------------------------------
+BACKGROUND_MUSIC_PATH = "assets/music/background.mp3"
+MUSIC_VOLUME_DB = -22
+
+
+def _mix_background_music(narration_audio_path: str, out_path: str) -> str:
+    if not os.path.exists(BACKGROUND_MUSIC_PATH):
+        print(f"No background music found at '{BACKGROUND_MUSIC_PATH}' — using narration-only "
+              f"audio. Drop a royalty-free track there to enable background music.")
+        return narration_audio_path
+    subprocess.run(
+        ["ffmpeg", "-y",
+         "-i", narration_audio_path,
+         "-stream_loop", "-1", "-i", BACKGROUND_MUSIC_PATH,
+         "-filter_complex",
+         f"[1:a]volume={MUSIC_VOLUME_DB}dB[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+         "-map", "[aout]", out_path],
+        check=True, capture_output=True,
+    )
+    print(f"Mixed background music from '{BACKGROUND_MUSIC_PATH}' under the narration.")
+    return out_path
+
+
 def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
     plan, audio_files_in_order = _build_render_plan(parsed_script)
-    print(f"Render plan: {len(plan)} image segments.")
+    print(f"Render plan: {len(plan)} clips.")
 
     os.makedirs("clips", exist_ok=True)
     clip_paths = []
-    for i, (image_path, duration) in enumerate(plan):
+    for i, (image_path, duration, caption_text) in enumerate(plan):
         clip_path = f"clips/clip_{i:04d}.mp4"
-        _render_ken_burns_clip(image_path, duration, clip_path)
+        _render_ken_burns_clip(image_path, duration, caption_text, clip_path)
         clip_paths.append(clip_path)
 
     video_concat_path = "video_concat_list.txt"
@@ -835,20 +929,22 @@ def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
         check=True, capture_output=True,
     )
 
+    final_audio_path = _mix_background_music("full_audio.mp3", "full_audio_mixed.mp3")
+
     subprocess.run(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", video_concat_path,
-         "-i", "full_audio.mp3",
+         "-i", final_audio_path,
          "-c:v", "copy",
          "-c:a", "aac", "-shortest", out_path],
         check=True, capture_output=True,
     )
-    total_duration = sum(d for _, d in plan)
-    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(plan)} image segments)")
+    total_duration = sum(d for _, d, _ in plan)
+    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(plan)} clips)")
     return out_path
 
 
 # ---------------------------------------------------------------------
-# 9. Thumbnail — reuse the first beat's generated image, with title text
+# 9. Thumbnail — reuse the first clip's generated image, with title text
 # overlaid on top.
 # ---------------------------------------------------------------------
 def generate_thumbnail(parsed_script: dict, title: str, out_path: str = "thumbnail.jpg"):
@@ -876,11 +972,6 @@ def generate_thumbnail(parsed_script: dict, title: str, out_path: str = "thumbna
 # ---------------------------------------------------------------------
 # 10. Upload
 # ---------------------------------------------------------------------
-def extract_seo_title(text):
-    match = re.search(r"1\.\s*[\"\u201c]?(.+?)[\"\u201d]?\s*(?:\(|$)", text)
-    return match.group(1).strip() if match else "Automated Video"
-
-
 def upload_video(video_path: str, thumbnail_path: str, title: str, description: str, tags: list):
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
