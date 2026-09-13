@@ -491,7 +491,7 @@ print(result)
 # ---------------------------------------------------------------------
 # 7. Parse + validate the Scriptwriter's JSON output
 # ---------------------------------------------------------------------
-def _extract_json_object(raw_text: str) -> dict:
+def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
     """Some models (Nemotron did this in practice, and any model still can) write
     out a 'thinking process' before the real answer no matter how firmly
     you tell them not to — and that reasoning text can itself contain
@@ -499,7 +499,9 @@ def _extract_json_object(raw_text: str) -> dict:
     first-brace/last-brace slice. This scans for every *balanced* {...}
     block in the text and tries them from LAST to FIRST (the real answer
     comes after the reasoning, not before it), returning the first one
-    that both parses as JSON and actually looks like our script shape."""
+    that both parses as JSON and has the key the CALLER actually needs —
+    'segments' for the final script, 'beats' for the outline step. This is
+    shared by both, so the required key can't be hardcoded to just one."""
     candidates = []
     stack = []
     start = None
@@ -519,14 +521,14 @@ def _extract_json_object(raw_text: str) -> dict:
     for cand in reversed(candidates):
         try:
             data = json.loads(cand)
-            if isinstance(data, dict) and "segments" in data:
+            if isinstance(data, dict) and required_key in data:
                 return data
         except json.JSONDecodeError as e:
             last_error = e
             continue
 
     raise RuntimeError(
-        f"No valid JSON object with a 'segments' key found anywhere in the output "
+        f"No valid JSON object with a '{required_key}' key found anywhere in the output "
         f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error}). "
         f"Raw output:\n{raw_text[:1500]}"
     )
@@ -655,7 +657,7 @@ def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
     ]
     raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.2)
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
-    data = _extract_json_object(text)
+    data = _extract_json_object(text, required_key="beats")
 
     era = data.get("era")
     if era not in CHARACTER_ROSTER:
