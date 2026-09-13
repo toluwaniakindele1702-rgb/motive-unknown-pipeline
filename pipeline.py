@@ -54,6 +54,22 @@ llm = LLM(
     max_retries=5,
 )
 
+# Scriptwriter gets its own LLM instance with an explicit, generous max_tokens.
+# No max_tokens was set before, so it was using whatever default NVIDIA's API
+# applies — and since we deliberately leave "detailed thinking" ON for this
+# agent (turning it off caused truncated scripts, see below), the reasoning
+# essay it writes first can eat most of a default-sized budget before the
+# actual JSON ever finishes. That matches exactly what we just saw: a huge
+# thinking dump, then no complete/parseable JSON in the output at all.
+llm_scriptwriter = LLM(
+    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
+    api_key=NVIDIA_KEY,
+    base_url="https://integrate.api.nvidia.com/v1",
+    timeout=300,
+    max_retries=5,
+    max_tokens=8000,
+)
+
 
 def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
     last_error = None
@@ -271,7 +287,7 @@ scriptwriter = Agent(
         "You output ONLY valid JSON, nothing else — no preamble, no markdown code fences, "
         "no commentary before or after the JSON."
     ),
-    llm=llm,
+    llm=llm_scriptwriter,
     max_iter=3,
     verbose=True,
 )
@@ -442,10 +458,16 @@ def _extract_json_object(raw_text: str) -> dict:
             last_error = e
             continue
 
+    truncation_hint = (
+        " This looks like the response got cut off before finishing (only "
+        f"{len(candidates)} brace-balanced chunk(s) found at all) — most likely "
+        "max_tokens was too low for this model's reasoning-trace-plus-JSON output. "
+        "Check/raise max_tokens on llm_scriptwriter." if len(candidates) <= 1 else ""
+    )
     raise RuntimeError(
         f"No valid JSON object with a 'segments' key found anywhere in the output "
-        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error}). "
-        f"Raw output:\n{raw_text[:1500]}"
+        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error})."
+        f"{truncation_hint} Raw output:\n{raw_text[:1500]}"
     )
 
 
