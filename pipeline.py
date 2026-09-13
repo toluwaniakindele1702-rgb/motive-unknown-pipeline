@@ -53,6 +53,17 @@ import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
+# WORKAROUND for a known CrewAI bug (crewAIInc/crewAI#5886): CrewAI's own
+# code injects an Anthropic-style 'cache_breakpoint' property into every
+# system message, but the function that's supposed to strip it back out for
+# non-Anthropic providers never actually gets called. Groq's API has no
+# concept of that field and rejects the whole request outright with
+# "property 'cache_breakpoint' is unsupported" — this has nothing to do
+# with which Groq model is selected, it happens for any Groq/OpenAI-
+# compatible provider. No-op'ing the injection function fixes it.
+import crewai.llms.cache as _crewai_cache
+_crewai_cache.mark_cache_breakpoint = lambda msg: msg
+
 llm = LLM(
     model="groq/openai/gpt-oss-120b",
     api_key=GROQ_KEY,
