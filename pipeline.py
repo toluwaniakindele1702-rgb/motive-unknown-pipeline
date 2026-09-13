@@ -25,12 +25,15 @@ from PIL import Image, ImageDraw, ImageFont
 # ---------------------------------------------------------------------
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
-# REVERTED from Gemini back to NVIDIA NIM — Gemini's free-tier quota kept
-# getting fully exhausted (not just per-minute, since even 60s waits after
-# a 429 kept failing again), and no amount of pacing fixes a quota that's
-# actually used up. NIM is slower per call but is the one provider that's
-# proven to run a full crew to completion without this wall.
-NVIDIA_KEY = os.environ["NVIDIA_NIM_API_KEY"]
+# Switched to Groq — confirmed by an actual successful run that it can
+# produce a complete, correct 1600-2400 word script where NVIDIA's Nemotron
+# kept either truncating (thinking off) or degenerating into garbled text
+# partway through a very long single generation (thinking on). Real risk to
+# know about: Groq's free tier caps openai/gpt-oss-120b at 8,000 tokens/
+# MINUTE total (input + output combined), and this script alone can need
+# 3,000-4,500 output tokens — so this is run close to the ceiling, not with
+# huge headroom. If it starts failing with 429s again, that's why.
+GROQ_KEY = os.environ["GROQ_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
     f.write(os.environ["YOUTUBE_TOKEN_JSON"])
@@ -40,34 +43,30 @@ with open("client_secret.json", "w") as f:
 print("Secrets loaded.")
 
 # ---------------------------------------------------------------------
-# 1. LLM connection (NVIDIA NIM)
+# 1. LLM connection (Groq)
 # ---------------------------------------------------------------------
 import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
-llm = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    api_key=NVIDIA_KEY,
-    base_url="https://integrate.api.nvidia.com/v1",
-    timeout=300,
-    max_retries=5,
-)
+# WORKAROUND for a known CrewAI bug (crewAIInc/crewAI#5886): CrewAI injects
+# an Anthropic-style 'cache_breakpoint' property into every system message,
+# and the code path that's supposed to strip it back out for non-Anthropic
+# providers doesn't get called. Groq's API has no concept of that field and
+# rejects the whole request with "property 'cache_breakpoint' is
+# unsupported" — happens for any Groq/OpenAI-compatible provider,
+# regardless of which model. No-op'ing the injection function fixes it.
+import crewai.llms.cache as _crewai_cache
+_crewai_cache.mark_cache_breakpoint = lambda msg: msg
 
-# Scriptwriter gets its own LLM instance with an explicit, generous max_tokens.
-# No max_tokens was set before, so it was using whatever default NVIDIA's API
-# applies — and since we deliberately leave "detailed thinking" ON for this
-# agent (turning it off caused truncated scripts, see below), the reasoning
-# essay it writes first can eat most of a default-sized budget before the
-# actual JSON ever finishes. That matches exactly what we just saw: a huge
-# thinking dump, then no complete/parseable JSON in the output at all.
-llm_scriptwriter = LLM(
-    model="openai/nvidia/nemotron-3.5-lightning-30b-a3b",
-    api_key=NVIDIA_KEY,
-    base_url="https://integrate.api.nvidia.com/v1",
+llm = LLM(
+    model="groq/openai/gpt-oss-120b",
+    api_key=GROQ_KEY,
     timeout=300,
     max_retries=5,
-    max_tokens=8000,
+    max_tokens=1024,  # only used by the light agents (topic pick, bullet list) —
+                       # script + SEO generation go through direct chunked calls
+                       # below instead, see _call_groq_direct.
 )
 
 
@@ -86,6 +85,64 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
 
 test = call_with_retry(llm, "Reply with exactly one word: OK")
 print("LLM connection test:", test)
+
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL_ID = "openai/gpt-oss-120b"
+
+
+def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=6, base_delay=15):
+    """Calls Groq's chat/completions endpoint directly with raw `requests`,
+    bypassing CrewAI/litellm entirely — used for script generation (outline +
+    per-beat) and SEO, where full control over exactly what's sent matters
+    more than CrewAI's Agent/Task abstraction. openai/gpt-oss-120b IS a
+    reasoning model, but Groq puts its reasoning trace in a separate
+    "reasoning" field on the response rather than mixing it into "content" —
+    include_reasoning: false tells Groq to drop that field entirely, so no
+    reasoning text should leak into the JSON we're trying to parse.
+
+    On a 429 (rate limit — Groq's free tier caps this model's tokens/minute),
+    this parses the actual suggested wait time out of Groq's error response
+    rather than guessing, since a fixed short backoff can retry before the
+    per-minute window has actually reset."""
+    last_error = None
+    for i in range(attempts):
+        try:
+            resp = requests.post(
+                GROQ_CHAT_URL,
+                headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": GROQ_MODEL_ID,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "include_reasoning": False,
+                },
+                timeout=120,
+            )
+            if resp.status_code == 429:
+                wait = base_delay * (i + 1)
+                retry_after = resp.headers.get("retry-after")
+                if retry_after:
+                    try:
+                        wait = max(wait, float(retry_after) + 2)
+                    except ValueError:
+                        pass
+                else:
+                    match = re.search(r"try again in ([\d.]+)s", resp.text)
+                    if match:
+                        wait = max(wait, float(match.group(1)) + 2)
+                print(f"Groq rate limit hit (attempt {i+1}/{attempts}), waiting {wait:.1f}s: {resp.text[:200]}")
+                last_error = f"429 rate limited: {resp.text[:300]}"
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            wait = base_delay * (i + 1)
+            print(f"Groq direct call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"Groq direct call failed after {attempts} attempts: {last_error}")
 
 # ---------------------------------------------------------------------
 # 1b. Timing instrumentation — so a future stall shows exactly which
@@ -266,45 +323,6 @@ researcher = Agent(
     verbose=True,
 )
 
-scriptwriter = Agent(
-    role="Scriptwriter",
-    goal=(
-        "Turn research into a 10-15 minute puppet-animation video script: a narrator "
-        "tells the story while on-screen characters silently act along, breaking into "
-        "their own dialogue or jokes only occasionally."
-    ),
-    backstory=(
-        # NOTE: deliberately NOT using "detailed thinking off" here, unlike the other
-        # three agents. Real test evidence: with it on, this model undershot the
-        # word-count target badly (699 words, then 313, against a 1600-2400 target) —
-        # suppressing the model's reasoning made it also rush/truncate the actual
-        # output. This is the one task where the extra generation time is worth it.
-        "You write for a 2D cutout/puppet animation history channel, similar in style "
-        "to 'Chat History' and 'Peanut'. A narrator voice carries most of the runtime. "
-        "The characters on screen are simple archetypes (commoner, soldier, royal) for "
-        "the era of the story — they are not named historical figures, they're stand-ins "
-        "acting out the story and occasionally cracking a joke or reacting to each other. "
-        "You output ONLY valid JSON, nothing else — no preamble, no markdown code fences, "
-        "no commentary before or after the JSON."
-    ),
-    llm=llm_scriptwriter,
-    max_iter=3,
-    verbose=True,
-)
-
-seo_specialist = Agent(
-    role="YouTube SEO Specialist",
-    goal="Generate a high-CTR title, description, and tag list for the video",
-    backstory=(
-        "detailed thinking off\n\n"
-        "You've studied thousands of high-performing history-channel uploads and know "
-        "how to write curiosity-driven titles and keyword-rich descriptions."
-    ),
-    llm=llm,
-    max_iter=5,
-    verbose=True,
-)
-
 print("Agents ready.")
 
 # ---------------------------------------------------------------------
@@ -335,104 +353,49 @@ research_task = Task(
     callback=_timing_callback("Researcher"),
 )
 
-CHARACTER_LIST_TEXT = "\n".join(
-    f"  {era}: {', '.join(names)}" for era, names in CHARACTER_ROSTER.items()
-)
-
-script_task = Task(
-    description=(
-        "Using the research, write a 10-15 minute puppet-animation video script as JSON.\n\n"
-        "CRITICAL: This is a fully automated pipeline. There is no human available to "
-        "answer questions or confirm details. Decide everything yourself and output the "
-        "finished JSON directly, right now. Never ask a question, never say 'let me know', "
-        "never wrap the JSON in markdown code fences, never write anything before or after "
-        "the JSON object. Do NOT include a thinking process, analysis, reasoning section, or "
-        "any notes about your approach — not even a short one. Your entire response must be "
-        "nothing but the JSON object itself: the very first character you output must be '{' "
-        "and the very last character must be '}'.\n\n"
-        f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
-        "Output a single JSON object with this exact shape:\n"
-        "{\n"
-        '  "era": "ancient_egypt" | "ancient_rome",\n'
-        '  "characters_used": ["<character_name>", ...],\n'
-        '  "segments": [\n'
-        "    {\n"
-        '      "type": "narration",\n'
-        '      "text": "<narrator line, 1-3 sentences>",\n'
-        '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
-        "    },\n"
-        "    {\n"
-        '      "type": "dialogue",\n'
-        '      "lines": [\n'
-        '        {"speaker": "<character_name>", "text": "<line>", "expression": "<neutral|happy|angry|worried>"},\n'
-        "        ...\n"
-        "      ]\n"
-        "    }\n"
-        "  ]\n"
-        "}\n\n"
-        "Rules:\n"
-        "- Most segments should be type 'narration' — this carries the story.\n"
-        "- Use type 'dialogue' only occasionally (roughly every 4-8 narration segments), "
-        "for a short back-and-forth exchange or joke between 2 characters already "
-        "established as on_screen nearby.\n"
-        "- Total narration + dialogue text combined should be roughly 1600-2400 words "
-        "(this is a 10-15 minute voiceover at normal pacing).\n"
-        "- Every character name used must come from the allowed list above, and must "
-        "match the chosen era.\n"
-        "- Open with a hook in the first narration segment.\n"
-        "- Keep sentences short — this is read aloud by AI voiceover."
-    ),
-    expected_output=(
-        "A single valid JSON object matching the schema above — nothing else, no "
-        "markdown fences, no explanation text."
-    ),
-    agent=scriptwriter,
-    context=[research_task],
-    callback=_timing_callback("Scriptwriter"),
-)
-
-seo_task = Task(
-    description=(
-        "Based on the script, write:\n"
-        "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
-        "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
-        "3. A list of 15 relevant tags"
-    ),
-    expected_output="Titles, description, and tags clearly labeled.",
-    agent=seo_specialist,
-    context=[script_task],
-    callback=_timing_callback("SEO"),
-)
-
 print("Tasks ready.")
 
 # ---------------------------------------------------------------------
-# 6. Run the crew
+# 6. Run the crew — ONE single kickoff() for the whole crew. (Running each
+# agent as its own separate Crew() one at a time was tried before, to space
+# Groq token usage across per-minute windows — but calling Crew().kickoff()
+# more than once in the same process triggered a CrewAI internal asyncio
+# bug ("no running event loop") on the second call. One combined crew
+# avoids that entirely, and Script/SEO generation below never call
+# Crew.kickoff() at all, so there's no remaining risk of hitting it again.
 # ---------------------------------------------------------------------
 crew = Crew(
-    agents=[topic_scout, researcher, scriptwriter, seo_specialist],
-    tasks=[topic_task, research_task, script_task, seo_task],
+    agents=[topic_scout, researcher],
+    tasks=[topic_task, research_task],
     process=Process.sequential,
     step_callback=_step_callback,
     verbose=True,
 )
 
 result = crew.kickoff()
-print("\n\n===== FINAL OUTPUT =====\n")
+print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
 print(result)
 
 # ---------------------------------------------------------------------
-# 7. Parse + validate the Scriptwriter's JSON output
+# 7. Script generation — OUTLINE first, then each beat individually.
+#
+# This is the actual fix for the repeated failures (timeouts, truncated
+# JSON, garbled output) we kept hitting asking one LLM call to produce a
+# whole 1600-2400 word structured script at once. Confirmed by a real run:
+# this chunked approach completed successfully where single-shot generation
+# kept failing in different ways across three different providers.
 # ---------------------------------------------------------------------
-def _extract_json_object(raw_text: str) -> dict:
-    """Some models (this NVIDIA Nemotron model included, in practice) write
-    out a 'thinking process' before the real answer no matter how firmly
-    you tell them not to — and that reasoning text can itself contain
-    brace-like snippets ('keys: {"era", "segments"}') that break a naive
-    first-brace/last-brace slice. This scans for every *balanced* {...}
-    block in the text and tries them from LAST to FIRST (the real answer
-    comes after the reasoning, not before it), returning the first one
-    that both parses as JSON and actually looks like our script shape."""
+CHARACTER_LIST_TEXT = "\n".join(
+    f"  {era}: {', '.join(names)}" for era, names in CHARACTER_ROSTER.items()
+)
+
+
+def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
+    """Scans for every *balanced* {...} block in the text and tries them
+    from LAST to FIRST (the real answer comes after any reasoning text,
+    not before it), returning the first one that both parses as JSON and
+    has the key the caller actually needs — 'segments' for the final
+    script, 'beats' for the outline step."""
     candidates = []
     stack = []
     start = None
@@ -452,30 +415,38 @@ def _extract_json_object(raw_text: str) -> dict:
     for cand in reversed(candidates):
         try:
             data = json.loads(cand)
-            if isinstance(data, dict) and "segments" in data:
+            if isinstance(data, dict) and required_key in data:
                 return data
         except json.JSONDecodeError as e:
             last_error = e
             continue
 
-    truncation_hint = (
-        " This looks like the response got cut off before finishing (only "
-        f"{len(candidates)} brace-balanced chunk(s) found at all) — most likely "
-        "max_tokens was too low for this model's reasoning-trace-plus-JSON output. "
-        "Check/raise max_tokens on llm_scriptwriter." if len(candidates) <= 1 else ""
-    )
     raise RuntimeError(
-        f"No valid JSON object with a 'segments' key found anywhere in the output "
-        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error})."
-        f"{truncation_hint} Raw output:\n{raw_text[:1500]}"
+        f"No valid JSON object with a '{required_key}' key found anywhere in the output "
+        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error}). "
+        f"Raw output:\n{raw_text[:1500]}"
     )
 
 
-def parse_script_json(raw_text: str) -> dict:
-    text = raw_text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE)
-    data = _extract_json_object(text)
+def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int, expr_key: str = "expression"):
+    """Character name has no safe fallback (there's no art for a name that
+    doesn't exist), so that still fails hard. An unrecognized expression
+    DOES have a safe fallback (neutral) — so rather than throw away a full
+    run over one made-up word like 'proud', we just warn and downgrade it."""
+    name = char_entry.get("character")
+    if name not in allowed_for_era:
+        raise RuntimeError(
+            f"Segment {seg_index} uses character {name!r}, which isn't in this era's "
+            f"roster ({sorted(allowed_for_era)})."
+        )
+    expr = char_entry.get(expr_key)
+    if expr not in VALID_EXPRESSIONS:
+        print(f"WARNING: segment {seg_index}, character {name!r} used unrecognized "
+              f"expression {expr!r} — falling back to 'neutral'.")
+        char_entry[expr_key] = "neutral"
 
+
+def validate_script_dict(data: dict) -> dict:
     era = data.get("era")
     if era not in CHARACTER_ROSTER:
         raise RuntimeError(f"Script has invalid/missing era: {era!r}")
@@ -489,8 +460,7 @@ def parse_script_json(raw_text: str) -> dict:
     for i, seg in enumerate(segments):
         seg_type = seg.get("type")
         if seg_type == "narration":
-            text_val = seg.get("text", "")
-            total_words += len(text_val.split())
+            total_words += len(seg.get("text", "").split())
             for char in seg.get("on_screen", []):
                 _validate_character(char, allowed_for_era, i)
         elif seg_type == "dialogue":
@@ -499,7 +469,7 @@ def parse_script_json(raw_text: str) -> dict:
                 raise RuntimeError(f"Segment {i} is type 'dialogue' but has no lines.")
             for line in lines:
                 total_words += len(line.get("text", "").split())
-                line["character"] = line.get("speaker")  # so _validate_character can read it uniformly
+                line["character"] = line.get("speaker")
                 _validate_character(line, allowed_for_era, i)
         else:
             raise RuntimeError(f"Segment {i} has invalid type: {seg_type!r}")
@@ -514,25 +484,6 @@ def parse_script_json(raw_text: str) -> dict:
     return data
 
 
-def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int, expr_key: str = "expression"):
-    """Character name has no safe fallback (there's no art for a name that
-    doesn't exist), so that still fails hard. An unrecognized expression
-    DOES have a safe fallback (neutral) — so rather than throw away a full
-    ~25-30 minute crew run over one made-up word like 'proud', we just warn
-    and downgrade it to neutral, and keep going."""
-    name = char_entry.get("character")
-    if name not in allowed_for_era:
-        raise RuntimeError(
-            f"Segment {seg_index} uses character {name!r}, which isn't in this era's "
-            f"roster ({sorted(allowed_for_era)})."
-        )
-    expr = char_entry.get(expr_key)
-    if expr not in VALID_EXPRESSIONS:
-        print(f"WARNING: segment {seg_index}, character {name!r} used unrecognized "
-              f"expression {expr!r} — falling back to 'neutral'.")
-        char_entry[expr_key] = "neutral"
-
-
 def flatten_script_to_text(parsed_script: dict) -> str:
     parts = []
     for seg in parsed_script["segments"]:
@@ -544,8 +495,206 @@ def flatten_script_to_text(parsed_script: dict) -> str:
     return "\n".join(parts)
 
 
-raw_task_out = getattr(script_task.output, "raw", str(script_task.output))
-parsed_script = parse_script_json(raw_task_out)
+OUTLINE_TASK_DESCRIPTION = (
+    "Using the research, plan a 10-15 minute puppet-animation video script as a BEAT "
+    "OUTLINE — structure only, not the full prose yet.\n\n"
+    f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
+    "Output ONLY a single JSON object with this exact shape, nothing else:\n"
+    "{\n"
+    '  "era": "ancient_egypt" | "ancient_rome",\n'
+    '  "characters_used": ["<character_name>", ...],\n'
+    '  "beats": [\n'
+    "    {\n"
+    '      "type": "narration",\n'
+    '      "gist": "<1 sentence: what happens in this beat>",\n'
+    '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
+    "    },\n"
+    "    {\n"
+    '      "type": "dialogue",\n'
+    '      "gist": "<1 sentence: what this exchange is about>",\n'
+    '      "speakers": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}, ...]\n'
+    "    }\n"
+    "  ]\n"
+    "}\n\n"
+    "Rules:\n"
+    "- Produce 12-16 beats total, covering the full story arc from the research, in order.\n"
+    "- Most beats should be type 'narration'.\n"
+    "- Use type 'dialogue' only occasionally (roughly every 3-5 narration beats), between "
+    "2 characters already on screen nearby.\n"
+    "- Every character name must come from the allowed list above, matching the chosen era.\n"
+    "- The first beat should be a hook.\n"
+    "- Output must be ONLY the JSON object — first character '{', last character '}'."
+)
+
+
+def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
+    description = OUTLINE_TASK_DESCRIPTION
+    if extra_note:
+        description += f"\n\nIMPORTANT — this is a retry. Previous attempt was rejected: {extra_note}"
+    messages = [
+        {"role": "system", "content": "You are a precise JSON generator. Output ONLY the requested JSON object, nothing else."},
+        {"role": "user", "content": f"Research to base the outline on:\n{research_text}\n\n{description}"},
+    ]
+    raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.2)
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+    data = _extract_json_object(text, required_key="beats")
+
+    era = data.get("era")
+    if era not in CHARACTER_ROSTER:
+        raise RuntimeError(f"Outline has invalid/missing era: {era!r}")
+    beats = data.get("beats")
+    if not isinstance(beats, list) or len(beats) < 10:
+        raise RuntimeError(f"Outline has too few beats ({len(beats) if isinstance(beats, list) else 0}, need >=10).")
+
+    allowed_for_era = set(CHARACTER_ROSTER[era])
+    for i, beat in enumerate(beats):
+        if beat.get("type") == "narration":
+            for char in beat.get("on_screen", []):
+                _validate_character(char, allowed_for_era, i)
+        elif beat.get("type") == "dialogue":
+            for sp in beat.get("speakers", []):
+                _validate_character(sp, allowed_for_era, i)
+        else:
+            raise RuntimeError(f"Outline beat {i} has invalid type: {beat.get('type')!r}")
+
+    return data
+
+
+NARRATION_MIN_WORDS, NARRATION_MAX_WORDS = 110, 170
+
+
+def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
+    text = ""
+    for attempt in range(1, attempts + 1):
+        messages = [
+            {"role": "system", "content": "You write narration for a history video. Output ONLY the narration text, nothing else."},
+            {"role": "user", "content": (
+                f"Write {NARRATION_MIN_WORDS}-{NARRATION_MAX_WORDS} words of narration for a "
+                f"puppet-animation history video (era: {era}). This is ONE beat of a larger "
+                "script — write ONLY the narration text itself, nothing else: no JSON, no "
+                "labels, no preamble, no markdown.\n\n"
+                f"What happens in this beat: {gist}\n\n"
+                "Keep sentences short — this is read aloud by AI voiceover. Write in an "
+                "engaging storytelling narrator voice."
+            )},
+        ]
+        text = _call_groq_direct(messages, max_tokens=800, temperature=0.6).strip()
+        text = re.sub(r"^```\s*|\s*```$", "", text)
+        if len(text.split()) >= NARRATION_MIN_WORDS * 0.7:
+            return text
+        print(f"[BEAT RETRY] narration beat too short ({len(text.split())} words), "
+              f"retrying ({attempt}/{attempts})...")
+    return text
+
+
+def _generate_dialogue_lines(gist: str, speakers: list, era: str, attempts: int = 3) -> list:
+    speaker_names = [s["character"] for s in speakers]
+    expr_by_name = {s["character"]: s.get("expression", "neutral") for s in speakers}
+    lines = []
+    for attempt in range(1, attempts + 1):
+        messages = [
+            {"role": "system", "content": "You write short dialogue for a history video. Output ONLY the requested lines, nothing else."},
+            {"role": "user", "content": (
+                f"Write a short 2-4 line dialogue exchange between {', '.join(speaker_names)} "
+                f"for a puppet-animation history video (era: {era}).\n\n"
+                f"What this exchange is about: {gist}\n\n"
+                "Output ONLY the lines, one per line, in this exact format:\n"
+                "SPEAKER_NAME: line text\n\n"
+                f"Only use these exact speaker names: {', '.join(speaker_names)}. No JSON, no "
+                "preamble, no extra commentary — just the lines."
+            )},
+        ]
+        raw = _call_groq_direct(messages, max_tokens=400, temperature=0.6).strip()
+        lines = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or ":" not in line:
+                continue
+            speaker, _, spoken_text = line.partition(":")
+            speaker, spoken_text = speaker.strip(), spoken_text.strip()
+            if speaker in speaker_names and spoken_text:
+                lines.append({"speaker": speaker, "text": spoken_text, "expression": expr_by_name[speaker]})
+        if len(lines) >= 2:
+            return lines
+        print(f"[BEAT RETRY] dialogue beat produced too few valid lines, retrying ({attempt}/{attempts})...")
+    return lines
+
+
+def _assemble_script_from_outline(outline: dict) -> dict:
+    era = outline["era"]
+    segments = []
+    for beat in outline["beats"]:
+        if beat["type"] == "narration":
+            segments.append({
+                "type": "narration",
+                "text": _generate_narration_text(beat["gist"], era),
+                "on_screen": beat.get("on_screen", []),
+            })
+        else:
+            lines = _generate_dialogue_lines(beat["gist"], beat.get("speakers", []), era)
+            if lines:
+                segments.append({"type": "dialogue", "lines": lines})
+    return {
+        "era": era,
+        "characters_used": outline.get("characters_used", []),
+        "segments": segments,
+    }
+
+
+def _generate_seo_direct(script_text: str, attempts: int = 3) -> str:
+    messages = [
+        {"role": "system", "content": "You are a YouTube SEO specialist for a history channel. Output plain text only."},
+        {"role": "user", "content": (
+            "Based on the following finished script, write:\n"
+            "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
+            "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
+            "3. A list of 15 relevant tags\n\n"
+            f"SCRIPT:\n{script_text[:6000]}"
+        )},
+    ]
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _call_groq_direct(messages, max_tokens=1024, temperature=0.5)
+        except Exception as e:
+            last_error = e
+            wait = 10 * attempt
+            print(f"[SEO RETRY] attempt {attempt}/{attempts} failed: {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"SEO generation failed after {attempts} attempts: {last_error}")
+
+
+research_text = getattr(research_task.output, "raw", str(research_task.output))
+
+MAX_OUTLINE_ATTEMPTS = 3
+outline = None
+last_error = None
+for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
+    print(f"[OUTLINE] Generating outline (attempt {attempt}/{MAX_OUTLINE_ATTEMPTS})...")
+    t0 = time.time()
+    try:
+        outline = _generate_outline_direct(research_text, extra_note=str(last_error) if last_error else "")
+        print(f"[TIMING] 'Outline (attempt {attempt})' finished — took {time.time() - t0:.1f}s, "
+              f"{len(outline['beats'])} beats")
+        break
+    except RuntimeError as e:
+        last_error = e
+        print(f"[OUTLINE RETRY] Attempt {attempt}/{MAX_OUTLINE_ATTEMPTS} failed: {e}")
+
+if outline is None:
+    raise RuntimeError(f"Outline generation failed after {MAX_OUTLINE_ATTEMPTS} attempts. Last error: {last_error}")
+
+print(f"[SCRIPT] Generating {len(outline['beats'])} beats individually...")
+t0 = time.time()
+script_dict = _assemble_script_from_outline(outline)
+print(f"[TIMING] 'All beats generated' finished — took {time.time() - t0:.1f}s")
+
+parsed_script = validate_script_dict(script_dict)
+
+print("[SEO] Generating title/description/tags...")
+t0 = time.time()
+seo_output = _generate_seo_direct(flatten_script_to_text(parsed_script))
+print(f"[TIMING] 'SEO' finished — took {time.time() - t0:.1f}s")
 
 # ---------------------------------------------------------------------
 # 8. Character assembly config
@@ -979,7 +1128,6 @@ def upload_video(video_path: str, thumbnail_path: str, title: str, description: 
 parsed_script = generate_all_voiceovers(parsed_script)
 video_path = build_video(parsed_script)
 
-seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 video_title = extract_seo_title(seo_output)[:100]
 thumb_path = generate_thumbnail(parsed_script, video_title)
 
