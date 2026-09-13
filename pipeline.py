@@ -869,11 +869,37 @@ SCENE_DIR = "scene_frames"
 # ---------------------------------------------------------------------
 # 9. Voiceover — one file per narration block / dialogue line
 # ---------------------------------------------------------------------
-def tts_to_file(text: str, voice: str, filename: str):
-    async def _run():
-        communicate = edge_tts.Communicate(text=text, voice=voice)
+# A generic fallback voice to retry with if a specific voice keeps failing —
+# edge-tts's NoAudioReceived error is a known, still-unresolved issue
+# upstream (it's an unofficial wrapper around Edge's internal "Read Aloud"
+# service, not a real public API, and Microsoft's servers periodically
+# reject requests — more often from datacenter IPs like GitHub Actions
+# runners). Plain retries don't always help since it can be voice-specific
+# throttling, so after a couple of failures we also try switching voice.
+TTS_FALLBACK_VOICE = "en-US-AriaNeural"
+
+
+def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4):
+    async def _run(v):
+        communicate = edge_tts.Communicate(text=text, voice=v)
         await communicate.save(filename)
-    asyncio.run(_run())
+
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        # After 2 failures with the requested voice, try the fallback voice
+        # instead — a different voice sometimes succeeds when the original
+        # is being throttled.
+        use_voice = voice if attempt <= 2 else TTS_FALLBACK_VOICE
+        try:
+            asyncio.run(_run(use_voice))
+            return
+        except Exception as e:
+            last_error = e
+            wait = 5 * attempt
+            print(f"[TTS RETRY] '{filename}' failed with voice '{use_voice}' "
+                  f"(attempt {attempt}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"TTS failed for '{filename}' after {attempts} attempts. Last error: {last_error}")
 
 
 def generate_all_voiceovers(parsed_script: dict, out_dir: str = "audio"):
