@@ -1,38 +1,28 @@
 """
-Motive Unknown — automated video pipeline (puppet-animation format).
-Runs unattended on GitHub Actions. No interactive input anywhere.
+Motive Unknown — automated video pipeline (Ken Burns / cartoon-illustration
+format). Runs unattended on GitHub Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
-  NVIDIA_NIM_API_KEY    - your NVIDIA NIM key
+  GROQ_API_KEY          - your Groq API key
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
-Required repo contents:
-  assets/  - the cleaned character PNGs (from motive_unknown_clean_assets.zip)
+No local character assets required anymore — every scene's image is
+generated on the fly (Pollinations.ai, free, no key) from that beat's gist.
 """
 
 import os
 import re
 import time
 import json
-import math
 import asyncio
 import subprocess
 
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 # ---------------------------------------------------------------------
 # 0. Load secrets from environment (GitHub injects these at runtime)
 # ---------------------------------------------------------------------
-# Switched to Groq — confirmed by an actual successful run that it can
-# produce a complete, correct 1600-2400 word script where NVIDIA's Nemotron
-# kept either truncating (thinking off) or degenerating into garbled text
-# partway through a very long single generation (thinking on). Real risk to
-# know about: Groq's free tier caps openai/gpt-oss-120b at 8,000 tokens/
-# MINUTE total (input + output combined), and this script alone can need
-# 3,000-4,500 output tokens — so this is run close to the ceiling, not with
-# huge headroom. If it starts failing with 429s again, that's why.
 GROQ_KEY = os.environ["GROQ_API_KEY"]
 
 with open("youtube_token.json", "w") as f:
@@ -49,13 +39,14 @@ import requests
 from crewai import LLM, Agent, Task, Crew, Process
 from crewai.tools import tool
 
-# WORKAROUND for a known CrewAI bug (crewAIInc/crewAI#5886): CrewAI injects
-# an Anthropic-style 'cache_breakpoint' property into every system message,
-# and the code path that's supposed to strip it back out for non-Anthropic
-# providers doesn't get called. Groq's API has no concept of that field and
-# rejects the whole request with "property 'cache_breakpoint' is
-# unsupported" — happens for any Groq/OpenAI-compatible provider,
-# regardless of which model. No-op'ing the injection function fixes it.
+# WORKAROUND for a known CrewAI bug (crewAIInc/crewAI#5886): CrewAI's own
+# code injects an Anthropic-style 'cache_breakpoint' property into every
+# system message, but the function that's supposed to strip it back out for
+# non-Anthropic providers never actually gets called. Groq's API has no
+# concept of that field and rejects the whole request outright with
+# "property 'cache_breakpoint' is unsupported" — this has nothing to do
+# with which Groq model is selected, it happens for any Groq/OpenAI-
+# compatible provider. No-op'ing the injection function fixes it.
 import crewai.llms.cache as _crewai_cache
 _crewai_cache.mark_cache_breakpoint = lambda msg: msg
 
@@ -64,9 +55,9 @@ llm = LLM(
     api_key=GROQ_KEY,
     timeout=300,
     max_retries=5,
-    max_tokens=1024,  # only used by the light agents (topic pick, bullet list) —
-                       # script + SEO generation go through direct chunked calls
-                       # below instead, see _call_groq_direct.
+    max_tokens=2048,  # Groq's free tier caps openai/gpt-oss-120b at 8000
+                       # TOKENS PER MINUTE total. Topic Scout/Researcher/SEO
+                       # only need short outputs so this still leaves headroom.
 )
 
 
@@ -83,33 +74,31 @@ def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
     raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
 
 
-test = call_with_retry(llm, "Reply with exactly one word: OK")
-print("LLM connection test:", test)
-
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL_ID = "openai/gpt-oss-120b"
 
 
 def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=6, base_delay=15):
     """Calls Groq's chat/completions endpoint directly with raw `requests`,
-    bypassing CrewAI/litellm entirely — used for script generation (outline +
-    per-beat) and SEO, where full control over exactly what's sent matters
-    more than CrewAI's Agent/Task abstraction. openai/gpt-oss-120b IS a
-    reasoning model, but Groq puts its reasoning trace in a separate
+    bypassing CrewAI/litellm entirely — used for the Scriptwriter's outline
+    and per-beat generation calls: full control over exactly what's sent,
+    independent of CrewAI's system-prompt templating. openai/gpt-oss-120b IS
+    a reasoning model, but Groq puts its reasoning trace in a separate
     "reasoning" field on the response rather than mixing it into "content" —
-    include_reasoning: false tells Groq to drop that field entirely, so no
-    reasoning text should leak into the JSON we're trying to parse.
+    include_reasoning: false below tells Groq to drop that field entirely.
 
-    On a 429 (rate limit — Groq's free tier caps this model's tokens/minute),
-    this parses the actual suggested wait time out of Groq's error response
-    rather than guessing, since a fixed short backoff can retry before the
-    per-minute window has actually reset."""
+    On a 429 (rate limit — Groq's free tier is only 8000 tokens/minute for
+    this model), this parses the actual suggested wait time out of Groq's
+    error response ("Please try again in 12.915s") rather than guessing."""
     last_error = None
     for i in range(attempts):
         try:
             resp = requests.post(
                 GROQ_CHAT_URL,
-                headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {GROQ_KEY}",
+                    "Content-Type": "application/json",
+                },
                 json={
                     "model": GROQ_MODEL_ID,
                     "messages": messages,
@@ -144,10 +133,12 @@ def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=6, ba
             time.sleep(wait)
     raise RuntimeError(f"Groq direct call failed after {attempts} attempts: {last_error}")
 
+
+test = call_with_retry(llm, "Reply with exactly one word: OK")
+print("LLM connection test:", test)
+
 # ---------------------------------------------------------------------
-# 1b. Timing instrumentation — so a future stall shows exactly which
-# task it died on and how long each prior stage took, instead of the
-# log just going quiet until the job hits its timeout.
+# 1b. Timing instrumentation
 # ---------------------------------------------------------------------
 PIPELINE_START = time.time()
 _last_checkpoint = {"t": PIPELINE_START}
@@ -168,28 +159,9 @@ def _step_callback(step):
     since_start = time.time() - PIPELINE_START
     print(f"[STEP] t+{since_start:.1f}s — {type(step).__name__}")
 
+
 # ---------------------------------------------------------------------
 # 2. Search tools
-#
-# DDGS (duckduckgo_search) is gone. It scrapes DDG's HTML endpoint with no
-# official API, and GitHub Actions runner IPs get bot-challenged/rate-limited
-# on it constantly — which doesn't just cost the 3 retries in this function,
-# it also makes the CrewAI agent re-issue the search several more times on
-# its own, burning full LLM calls each time. That combo is most of why a run
-# can still be stuck on an early task after 90 minutes.
-#
-# Replaced with two genuinely free (not free-tier-capped) sources:
-#   - SearXNG: a self-hosted metasearch engine (Google/Bing/DDG/70+ engines
-#     merged). No API key, no rate limit, no monthly fee, because you're
-#     running it yourself. Needs a SearXNG instance reachable at
-#     SEARXNG_URL (see the GitHub Actions service block in
-#     searxng-github-actions.yml). It also needs `search.formats: [html, json]`
-#     enabled in SearXNG's settings.yml — JSON output is off by default.
-#   - Wikipedia's REST/API: official, free, unlimited for reasonable use, no
-#     key. Since every topic here is a specific Ancient Egypt / Ancient Rome
-#     figure or event, Wikipedia is a much more reliable primary source for
-#     the Researcher than search snippets are — use SearXNG mainly for the
-#     Topic Scout's "what's trending" angle instead.
 # ---------------------------------------------------------------------
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:8888")
 WIKI_USER_AGENT = "MotiveUnknownBot/1.0 (automated video pipeline; contact: replace-with-your-email@example.com)"
@@ -207,7 +179,7 @@ def search_tool(query: str) -> str:
                 timeout=15,
             )
             resp.raise_for_status()
-            results = resp.json().get("results", [])[:6]
+            results = resp.json().get("results", [])[:3]
             if not results:
                 return "No results found for this query. Try a different angle."
             formatted = []
@@ -233,7 +205,7 @@ def wikipedia_tool(query: str) -> str:
                     "list": "search",
                     "srsearch": query,
                     "format": "json",
-                    "srlimit": 3,
+                    "srlimit": 2,
                 },
                 headers={"User-Agent": WIKI_USER_AGENT},
                 timeout=15,
@@ -254,7 +226,7 @@ def wikipedia_tool(query: str) -> str:
                 if summary_resp.status_code != 200:
                     continue
                 summary = summary_resp.json()
-                extract = summary.get("extract", "")
+                extract = summary.get("extract", "")[:800]
                 url = summary.get("content_urls", {}).get("desktop", {}).get("page", "")
                 formatted.append(f"{title}\n{extract}\n{url}")
 
@@ -268,36 +240,26 @@ def wikipedia_tool(query: str) -> str:
 
 
 # ---------------------------------------------------------------------
-# 3. Character roster — single source of truth, matches assets/ filenames.
+# 3. Agents
 #
-# SCOPE NOTE: general "why does X happen" curiosity topics are on hold —
-# there's no character art for non-historical content yet. Topic Scout
-# below is scoped to Ancient Egypt / Ancient Rome only until that changes.
-# ---------------------------------------------------------------------
-CHARACTER_ROSTER = {
-    "ancient_egypt": ["egyptian_commoner", "egyptian_soldier", "egyptian_royal"],
-    "ancient_rome": ["roman_commoner", "roman_soldier", "roman_royal"],
-}
-VALID_EXPRESSIONS = ["neutral", "happy", "angry", "worried"]
-
-# ---------------------------------------------------------------------
-# 4. Agents
+# SCOPE NOTE: still scoped to Ancient Egypt / Ancient Rome for now — that
+# was originally because only those eras had character art, but since
+# images are generated per-beat now, that constraint could be lifted
+# whenever you want to broaden the topic pool. Left in place until you
+# decide to widen it.
 # ---------------------------------------------------------------------
 topic_scout = Agent(
     role="Topic Scout",
     goal=(
         "Find a single, highly clickable video topic that is a specific historical "
-        "story, event, or figure from Ancient Egypt or Ancient Rome — the only eras "
-        "with character art available right now."
+        "story, event, or figure from Ancient Egypt or Ancient Rome."
     ),
     backstory=(
-        "detailed thinking off\n\n"
         "You track trending searches, Reddit threads, and history content that performs "
         "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
         "particular event, figure, or moment — that has strong curiosity-gap potential. "
-        "You only pick topics from Ancient Egypt or Ancient Rome, since those are the "
-        "only eras with character designs ready. You pick ONE topic and justify why it "
-        "will perform well."
+        "You only pick topics from Ancient Egypt or Ancient Rome. You pick ONE topic and "
+        "justify why it will perform well."
     ),
     tools=[search_tool],
     llm=llm,
@@ -309,7 +271,6 @@ researcher = Agent(
     role="Video Researcher",
     goal="Find the most surprising, well-sourced facts or story beats on the chosen historical topic",
     backstory=(
-        "detailed thinking off\n\n"
         "You're an obsessive researcher for a history storytelling channel. You dig up "
         "real, verifiable, surprising details and put them in the order they'd be told "
         "as a story. You avoid generic facts everyone already knows. You always check "
@@ -323,10 +284,27 @@ researcher = Agent(
     verbose=True,
 )
 
+# NOTE: there is deliberately no CrewAI Agent for the Scriptwriter — the
+# JSON-only output requirement was too strict for CrewAI's system-prompt
+# templating to reliably satisfy, so script generation is done via direct
+# API calls further down instead.
+
+seo_specialist = Agent(
+    role="YouTube SEO Specialist",
+    goal="Generate a high-CTR title, description, and tag list for the video",
+    backstory=(
+        "You've studied thousands of high-performing history-channel uploads and know "
+        "how to write curiosity-driven titles and keyword-rich descriptions."
+    ),
+    llm=llm,
+    max_iter=5,
+    verbose=True,
+)
+
 print("Agents ready.")
 
 # ---------------------------------------------------------------------
-# 5. Tasks
+# 4. Tasks — Topic Scout + Researcher
 # ---------------------------------------------------------------------
 topic_task = Task(
     description=(
@@ -356,46 +334,52 @@ research_task = Task(
 print("Tasks ready.")
 
 # ---------------------------------------------------------------------
-# 6. Run the crew — ONE single kickoff() for the whole crew. (Running each
-# agent as its own separate Crew() one at a time was tried before, to space
-# Groq token usage across per-minute windows — but calling Crew().kickoff()
-# more than once in the same process triggered a CrewAI internal asyncio
-# bug ("no running event loop") on the second call. One combined crew
-# avoids that entirely, and Script/SEO generation below never call
-# Crew.kickoff() at all, so there's no remaining risk of hitting it again.
+# 5. Run Topic Scout and Researcher as TWO SEPARATE crew runs, not one —
+# spreads their token usage across separate 60s TPM windows on Groq's free
+# tier instead of stacking it in one.
 # ---------------------------------------------------------------------
-crew = Crew(
-    agents=[topic_scout, researcher],
-    tasks=[topic_task, research_task],
-    process=Process.sequential,
-    step_callback=_step_callback,
-    verbose=True,
-)
+MAX_CREW_ATTEMPTS = 3
 
-result = crew.kickoff()
+
+def _run_single_task_crew(agent, task, label):
+    single_crew = Crew(
+        agents=[agent],
+        tasks=[task],
+        process=Process.sequential,
+        verbose=True,
+        step_callback=_step_callback,
+    )
+    for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
+        try:
+            return single_crew.kickoff()
+        except Exception as e:
+            wait = 70
+            print(f"[{label} RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
+            if attempt == MAX_CREW_ATTEMPTS:
+                raise
+            time.sleep(wait)
+
+
+_run_single_task_crew(topic_scout, topic_task, "TOPIC SCOUT")
+print("[PACING] Waiting 20s before Researcher to keep token usage spread across TPM windows...")
+time.sleep(20)
+result = _run_single_task_crew(researcher, research_task, "RESEARCHER")
+
 print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
 print(result)
 
 # ---------------------------------------------------------------------
-# 7. Script generation — OUTLINE first, then each beat individually.
-#
-# This is the actual fix for the repeated failures (timeouts, truncated
-# JSON, garbled output) we kept hitting asking one LLM call to produce a
-# whole 1600-2400 word structured script at once. Confirmed by a real run:
-# this chunked approach completed successfully where single-shot generation
-# kept failing in different ways across three different providers.
+# 6. Parse + validate the Scriptwriter's JSON output
 # ---------------------------------------------------------------------
-CHARACTER_LIST_TEXT = "\n".join(
-    f"  {era}: {', '.join(names)}" for era, names in CHARACTER_ROSTER.items()
-)
-
-
 def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
-    """Scans for every *balanced* {...} block in the text and tries them
-    from LAST to FIRST (the real answer comes after any reasoning text,
-    not before it), returning the first one that both parses as JSON and
-    has the key the caller actually needs — 'segments' for the final
-    script, 'beats' for the outline step."""
+    """Some models write out a 'thinking process' before the real answer no
+    matter how firmly you tell them not to — and that reasoning text can
+    itself contain brace-like snippets that break a naive first-brace/
+    last-brace slice. This scans for every *balanced* {...} block in the
+    text and tries them from LAST to FIRST (the real answer comes after the
+    reasoning, not before it), returning the first one that both parses as
+    JSON and has the key the CALLER actually needs — 'segments' for the
+    final script, 'beats' for the outline step."""
     candidates = []
     stack = []
     start = None
@@ -428,30 +412,14 @@ def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
     )
 
 
-def _validate_character(char_entry: dict, allowed_for_era: set, seg_index: int, expr_key: str = "expression"):
-    """Character name has no safe fallback (there's no art for a name that
-    doesn't exist), so that still fails hard. An unrecognized expression
-    DOES have a safe fallback (neutral) — so rather than throw away a full
-    run over one made-up word like 'proud', we just warn and downgrade it."""
-    name = char_entry.get("character")
-    if name not in allowed_for_era:
-        raise RuntimeError(
-            f"Segment {seg_index} uses character {name!r}, which isn't in this era's "
-            f"roster ({sorted(allowed_for_era)})."
-        )
-    expr = char_entry.get(expr_key)
-    if expr not in VALID_EXPRESSIONS:
-        print(f"WARNING: segment {seg_index}, character {name!r} used unrecognized "
-              f"expression {expr!r} — falling back to 'neutral'.")
-        char_entry[expr_key] = "neutral"
+VALID_ERAS = ("ancient_egypt", "ancient_rome")
 
 
 def validate_script_dict(data: dict) -> dict:
     era = data.get("era")
-    if era not in CHARACTER_ROSTER:
+    if era not in VALID_ERAS:
         raise RuntimeError(f"Script has invalid/missing era: {era!r}")
 
-    allowed_for_era = set(CHARACTER_ROSTER[era])
     segments = data.get("segments")
     if not isinstance(segments, list) or len(segments) < 4:
         raise RuntimeError("Script has too few segments (or 'segments' missing/not a list).")
@@ -461,18 +429,16 @@ def validate_script_dict(data: dict) -> dict:
         seg_type = seg.get("type")
         if seg_type == "narration":
             total_words += len(seg.get("text", "").split())
-            for char in seg.get("on_screen", []):
-                _validate_character(char, allowed_for_era, i)
         elif seg_type == "dialogue":
             lines = seg.get("lines", [])
             if not lines:
                 raise RuntimeError(f"Segment {i} is type 'dialogue' but has no lines.")
             for line in lines:
                 total_words += len(line.get("text", "").split())
-                line["character"] = line.get("speaker")
-                _validate_character(line, allowed_for_era, i)
         else:
             raise RuntimeError(f"Segment {i} has invalid type: {seg_type!r}")
+        if not seg.get("image_file"):
+            raise RuntimeError(f"Segment {i} is missing its generated image_file.")
 
     if total_words < 1000 or total_words > 3200:
         raise RuntimeError(
@@ -496,38 +462,34 @@ def flatten_script_to_text(parsed_script: dict) -> str:
 
 
 OUTLINE_TASK_DESCRIPTION = (
-    "Using the research, plan a 10-15 minute puppet-animation video script as a BEAT "
-    "OUTLINE — structure only, not the full prose yet.\n\n"
-    f"Only use these characters, matched to the story's era:\n{CHARACTER_LIST_TEXT}\n\n"
+    "Using the research, plan a 10-15 minute narrated history video as a BEAT OUTLINE — "
+    "structure only, not the full narration text yet.\n\n"
     "Output ONLY a single JSON object with this exact shape, nothing else:\n"
     "{\n"
     '  "era": "ancient_egypt" | "ancient_rome",\n'
-    '  "characters_used": ["<character_name>", ...],\n'
     '  "beats": [\n'
-    "    {\n"
-    '      "type": "narration",\n'
-    '      "gist": "<1 sentence: what happens in this beat>",\n'
-    '      "on_screen": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}]\n'
-    "    },\n"
-    "    {\n"
-    '      "type": "dialogue",\n'
-    '      "gist": "<1 sentence: what this exchange is about>",\n'
-    '      "speakers": [{"character": "<name>", "expression": "<neutral|happy|angry|worried>"}, ...]\n'
-    "    }\n"
+    '    {"type": "narration", "gist": "<1 sentence: what happens in this beat, described '
+    'concretely and visually enough to base an illustration on>"},\n'
+    '    {"type": "dialogue", "gist": "<1 sentence: what this exchange is about>"}\n'
     "  ]\n"
     "}\n\n"
     "Rules:\n"
     "- Produce 12-16 beats total, covering the full story arc from the research, in order.\n"
     "- Most beats should be type 'narration'.\n"
-    "- Use type 'dialogue' only occasionally (roughly every 3-5 narration beats), between "
-    "2 characters already on screen nearby.\n"
-    "- Every character name must come from the allowed list above, matching the chosen era.\n"
+    "- Use type 'dialogue' only occasionally (roughly every 3-5 narration beats).\n"
+    "- Each 'gist' must describe a concrete, visualizable moment (a place, an action, "
+    "people doing something specific) — it's used to generate an illustration, so avoid "
+    "vague or abstract gists like 'tensions rise'.\n"
     "- The first beat should be a hook.\n"
     "- Output must be ONLY the JSON object — first character '{', last character '}'."
 )
 
 
 def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
+    """Step 1 of 2: ask for a compact structural outline, not the full script.
+    Chunking (outline, then one small generation per beat) is more reliable
+    for hitting an aggregate word-count target than one big single-shot
+    generation, regardless of model."""
     description = OUTLINE_TASK_DESCRIPTION
     if extra_note:
         description += f"\n\nIMPORTANT — this is a retry. Previous attempt was rejected: {extra_note}"
@@ -540,22 +502,16 @@ def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
     data = _extract_json_object(text, required_key="beats")
 
     era = data.get("era")
-    if era not in CHARACTER_ROSTER:
+    if era not in VALID_ERAS:
         raise RuntimeError(f"Outline has invalid/missing era: {era!r}")
     beats = data.get("beats")
     if not isinstance(beats, list) or len(beats) < 10:
         raise RuntimeError(f"Outline has too few beats ({len(beats) if isinstance(beats, list) else 0}, need >=10).")
-
-    allowed_for_era = set(CHARACTER_ROSTER[era])
     for i, beat in enumerate(beats):
-        if beat.get("type") == "narration":
-            for char in beat.get("on_screen", []):
-                _validate_character(char, allowed_for_era, i)
-        elif beat.get("type") == "dialogue":
-            for sp in beat.get("speakers", []):
-                _validate_character(sp, allowed_for_era, i)
-        else:
+        if beat.get("type") not in ("narration", "dialogue"):
             raise RuntimeError(f"Outline beat {i} has invalid type: {beat.get('type')!r}")
+        if not beat.get("gist"):
+            raise RuntimeError(f"Outline beat {i} is missing a 'gist'.")
 
     return data
 
@@ -570,7 +526,7 @@ def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
             {"role": "system", "content": "You write narration for a history video. Output ONLY the narration text, nothing else."},
             {"role": "user", "content": (
                 f"Write {NARRATION_MIN_WORDS}-{NARRATION_MAX_WORDS} words of narration for a "
-                f"puppet-animation history video (era: {era}). This is ONE beat of a larger "
+                f"cartoon-illustrated history video (era: {era}). This is ONE beat of a larger "
                 "script — write ONLY the narration text itself, nothing else: no JSON, no "
                 "labels, no preamble, no markdown.\n\n"
                 f"What happens in this beat: {gist}\n\n"
@@ -587,21 +543,25 @@ def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
     return text
 
 
-def _generate_dialogue_lines(gist: str, speakers: list, era: str, attempts: int = 3) -> list:
-    speaker_names = [s["character"] for s in speakers]
-    expr_by_name = {s["character"]: s.get("expression", "neutral") for s in speakers}
+DIALOGUE_SPEAKER_LABELS = ["Speaker 1", "Speaker 2"]
+
+
+def _generate_dialogue_lines(gist: str, era: str, attempts: int = 3) -> list:
+    """No named characters anymore — just two generic speaker labels. Voice
+    variety comes from mapping these two labels to two fixed TTS voices."""
     lines = []
     for attempt in range(1, attempts + 1):
         messages = [
             {"role": "system", "content": "You write short dialogue for a history video. Output ONLY the requested lines, nothing else."},
             {"role": "user", "content": (
-                f"Write a short 2-4 line dialogue exchange between {', '.join(speaker_names)} "
-                f"for a puppet-animation history video (era: {era}).\n\n"
+                "Write a short 2-4 line dialogue exchange between two people for a "
+                f"cartoon-illustrated history video (era: {era}). Label the speakers exactly "
+                "'Speaker 1' and 'Speaker 2'.\n\n"
                 f"What this exchange is about: {gist}\n\n"
                 "Output ONLY the lines, one per line, in this exact format:\n"
-                "SPEAKER_NAME: line text\n\n"
-                f"Only use these exact speaker names: {', '.join(speaker_names)}. No JSON, no "
-                "preamble, no extra commentary — just the lines."
+                "Speaker 1: line text\n"
+                "Speaker 2: line text\n\n"
+                "No JSON, no preamble, no extra commentary — just the alternating lines."
             )},
         ]
         raw = _call_groq_direct(messages, max_tokens=400, temperature=0.6).strip()
@@ -612,56 +572,77 @@ def _generate_dialogue_lines(gist: str, speakers: list, era: str, attempts: int 
                 continue
             speaker, _, spoken_text = line.partition(":")
             speaker, spoken_text = speaker.strip(), spoken_text.strip()
-            if speaker in speaker_names and spoken_text:
-                lines.append({"speaker": speaker, "text": spoken_text, "expression": expr_by_name[speaker]})
+            if speaker in DIALOGUE_SPEAKER_LABELS and spoken_text:
+                lines.append({"speaker": speaker, "text": spoken_text})
         if len(lines) >= 2:
             return lines
         print(f"[BEAT RETRY] dialogue beat produced too few valid lines, retrying ({attempt}/{attempts})...")
     return lines
 
 
+# ---------------------------------------------------------------------
+# 6b. Image generation — Pollinations.ai (free, no API key)
+#
+# One generated cartoon-illustration image per beat, based on that beat's
+# gist. A fixed style suffix keeps the look consistent across the whole
+# video instead of each image looking like a different art style.
+# ---------------------------------------------------------------------
+STYLE_SUFFIX = (
+    "flat vector cartoon illustration, bold clean outlines, warm vibrant colors, "
+    "educational children's storybook art style, no text, no watermark, no logo"
+)
+ERA_LABELS = {"ancient_egypt": "Ancient Egypt", "ancient_rome": "Ancient Rome"}
+
+
+def generate_beat_image(gist: str, era: str, filename: str, attempts: int = 4) -> str:
+    """Pollinations.ai has no formal SLA and can be rate-limited/flaky like
+    every other free service in this pipeline — same retry-with-backoff
+    pattern as everywhere else. A too-small response is treated as a
+    failure too, since that's usually an error page, not a real image."""
+    era_label = ERA_LABELS.get(era, era)
+    prompt = f"{era_label} scene: {gist}. {STYLE_SUFFIX}"
+    encoded_prompt = requests.utils.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = requests.get(
+                url,
+                params={"width": 1280, "height": 720, "nologo": "true"},
+                timeout=90,
+            )
+            resp.raise_for_status()
+            if len(resp.content) < 2000:
+                raise RuntimeError(f"Response too small to be a real image ({len(resp.content)} bytes)")
+            with open(filename, "wb") as f:
+                f.write(resp.content)
+            return filename
+        except Exception as e:
+            last_error = e
+            wait = 8 * attempt
+            print(f"[IMAGE RETRY] '{filename}' failed (attempt {attempt}/{attempts}): {e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"Image generation failed for '{filename}' after {attempts} attempts: {last_error}")
+
+
 def _assemble_script_from_outline(outline: dict) -> dict:
     era = outline["era"]
+    os.makedirs("beat_images", exist_ok=True)
     segments = []
-    for beat in outline["beats"]:
+    for i, beat in enumerate(outline["beats"]):
+        image_file = generate_beat_image(beat["gist"], era, f"beat_images/beat_{i:03d}.jpg")
         if beat["type"] == "narration":
             segments.append({
                 "type": "narration",
                 "text": _generate_narration_text(beat["gist"], era),
-                "on_screen": beat.get("on_screen", []),
+                "image_file": image_file,
             })
         else:
-            lines = _generate_dialogue_lines(beat["gist"], beat.get("speakers", []), era)
+            lines = _generate_dialogue_lines(beat["gist"], era)
             if lines:
-                segments.append({"type": "dialogue", "lines": lines})
-    return {
-        "era": era,
-        "characters_used": outline.get("characters_used", []),
-        "segments": segments,
-    }
-
-
-def _generate_seo_direct(script_text: str, attempts: int = 3) -> str:
-    messages = [
-        {"role": "system", "content": "You are a YouTube SEO specialist for a history channel. Output plain text only."},
-        {"role": "user", "content": (
-            "Based on the following finished script, write:\n"
-            "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
-            "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
-            "3. A list of 15 relevant tags\n\n"
-            f"SCRIPT:\n{script_text[:6000]}"
-        )},
-    ]
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            return _call_groq_direct(messages, max_tokens=1024, temperature=0.5)
-        except Exception as e:
-            last_error = e
-            wait = 10 * attempt
-            print(f"[SEO RETRY] attempt {attempt}/{attempts} failed: {e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"SEO generation failed after {attempts} attempts: {last_error}")
+                segments.append({"type": "dialogue", "lines": lines, "image_file": image_file})
+    return {"era": era, "segments": segments}
 
 
 research_text = getattr(research_task.output, "raw", str(research_task.output))
@@ -669,6 +650,7 @@ research_text = getattr(research_task.output, "raw", str(research_task.output))
 MAX_OUTLINE_ATTEMPTS = 3
 outline = None
 last_error = None
+
 for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
     print(f"[OUTLINE] Generating outline (attempt {attempt}/{MAX_OUTLINE_ATTEMPTS})...")
     t0 = time.time()
@@ -684,81 +666,54 @@ for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
 if outline is None:
     raise RuntimeError(f"Outline generation failed after {MAX_OUTLINE_ATTEMPTS} attempts. Last error: {last_error}")
 
-print(f"[SCRIPT] Generating {len(outline['beats'])} beats individually...")
+print(f"[SCRIPT] Generating {len(outline['beats'])} beats (text + image) individually...")
 t0 = time.time()
 script_dict = _assemble_script_from_outline(outline)
 print(f"[TIMING] 'All beats generated' finished — took {time.time() - t0:.1f}s")
 
 parsed_script = validate_script_dict(script_dict)
 
-print("[SEO] Generating title/description/tags...")
-t0 = time.time()
-seo_output = _generate_seo_direct(flatten_script_to_text(parsed_script))
-print(f"[TIMING] 'SEO' finished — took {time.time() - t0:.1f}s")
+# ---------------------------------------------------------------------
+# 6c. SEO — runs AFTER the script is validated, using the actual finished
+# script text embedded directly in the prompt.
+# ---------------------------------------------------------------------
+seo_task = Task(
+    description=(
+        "Based on the following finished script, write:\n"
+        "1. Three title options (under 60 characters, curiosity-driven, no clickbait flags)\n"
+        "2. A YouTube description (first 2 lines keyword-rich, then a short summary)\n"
+        "3. A list of 15 relevant tags\n\n"
+        f"SCRIPT:\n{flatten_script_to_text(parsed_script)}"
+    ),
+    expected_output="Titles, description, and tags clearly labeled.",
+    agent=seo_specialist,
+    callback=_timing_callback("SEO Specialist"),
+)
+_run_single_task_crew(seo_specialist, seo_task, "SEO")
+seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 
 # ---------------------------------------------------------------------
-# 8. Character assembly config
+# 7. Voiceover — one file per narration block / dialogue line
 # ---------------------------------------------------------------------
 import edge_tts
 
-ASSET_DIR = "assets"
-
-CHARACTER_FILES = {
-    "egyptian_commoner": "egyptian_commoner.png",
-    "egyptian_soldier": "egyptian_soldier.png",
-    "egyptian_royal": "egyptian_royal.png",
-    "roman_commoner": "roman_commoner.png",
-    "roman_soldier": "roman_soldier.png",
-    "roman_royal": "roman_royal.png",
-}
-EYE_FILES = {
-    "neutral": "eyes_neutral.png",
-    "happy": "eyes_happy.png",
-    "angry": "eyes_angry.png",
-    "worried": "eyes_neutral.png",  # no distinct "worried" eyes drawn yet — falls back to neutral
-}
-MOUTH_FILES = {
-    "closed": "mouth_closed.png",
-    "half": "mouth_half_open.png",
-    "open": "mouth_fully_open.png",
-}
 NARRATOR_VOICE = "en-US-GuyNeural"
-VOICE_MAP = {
-    "egyptian_commoner": "en-US-DavisNeural",
-    "egyptian_soldier": "en-US-TonyNeural",
-    "egyptian_royal": "en-US-JennyNeural",
-    "roman_commoner": "en-US-EricNeural",
-    "roman_soldier": "en-GB-RyanNeural",
-    "roman_royal": "en-US-AriaNeural",
+DIALOGUE_VOICES = {
+    "Speaker 1": "en-US-DavisNeural",
+    "Speaker 2": "en-US-JennyNeural",
 }
-# FIRST-PASS eyes/mouth placement, as fraction of (width, height) — nudge
-# per character once you've seen a real render; a single universal ratio
-# was tested and does NOT land well on every head shape.
-REGISTRATION = {
-    "egyptian_commoner": {"eyes": (0.50, 0.13), "mouth": (0.50, 0.22)},
-    "egyptian_soldier":  {"eyes": (0.50, 0.12), "mouth": (0.50, 0.21)},
-    "egyptian_royal":    {"eyes": (0.50, 0.14), "mouth": (0.50, 0.23)},
-    "roman_commoner":    {"eyes": (0.50, 0.13), "mouth": (0.50, 0.22)},
-    "roman_soldier":     {"eyes": (0.50, 0.12), "mouth": (0.50, 0.21)},
-    "roman_royal":       {"eyes": (0.50, 0.13), "mouth": (0.50, 0.22)},
-}
-
-FPS = 12
-VIDEO_W, VIDEO_H = 1280, 720
-SCENE_DIR = "scene_frames"
-
-# ---------------------------------------------------------------------
-# 9. Voiceover — one file per narration block / dialogue line
-# ---------------------------------------------------------------------
-# edge-tts is an unofficial, reverse-engineered API (Microsoft's Edge
-# "read aloud" feature, not a real public API), and its servers periodically
-# reject requests — more often from datacenter IPs like GitHub Actions
-# runners. Plain retries don't always help since it can be voice-specific
-# throttling, so after a couple of failures we also try switching voice.
 TTS_FALLBACK_VOICE = "en-US-AriaNeural"
+
+VIDEO_W, VIDEO_H = 1280, 720
+VIDEO_FPS = 30
 
 
 def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4):
+    """edge-tts's NoAudioReceived error is a known, still-unresolved issue
+    upstream (it's an unofficial wrapper around Edge's internal "Read Aloud"
+    service, not a real public API). Plain retries don't always help since
+    it can be voice-specific throttling, so after 2 failures we also switch
+    to a fallback voice."""
     async def _run(v):
         communicate = edge_tts.Communicate(text=text, voice=v)
         await communicate.save(filename)
@@ -789,8 +744,8 @@ def generate_all_voiceovers(parsed_script: dict, out_dir: str = "audio"):
             clip_index += 1
         else:
             for line in seg["lines"]:
-                voice = VOICE_MAP.get(line["speaker"], NARRATOR_VOICE)
-                fname = os.path.join(out_dir, f"clip_{clip_index:04d}_{line['speaker']}.mp3")
+                voice = DIALOGUE_VOICES.get(line["speaker"], NARRATOR_VOICE)
+                fname = os.path.join(out_dir, f"clip_{clip_index:04d}_dialogue.mp3")
                 tts_to_file(line["text"], voice, fname)
                 line["audio_file"] = fname
                 clip_index += 1
@@ -798,147 +753,9 @@ def generate_all_voiceovers(parsed_script: dict, out_dir: str = "audio"):
     return parsed_script
 
 
-# ---------------------------------------------------------------------
-# 10. Amplitude envelope -> cheap lip-sync
-# ---------------------------------------------------------------------
-def get_amplitude_envelope(mp3_path: str, fps: int = FPS):
-    raw_path = mp3_path + ".pcm"
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", mp3_path, "-f", "s16le", "-ac", "1", "-ar", "16000", raw_path],
-        check=True, capture_output=True,
-    )
-    samples = np.fromfile(raw_path, dtype=np.int16).astype(np.float32) / 32768.0
-    os.remove(raw_path)
-
-    samples_per_frame = max(1, int(16000 / fps))
-    n_frames = max(1, math.ceil(len(samples) / samples_per_frame))
-    envelope = np.zeros(n_frames)
-    for i in range(n_frames):
-        chunk = samples[i * samples_per_frame:(i + 1) * samples_per_frame]
-        if len(chunk):
-            envelope[i] = np.sqrt(np.mean(chunk ** 2))
-
-    peak = envelope.max() if envelope.max() > 0 else 1.0
-    return envelope / peak, n_frames / fps
-
-
-def amplitude_to_mouth(a: float) -> str:
-    if a < 0.15:
-        return "closed"
-    if a < 0.55:
-        return "half"
-    return "open"
-
-
-# ---------------------------------------------------------------------
-# 11. Character compositing + frame rendering
-# ---------------------------------------------------------------------
-_asset_cache = {}
-
-
-def _load(name: str) -> Image.Image:
-    if name not in _asset_cache:
-        _asset_cache[name] = Image.open(os.path.join(ASSET_DIR, name)).convert("RGBA")
-    return _asset_cache[name]
-
-
-def compose_character(character: str, expression: str, mouth_key: str = "closed") -> Image.Image:
-    body = _load(CHARACTER_FILES[character])
-    eyes = _load(EYE_FILES[expression])
-    mouth = _load(MOUTH_FILES[mouth_key])
-    reg = REGISTRATION[character]
-
-    canvas = body.copy()
-    ex_ratio, ey_ratio = reg["eyes"]
-    mx_ratio, my_ratio = reg["mouth"]
-    ex = int(body.width * ex_ratio) - eyes.width // 2
-    ey = int(body.height * ey_ratio) - eyes.height // 2
-    mx = int(body.width * mx_ratio) - mouth.width // 2
-    my = int(body.height * my_ratio) - mouth.height // 2
-
-    canvas.alpha_composite(eyes, (ex, ey))
-    canvas.alpha_composite(mouth, (mx, my))
-    return canvas
-
-
-def _render_frame(on_screen: list, speaking_amp: dict) -> Image.Image:
-    canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (235, 225, 200, 255))
-    n = max(1, len(on_screen))
-    slot_w = VIDEO_W // (n + 1)
-    for i, entry in enumerate(on_screen):
-        char = entry["character"]
-        expr = entry.get("expression", "neutral")
-        amp = speaking_amp.get(char, 0.0)
-        mouth_key = amplitude_to_mouth(amp)
-        sprite = compose_character(char, expr, mouth_key)
-
-        target_h = int(VIDEO_H * 0.6)
-        scale = target_h / sprite.height
-        sprite = sprite.resize((int(sprite.width * scale), target_h))
-
-        x = slot_w * (i + 1) - sprite.width // 2
-        y = VIDEO_H - sprite.height - 40
-        canvas.alpha_composite(sprite, (x, y))
-
-    return canvas.convert("RGB")
-
-
-# ---------------------------------------------------------------------
-# 12. Full video assembly — CACHED FRAMES, NOT ONE FILE PER 1/12s
-#
-# WHY THIS CHANGED: the previous version wrote one PNG per video frame for
-# the ENTIRE video — 7,000-11,000 individual composited files for a 10-15
-# minute video at 12fps. That's almost certainly what actually caused the
-# 90-minute timeouts (the crew itself finishes in ~25-30 min even on a slow
-# run — the rest of the time was unaccounted for, and this was the only
-# part of the pipeline that scales with video LENGTH rather than segment
-# COUNT). A puppet's mouth only changes a handful of times per second, so
-# most of those frames were exact duplicates of the one before them.
-#
-# Fix: render each unique (character, expression, mouth-shape) combination
-# ONCE, cache it, and tell ffmpeg to hold that single image for however
-# long it's needed via the concat demuxer's `duration` directive — instead
-# of writing the same image to disk over and over. Verified this actually
-# works (correct total duration, correct visual output) before shipping it.
-# ---------------------------------------------------------------------
-_frame_cache = {}
-
-
-def _get_or_render_frame(state: tuple) -> str:
-    """state = tuple of (character, expression, mouth_key) tuples, one per
-    on-screen character. Returns a file path, rendering + saving only the
-    first time a given state is ever needed."""
-    if state in _frame_cache:
-        return _frame_cache[state]
-    on_screen = [{"character": c, "expression": e} for c, e, _m in state]
-    speaking_amp = {}  # unused now — we pass mouth_key directly below instead
-    canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (235, 225, 200, 255))
-    n = max(1, len(state))
-    slot_w = VIDEO_W // (n + 1)
-    for i, (char, expr, mouth_key) in enumerate(state):
-        sprite = compose_character(char, expr, mouth_key)
-        target_h = int(VIDEO_H * 0.6)
-        scale = target_h / sprite.height
-        sprite = sprite.resize((int(sprite.width * scale), target_h))
-        x = slot_w * (i + 1) - sprite.width // 2
-        y = VIDEO_H - sprite.height - 40
-        canvas.alpha_composite(sprite, (x, y))
-
-    os.makedirs("unique_frames", exist_ok=True)
-    path = f"unique_frames/{abs(hash(state))}.png"
-    canvas.convert("RGB").save(path)
-    _frame_cache[state] = path
-    return path
-
-
 def _get_audio_duration(path: str) -> float:
-    """Uses ffmpeg itself (not ffprobe) to get duration. ffprobe isn't
-    guaranteed to be installed alongside ffmpeg on every runner image even
-    though they're normally bundled together — and since ffmpeg is already
-    confirmed working elsewhere in this pipeline, this avoids adding a
-    second binary dependency: running ffmpeg with no real output and
-    reading the 'Duration: HH:MM:SS.xx' line it prints to stderr works
-    anywhere ffmpeg itself works."""
+    """Uses ffmpeg itself (not ffprobe) to get duration — ffprobe isn't
+    guaranteed to be installed alongside ffmpeg on every runner image."""
     result = subprocess.run(
         ["ffmpeg", "-i", path, "-f", "null", "-"],
         capture_output=True, text=True,
@@ -950,69 +767,63 @@ def _get_audio_duration(path: str) -> float:
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
+# ---------------------------------------------------------------------
+# 8. Ken Burns rendering — one generated image per beat, slow zoom/pan for
+# the duration of that beat's voiceover, instead of a static frame.
+# ---------------------------------------------------------------------
+def _render_ken_burns_clip(image_path: str, duration: float, out_path: str, fps: int = VIDEO_FPS):
+    total_frames = max(1, int(round(duration * fps)))
+    zoom_per_frame = 0.15 / max(total_frames, 1)  # ~15% zoom over the clip's full duration
+    vf = (
+        f"scale=1600:-1,zoompan=z='min(zoom+{zoom_per_frame:.6f},1.2)':"
+        f"d={total_frames}:s={VIDEO_W}x{VIDEO_H}:fps={fps}"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-loop", "1", "-i", image_path,
+         "-vf", vf, "-t", f"{duration:.3f}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", out_path],
+        check=True, capture_output=True,
+    )
+
+
 def _build_render_plan(parsed_script: dict):
-    """Walks the script once, producing (image_path, hold_duration) pairs
-    for ffmpeg's concat demuxer, plus the ordered list of audio files to
-    concatenate. No per-video-frame files are written here at all — only
-    as many unique images as the script actually needs."""
+    """Returns (image_path, duration) pairs (one per beat) plus the ordered
+    list of audio files to concatenate. A dialogue beat holds on its one
+    image for the combined duration of all its lines, while the audio
+    plays each line in sequence underneath."""
     plan = []
     audio_files_in_order = []
 
     for seg in parsed_script["segments"]:
         if seg["type"] == "narration":
-            on_screen = seg.get("on_screen", [])
-            # Narrator isn't a rendered character, and on-screen characters
-            # stay silent/closed-mouth during narration — so this is ONE
-            # static image for the whole segment, not per-frame amplitude
-            # analysis at all. Getting duration via ffprobe is much cheaper
-            # than decoding the full PCM waveform for something we don't
-            # even use here.
-            state = tuple(sorted((c["character"], c.get("expression", "neutral"), "closed") for c in on_screen))
             duration = _get_audio_duration(seg["audio_file"])
-            plan.append((_get_or_render_frame(state), duration))
+            plan.append((seg["image_file"], duration))
             audio_files_in_order.append(seg["audio_file"])
         else:
-            speakers = [{"character": l["speaker"], "expression": l["expression"]} for l in seg["lines"]]
+            total_duration = 0.0
             for line in seg["lines"]:
-                # Dialogue DOES need the real amplitude envelope, since the
-                # speaking character's mouth actually needs to move — but
-                # we collapse consecutive identical mouth-shapes into ONE
-                # held image instead of one file per 1/12s slot.
-                envelope, duration = get_amplitude_envelope(line["audio_file"])
-                mouth_keys = [amplitude_to_mouth(a) for a in envelope]
-                frame_dur = duration / len(mouth_keys) if mouth_keys else duration
-                i = 0
-                while i < len(mouth_keys):
-                    j = i
-                    while j + 1 < len(mouth_keys) and mouth_keys[j + 1] == mouth_keys[i]:
-                        j += 1
-                    hold_duration = (j - i + 1) * frame_dur
-                    state = tuple(sorted(
-                        (s["character"], s.get("expression", "neutral"),
-                         mouth_keys[i] if s["character"] == line["speaker"] else "closed")
-                        for s in speakers
-                    ))
-                    plan.append((_get_or_render_frame(state), hold_duration))
-                    i = j + 1
+                total_duration += _get_audio_duration(line["audio_file"])
                 audio_files_in_order.append(line["audio_file"])
+            plan.append((seg["image_file"], total_duration))
 
     return plan, audio_files_in_order
 
 
 def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
     plan, audio_files_in_order = _build_render_plan(parsed_script)
-    print(f"Render plan: {len(plan)} timeline entries, only {len(_frame_cache)} unique images "
-          f"actually rendered (this is the number that used to be 7,000-11,000).")
+    print(f"Render plan: {len(plan)} image segments.")
+
+    os.makedirs("clips", exist_ok=True)
+    clip_paths = []
+    for i, (image_path, duration) in enumerate(plan):
+        clip_path = f"clips/clip_{i:04d}.mp4"
+        _render_ken_burns_clip(image_path, duration, clip_path)
+        clip_paths.append(clip_path)
 
     video_concat_path = "video_concat_list.txt"
     with open(video_concat_path, "w") as f:
-        for path, dur in plan:
+        for path in clip_paths:
             f.write(f"file '{os.path.abspath(path)}'\n")
-            f.write(f"duration {dur:.3f}\n")
-        if plan:
-            # ffmpeg's concat demuxer quirk: the LAST file's `duration` line
-            # is ignored unless the file is listed once more after it.
-            f.write(f"file '{os.path.abspath(plan[-1][0])}'\n")
 
     audio_concat_path = "audio_concat_list.txt"
     with open(audio_concat_path, "w") as f:
@@ -1027,29 +838,22 @@ def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
     subprocess.run(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", video_concat_path,
          "-i", "full_audio.mp3",
-         "-vf", f"pad=ceil(iw/2)*2:ceil(ih/2)*2,fps={FPS}",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-c:v", "copy",
          "-c:a", "aac", "-shortest", out_path],
         check=True, capture_output=True,
     )
     total_duration = sum(d for _, d in plan)
-    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(_frame_cache)} unique frames)")
+    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(plan)} image segments)")
     return out_path
 
 
 # ---------------------------------------------------------------------
-# 13. Thumbnail
+# 9. Thumbnail — reuse the first beat's generated image, with title text
+# overlaid on top.
 # ---------------------------------------------------------------------
 def generate_thumbnail(parsed_script: dict, title: str, out_path: str = "thumbnail.jpg"):
-    on_screen = []
-    for seg in parsed_script["segments"]:
-        candidates = seg.get("on_screen") if seg["type"] == "narration" else \
-            [{"character": l["speaker"], "expression": l["expression"]} for l in seg["lines"]]
-        if candidates:
-            on_screen = candidates
-            break
-
-    frame = _render_frame(on_screen, speaking_amp={})
+    first_image_path = parsed_script["segments"][0]["image_file"]
+    frame = Image.open(first_image_path).convert("RGB").resize((VIDEO_W, VIDEO_H))
     draw = ImageDraw.Draw(frame)
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
@@ -1070,7 +874,7 @@ def generate_thumbnail(parsed_script: dict, title: str, out_path: str = "thumbna
 
 
 # ---------------------------------------------------------------------
-# 14. Upload
+# 10. Upload
 # ---------------------------------------------------------------------
 def extract_seo_title(text):
     match = re.search(r"1\.\s*[\"\u201c]?(.+?)[\"\u201d]?\s*(?:\(|$)", text)
@@ -1123,7 +927,7 @@ def upload_video(video_path: str, thumbnail_path: str, title: str, description: 
 
 
 # ---------------------------------------------------------------------
-# 15. Run everything
+# 11. Run everything
 # ---------------------------------------------------------------------
 parsed_script = generate_all_voiceovers(parsed_script)
 video_path = build_video(parsed_script)
