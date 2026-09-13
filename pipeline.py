@@ -229,7 +229,7 @@ def search_tool(query: str) -> str:
                 timeout=15,
             )
             resp.raise_for_status()
-            results = resp.json().get("results", [])[:6]
+            results = resp.json().get("results", [])[:3]
             if not results:
                 return "No results found for this query. Try a different angle."
             formatted = []
@@ -255,7 +255,8 @@ def wikipedia_tool(query: str) -> str:
                     "list": "search",
                     "srsearch": query,
                     "format": "json",
-                    "srlimit": 3,
+                    "srlimit": 2,  # fewer hits = smaller context added to the agent's
+                                    # growing conversation history each tool call
                 },
                 headers={"User-Agent": WIKI_USER_AGENT},
                 timeout=15,
@@ -276,7 +277,9 @@ def wikipedia_tool(query: str) -> str:
                 if summary_resp.status_code != 200:
                     continue
                 summary = summary_resp.json()
-                extract = summary.get("extract", "")
+                extract = summary.get("extract", "")[:800]  # capped — full extracts can run
+                                                              # 2000+ words and get resent on
+                                                              # every subsequent agent step
                 url = summary.get("content_urls", {}).get("desktop", {}).get("page", "")
                 formatted.append(f"{title}\n{extract}\n{url}")
 
@@ -322,7 +325,9 @@ topic_scout = Agent(
     ),
     tools=[search_tool],
     llm=llm,
-    max_iter=8,  # caps tool-retry loops (CrewAI default is unbounded-ish, 15/20)
+    max_iter=4,  # caps tool-retry loops — each extra step resends the whole
+                  # growing conversation history, which is what actually
+                  # blows through Groq's per-minute token budget
     verbose=True,
 )
 
@@ -339,7 +344,8 @@ researcher = Agent(
     ),
     tools=[wikipedia_tool, search_tool],
     llm=llm,
-    max_iter=10,  # slightly higher than Topic Scout since it juggles 2 tools
+    max_iter=6,  # was 10 — same reasoning as Topic Scout: fewer steps means
+                  # less accumulated context resent per call
     verbose=True,
 )
 
@@ -441,32 +447,43 @@ SCRIPT_TASK_DESCRIPTION = (
 print("Tasks ready.")
 
 # ---------------------------------------------------------------------
-# 6. Run the crew
+# 6. Run Topic Scout and Researcher as TWO SEPARATE crew runs, not one.
+#
+# They used to run back-to-back in a single Crew.kickoff() call, meaning
+# both tasks' token usage landed in the same (or adjacent) 60-second TPM
+# window on Groq's free tier. Splitting them and adding a deliberate pause
+# spreads that usage out, on top of the max_iter cuts and smaller tool
+# results above (which shrink each task's own token footprint).
+# research_task's context=[topic_task] still works fine across two separate
+# kickoffs — it just reads topic_task.output at execution time, and that's
+# already populated by the time research_task runs.
 # ---------------------------------------------------------------------
-crew = Crew(
-    agents=[topic_scout, researcher],
-    tasks=[topic_task, research_task],
-    process=Process.sequential,
-    verbose=True,
-    step_callback=_step_callback,
-)
-
 MAX_CREW_ATTEMPTS = 3
-result = None
-for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
-    try:
-        result = crew.kickoff()
-        break
-    except Exception as e:
-        # A rate-limit error here previously killed the whole run instantly —
-        # CrewAI doesn't retry these on its own before propagating up. Groq's
-        # free tier TPM window resets every 60s, so wait a bit over that
-        # before trying the whole crew again.
-        wait = 70
-        print(f"[CREW RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
-        if attempt == MAX_CREW_ATTEMPTS:
-            raise
-        time.sleep(wait)
+
+
+def _run_single_task_crew(agent, task, label):
+    single_crew = Crew(
+        agents=[agent],
+        tasks=[task],
+        process=Process.sequential,
+        verbose=True,
+        step_callback=_step_callback,
+    )
+    for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
+        try:
+            return single_crew.kickoff()
+        except Exception as e:
+            wait = 70
+            print(f"[{label} RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
+            if attempt == MAX_CREW_ATTEMPTS:
+                raise
+            time.sleep(wait)
+
+
+_run_single_task_crew(topic_scout, topic_task, "TOPIC SCOUT")
+print("[PACING] Waiting 20s before Researcher to keep token usage spread across TPM windows...")
+time.sleep(20)
+result = _run_single_task_crew(researcher, research_task, "RESEARCHER")
 
 print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
 print(result)
@@ -793,23 +810,7 @@ seo_task = Task(
     agent=seo_specialist,
     callback=_timing_callback("SEO Specialist"),
 )
-seo_crew = Crew(
-    agents=[seo_specialist],
-    tasks=[seo_task],
-    process=Process.sequential,
-    verbose=True,
-    step_callback=_step_callback,
-)
-for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
-    try:
-        seo_crew.kickoff()
-        break
-    except Exception as e:
-        wait = 70
-        print(f"[SEO CREW RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
-        if attempt == MAX_CREW_ATTEMPTS:
-            raise
-        time.sleep(wait)
+_run_single_task_crew(seo_specialist, seo_task, "SEO")
 seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
 
 # ---------------------------------------------------------------------
