@@ -24,6 +24,7 @@ import time
 import json
 import asyncio
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from PIL import Image, ImageDraw, ImageFont
@@ -592,17 +593,38 @@ STYLE_SUFFIX = (
     "detailed and clear, educational storybook art style, no text, no watermark, no logo"
 )
 ERA_LABELS = {"ancient_egypt": "Ancient Egypt", "ancient_rome": "Ancient Rome"}
-IMAGE_GEN_WORKERS = 5
+IMAGE_GEN_WORKERS = 3  # was 5 — 5 workers hammering Pollinations continuously across
+                        # a ~200-image batch is what triggered sustained 429s; fewer
+                        # workers keeps the aggregate request rate lower
 TTS_GEN_WORKERS = 5
 
+# A GLOBAL throttle shared across every worker thread. Per-clip retry/backoff
+# alone doesn't help against a rate limit — while one thread backs off, the
+# other 2-4 keep firing, so the aggregate rate to Pollinations' server never
+# actually drops. This forces a minimum spacing between successive request
+# STARTS regardless of which thread is asking, which is what actually caps
+# the aggregate rate.
+_pollinations_lock = threading.Lock()
+_pollinations_last_call = {"t": 0.0}
+POLLINATIONS_MIN_INTERVAL = 2.0  # seconds between request starts, across ALL workers combined
 
-def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
-    """Pollinations.ai has no formal SLA and can be rate-limited/flaky like
-    every other free service in this pipeline — same retry-with-backoff
-    pattern as everywhere else. A too-small response is treated as a
-    failure too, since that's usually an error page, not a real image.
+
+def _throttle_pollinations():
+    with _pollinations_lock:
+        wait = POLLINATIONS_MIN_INTERVAL - (time.time() - _pollinations_last_call["t"])
+        if wait > 0:
+            time.sleep(wait)
+        _pollinations_last_call["t"] = time.time()
+
+
+def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 5) -> str:
+    """Pollinations.ai has no formal SLA. A too-small response is treated as
+    a failure too, since that's usually an error page, not a real image.
     Generated at a higher resolution than the final video so the Ken Burns
-    zoom has detail to crop into instead of visibly pixelating."""
+    zoom has detail to crop into instead of visibly pixelating.
+
+    429s get a much longer, dedicated backoff than other errors — a rate
+    limit needs real time to clear, not a quick retry."""
     era_label = ERA_LABELS.get(era, era)
     context_part = f" Broader scene context: {context_gist}." if context_gist else ""
     prompt = f"{era_label} scene, illustrating exactly this moment: {phrase}.{context_part} {STYLE_SUFFIX}"
@@ -612,11 +634,19 @@ def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str 
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
+            _throttle_pollinations()
             resp = requests.get(
                 url,
                 params={"width": 1600, "height": 900, "nologo": "true"},
                 timeout=90,
             )
+            if resp.status_code == 429:
+                wait = 25 * attempt
+                print(f"[IMAGE RETRY] '{filename}' rate-limited (429), attempt {attempt}/{attempts}, "
+                      f"waiting {wait}s before retrying...")
+                last_error = "429 Too Many Requests"
+                time.sleep(wait)
+                continue
             resp.raise_for_status()
             if len(resp.content) < 2000:
                 raise RuntimeError(f"Response too small to be a real image ({len(resp.content)} bytes)")
@@ -645,7 +675,7 @@ def _assemble_script_from_outline(outline: dict) -> dict:
     clip_specs = []
     idx = 0
     for beat_gist, text in beat_texts:
-        for phrase in _split_into_phrases(text, target_words=8):
+        for phrase in _split_into_phrases(text, target_words=11):
             clip_specs.append((idx, phrase, beat_gist))
             idx += 1
 
