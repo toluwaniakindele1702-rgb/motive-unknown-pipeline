@@ -5,6 +5,8 @@ Actions. No interactive input anywhere.
 
 Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
   GROQ_API_KEY          - your Groq API key
+  CLOUDFLARE_ACCOUNT_ID - your Cloudflare account ID
+  CLOUDFLARE_API_TOKEN  - a Workers AI API token from your Cloudflare account
   YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
   YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
 
@@ -22,6 +24,7 @@ import os
 import re
 import time
 import json
+import base64
 import asyncio
 import subprocess
 import threading
@@ -250,25 +253,25 @@ def wikipedia_tool(query: str) -> str:
 
 # ---------------------------------------------------------------------
 # 3. Agents
-#
-# SCOPE NOTE: still scoped to Ancient Egypt / Ancient Rome for now — that
-# was originally because only those eras had character art, but since
-# images are generated per-clip now, that constraint could be lifted
-# whenever you want to broaden the topic pool. Left in place until you
-# decide to widen it.
 # ---------------------------------------------------------------------
 topic_scout = Agent(
     role="Topic Scout",
     goal=(
         "Find a single, highly clickable video topic that is a specific historical "
-        "story, event, or figure from Ancient Egypt or Ancient Rome."
+        "story, event, or figure from ANY era or civilization in history."
     ),
     backstory=(
         "You track trending searches, Reddit threads, and history content that performs "
         "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
         "particular event, figure, or moment — that has strong curiosity-gap potential, "
-        "ideally with a twist, mystery, or unresolved question. You only pick topics from "
-        "Ancient Egypt or Ancient Rome. You pick ONE topic and justify why it will perform well."
+        "ideally with a twist, mystery, or unresolved question. You're not limited to any "
+        "one era or civilization — Ancient Egypt, Rome, Greece, China, Japan, the Vikings, "
+        "medieval Europe, the Aztec and Inca empires, and beyond are all fair game. You "
+        "lean toward well-known, popular figures and civilizations (people already have a "
+        "reason to click) but always find a specific, surprising angle on them rather than "
+        "a generic biography — a lesser-known story, twist, or mystery about someone "
+        "famous draws more curiosity than an obscure figure nobody's heard of. You pick "
+        "ONE topic and justify why it will perform well."
     ),
     tools=[search_tool],
     llm=llm,
@@ -317,14 +320,16 @@ print("Agents ready.")
 # ---------------------------------------------------------------------
 topic_task = Task(
     description=(
-        "Search for a specific, under-covered historical story, event, or figure from "
-        "Ancient Egypt or Ancient Rome ONLY — no other eras, and no non-historical "
-        "curiosity topics. Favor stories with genuine mystery, conflict, or a twist — not "
-        "just a dry historical fact. Pick ONE specific angle. State the topic clearly, "
-        "name which era it's from (ancient_egypt or ancient_rome), and give 2-3 sentences "
-        "on why it will perform well."
+        "Search for a specific, under-covered historical story, event, or figure from ANY "
+        "era or civilization in history — do not limit yourself to one region or period. "
+        "Favor well-known, popular figures and civilizations for broader appeal, but find a "
+        "specific, surprising angle on them rather than a generic biography. Favor stories "
+        "with genuine mystery, conflict, or a twist — not just a dry historical fact. Pick "
+        "ONE specific angle. State the topic clearly, name the era/civilization it's from "
+        "as a short readable label (e.g. 'Ancient Egypt', 'Viking Age Scandinavia', "
+        "'Napoleonic France'), and give 2-3 sentences on why it will perform well."
     ),
-    expected_output="One clearly stated topic, its era, and a short justification.",
+    expected_output="One clearly stated topic, its era/civilization as a short readable label, and a short justification.",
     agent=topic_scout,
     callback=_timing_callback("Topic Scout"),
 )
@@ -424,12 +429,16 @@ def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
     )
 
 
-VALID_ERAS = ("ancient_egypt", "ancient_rome")
+def _is_valid_era(era) -> bool:
+    """Era is now a free-text label the model provides (e.g. 'Ancient Egypt',
+    'Viking Age Scandinavia') rather than a fixed enum — just needs to be a
+    real, non-trivial string, not empty or some obviously broken value."""
+    return isinstance(era, str) and len(era.strip()) >= 3
 
 
 def validate_script_dict(data: dict) -> dict:
     era = data.get("era")
-    if era not in VALID_ERAS:
+    if not _is_valid_era(era):
         raise RuntimeError(f"Script has invalid/missing era: {era!r}")
 
     segments = data.get("segments")
@@ -463,7 +472,8 @@ OUTLINE_TASK_DESCRIPTION = (
     "structure only, not the full narration text yet.\n\n"
     "Output ONLY a single JSON object with this exact shape, nothing else:\n"
     "{\n"
-    '  "era": "ancient_egypt" | "ancient_rome",\n'
+    '  "era": "<short readable label for the era/civilization, e.g. \\"Ancient Egypt\\", '
+    '\\"Viking Age Scandinavia\\", \\"Napoleonic France\\">",\n'
     '  "beats": [\n'
     '    {"type": "narration", "gist": "<1 sentence: what happens in this beat, described '
     'concretely and visually enough to base an illustration on>"}\n'
@@ -500,7 +510,7 @@ def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
     data = _extract_json_object(text, required_key="beats")
 
     era = data.get("era")
-    if era not in VALID_ERAS:
+    if not _is_valid_era(era):
         raise RuntimeError(f"Outline has invalid/missing era: {era!r}")
     beats = data.get("beats")
     if not isinstance(beats, list) or len(beats) < 10:
@@ -587,26 +597,44 @@ def _split_into_phrases(text: str, target_words: int = 8) -> list:
 # what's actually being said, instead of one image sitting on screen for a
 # whole 30-45 second beat. A fixed style suffix keeps the look consistent
 # across the whole video.
+#
+# Two providers now, round-robined per clip — this is the real fix for the
+# sustained 429s, not just better backoff on one provider. Pollinations'
+# actual documented anonymous rate cap is ~1 request per 15 seconds, which
+# is far too slow on its own for a 150-250 image batch; splitting the load
+# with Cloudflare Workers AI (a real account with real per-model rate
+# limits, not a shared anonymous IP bucket) means neither provider sees the
+# full volume. Weighted 2:1 toward Cloudflare since its real capacity is
+# much higher — Pollinations only needs to carry a third of the load to
+# stop being the bottleneck, and if either provider fails a given clip
+# outright, the other one is tried as a fallback rather than failing the
+# whole run over one image.
 # ---------------------------------------------------------------------
 STYLE_SUFFIX = (
     "flat vector cartoon illustration, bold clean outlines, warm vibrant colors, "
     "detailed and clear, educational storybook art style, no text, no watermark, no logo"
 )
-ERA_LABELS = {"ancient_egypt": "Ancient Egypt", "ancient_rome": "Ancient Rome"}
-IMAGE_GEN_WORKERS = 3  # was 5 — 5 workers hammering Pollinations continuously across
-                        # a ~200-image batch is what triggered sustained 429s; fewer
-                        # workers keeps the aggregate request rate lower
+IMAGE_GEN_WORKERS = 4  # can afford a bit more concurrency now that Cloudflare is
+                        # carrying most of the load and has real rate limits
 TTS_GEN_WORKERS = 5
 
-# A GLOBAL throttle shared across every worker thread. Per-clip retry/backoff
-# alone doesn't help against a rate limit — while one thread backs off, the
-# other 2-4 keep firing, so the aggregate rate to Pollinations' server never
-# actually drops. This forces a minimum spacing between successive request
-# STARTS regardless of which thread is asking, which is what actually caps
-# the aggregate rate.
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
+CLOUDFLARE_IMAGE_URL = (
+    f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}"
+    f"/ai/run/{CLOUDFLARE_IMAGE_MODEL}"
+)
+
+# Global throttle shared across every worker thread for Pollinations only —
+# per-clip retry/backoff alone doesn't help against a rate limit, since
+# while one thread backs off the others keep firing, so the aggregate rate
+# never actually drops. This forces a minimum spacing between successive
+# request STARTS regardless of which thread is asking. Set to Pollinations'
+# actual documented anonymous limit (~1 req/15s), not a guess.
 _pollinations_lock = threading.Lock()
 _pollinations_last_call = {"t": 0.0}
-POLLINATIONS_MIN_INTERVAL = 2.0  # seconds between request starts, across ALL workers combined
+POLLINATIONS_MIN_INTERVAL = 15.0
 
 
 def _throttle_pollinations():
@@ -617,17 +645,15 @@ def _throttle_pollinations():
         _pollinations_last_call["t"] = time.time()
 
 
-def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 5) -> str:
-    """Pollinations.ai has no formal SLA. A too-small response is treated as
-    a failure too, since that's usually an error page, not a real image.
-    Generated at a higher resolution than the final video so the Ken Burns
-    zoom has detail to crop into instead of visibly pixelating.
-
-    429s get a much longer, dedicated backoff than other errors — a rate
-    limit needs real time to clear, not a quick retry."""
-    era_label = ERA_LABELS.get(era, era)
+def _build_image_prompt(phrase: str, era: str, context_gist: str = "") -> str:
     context_part = f" Broader scene context: {context_gist}." if context_gist else ""
-    prompt = f"{era_label} scene, illustrating exactly this moment: {phrase}.{context_part} {STYLE_SUFFIX}"
+    return f"{era} scene, illustrating exactly this moment: {phrase}.{context_part} {STYLE_SUFFIX}"
+
+
+def _generate_image_pollinations(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
+    """Pollinations.ai has no formal SLA. A too-small response is treated as
+    a failure too, since that's usually an error page, not a real image."""
+    prompt = _build_image_prompt(phrase, era, context_gist)
     encoded_prompt = requests.utils.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
@@ -642,8 +668,8 @@ def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str 
             )
             if resp.status_code == 429:
                 wait = 25 * attempt
-                print(f"[IMAGE RETRY] '{filename}' rate-limited (429), attempt {attempt}/{attempts}, "
-                      f"waiting {wait}s before retrying...")
+                print(f"[IMAGE RETRY-Pollinations] '{filename}' rate-limited (429), attempt "
+                      f"{attempt}/{attempts}, waiting {wait}s before retrying...")
                 last_error = "429 Too Many Requests"
                 time.sleep(wait)
                 continue
@@ -656,9 +682,69 @@ def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str 
         except Exception as e:
             last_error = e
             wait = 8 * attempt
-            print(f"[IMAGE RETRY] '{filename}' failed (attempt {attempt}/{attempts}): {e}\nRetrying in {wait}s...")
+            print(f"[IMAGE RETRY-Pollinations] '{filename}' failed (attempt {attempt}/{attempts}): "
+                  f"{e}\nRetrying in {wait}s...")
             time.sleep(wait)
-    raise RuntimeError(f"Image generation failed for '{filename}' after {attempts} attempts: {last_error}")
+    raise RuntimeError(f"Pollinations image generation failed for '{filename}' after {attempts} attempts: {last_error}")
+
+
+def _generate_image_cloudflare(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
+    """Cloudflare Workers AI (FLUX-1-schnell) — a real account with real
+    per-model rate limits, not a shared anonymous IP bucket, so this can
+    carry the bulk of the image load. Returns base64-encoded image data
+    wrapped in Cloudflare's standard {"result": {...}, "success": bool}
+    API envelope."""
+    prompt = _build_image_prompt(phrase, era, context_gist)[:2000]  # model caps prompts at 2048 chars
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = requests.post(
+                CLOUDFLARE_IMAGE_URL,
+                headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"},
+                json={"prompt": prompt, "steps": 6},
+                timeout=60,
+            )
+            if resp.status_code == 429:
+                wait = 20 * attempt
+                print(f"[IMAGE RETRY-Cloudflare] '{filename}' rate-limited (429), attempt "
+                      f"{attempt}/{attempts}, waiting {wait}s before retrying...")
+                last_error = "429 Too Many Requests"
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("success") or "image" not in data.get("result", {}):
+                raise RuntimeError(f"Unexpected Cloudflare response shape: {str(data)[:300]}")
+            image_bytes = base64.b64decode(data["result"]["image"])
+            if len(image_bytes) < 2000:
+                raise RuntimeError(f"Decoded image too small ({len(image_bytes)} bytes)")
+            with open(filename, "wb") as f:
+                f.write(image_bytes)
+            return filename
+        except Exception as e:
+            last_error = e
+            wait = 8 * attempt
+            print(f"[IMAGE RETRY-Cloudflare] '{filename}' failed (attempt {attempt}/{attempts}): "
+                  f"{e}\nRetrying in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError(f"Cloudflare image generation failed for '{filename}' after {attempts} attempts: {last_error}")
+
+
+def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", index: int = 0) -> str:
+    """Round-robins between providers per clip index (2 Cloudflare : 1
+    Pollinations), and falls back to the other provider if the chosen one
+    fails outright for a given clip, rather than failing the whole run."""
+    use_pollinations_first = (index % 3 == 0)
+    primary, fallback = (
+        (_generate_image_pollinations, _generate_image_cloudflare)
+        if use_pollinations_first else
+        (_generate_image_cloudflare, _generate_image_pollinations)
+    )
+    try:
+        return primary(phrase, era, filename, context_gist=context_gist)
+    except Exception as e:
+        print(f"[IMAGE FALLBACK] Primary provider failed for '{filename}' ({e}); trying the other provider...")
+        return fallback(phrase, era, filename, context_gist=context_gist)
 
 
 def _assemble_script_from_outline(outline: dict) -> dict:
@@ -681,14 +767,12 @@ def _assemble_script_from_outline(outline: dict) -> dict:
 
     print(f"[SCRIPT] Split into {len(clip_specs)} short clips (~2-3s each) for image generation.")
 
-    # Step 3: generate all images in parallel — Pollinations calls are
-    # independent per clip, and with 150-250+ of them now, sequential would
-    # be far too slow.
+    # Step 3: generate all images in parallel, round-robined across providers.
     segments = [None] * len(clip_specs)
 
     def _gen_one(spec):
         i, phrase, beat_gist = spec
-        image_file = generate_beat_image(phrase, era, f"beat_images/clip_{i:04d}.jpg", context_gist=beat_gist)
+        image_file = generate_beat_image(phrase, era, f"beat_images/clip_{i:04d}.jpg", context_gist=beat_gist, index=i)
         return i, {"type": "narration", "text": phrase, "image_file": image_file}
 
     with ThreadPoolExecutor(max_workers=IMAGE_GEN_WORKERS) as executor:
@@ -1058,7 +1142,7 @@ thumb_path = generate_thumbnail(parsed_script, video_title)
 
 upload_video(
     video_path, thumb_path, video_title, seo_output[:4900],
-    tags=["history", parsed_script["era"].replace("_", " ")],
+    tags=["history", parsed_script["era"]],
 )
 
 print("\nDone.")
