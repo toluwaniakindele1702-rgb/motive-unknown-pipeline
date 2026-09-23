@@ -1,1148 +1,1344 @@
 """
-Motive Unknown — automated video pipeline (Ken Burns / cartoon-illustration
-format, fast-cut with burned-in subtitles). Runs unattended on GitHub
-Actions. No interactive input anywhere.
+Motive Unknown v2 — curiosity-first automated history video factory.
 
-Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
-  GROQ_API_KEY          - your Groq API key
-  CLOUDFLARE_ACCOUNT_ID - your Cloudflare account ID
-  CLOUDFLARE_API_TOKEN  - a Workers AI API token from your Cloudflare account
-  YOUTUBE_TOKEN_JSON    - the full contents of your youtube_token.json file
-  YOUTUBE_CLIENT_SECRET_JSON - the full contents of your client_secret_....json file
+Design goals
+------------
+- Daily, unattended GitHub Actions execution.
+- Curiosity-driven historical questions instead of generic topics.
+- GPT-OSS 120B for research/storytelling; GPT-OSS 20B for lightweight
+  structuring/SEO tasks.
+- Local/open-weight Kokoro TTS (no paid voice API).
+- No per-clip image API calls. A deterministic stickman/storybook renderer
+  creates illustrated scenes locally, eliminating image-provider 429 loops.
+- No Ken Burns zoom and no burned-in subtitles.
+- Dedicated thumbnail generation separate from video scenes.
+- Idempotent stage files so a rerun can skip already-completed stages.
+- Safe YouTube default: private uploads until the owner changes the setting.
 
-Optional: drop a royalty-free music file at assets/music/background.mp3
-(e.g. from YouTube Audio Library or Pixabay Music) to enable background
-music — the pipeline skips music gracefully if that file isn't present.
+Required GitHub Secrets
+-----------------------
+GROQ_API_KEY
+YOUTUBE_TOKEN_JSON
+YOUTUBE_CLIENT_SECRET_JSON
 
-No local character assets required — every clip's image is generated on
-the fly (Pollinations.ai, free, no key) from a short phrase of narration,
-so images change roughly every 2-3 seconds in step with the voiceover, and
-that same phrase is burned in as a subtitle.
+Optional GitHub Variables / Secrets
+-----------------------------------
+YOUTUBE_PRIVACY_STATUS     default: private
+KOKORO_VOICE               default: am_onyx
+KOKORO_SPEED               default: 0.96
+CHANNEL_NAME               optional, used in prompts/description
+
+Optional repo asset
+-------------------
+assets/music/background.mp3  royalty-free / licensed music only
+
+The workflow file supplied with this package runs daily and also supports a
+manual "voice_test" mode before committing to a full production run.
 """
 
-import os
-import re
-import time
-import json
-import base64
-import asyncio
-import subprocess
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from __future__ import annotations
 
+import argparse
+import base64
+import json
+import os
+import random
+import re
+import subprocess
+import sys
+import textwrap
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+import numpy as np
+import requests
+import soundfile as sf
+from groq import Groq
 from PIL import Image, ImageDraw, ImageFont
 
-# ---------------------------------------------------------------------
-# 0. Load secrets from environment (GitHub injects these at runtime)
-# ---------------------------------------------------------------------
-GROQ_KEY = os.environ["GROQ_API_KEY"]
-
-with open("youtube_token.json", "w") as f:
-    f.write(os.environ["YOUTUBE_TOKEN_JSON"])
-with open("client_secret.json", "w") as f:
-    f.write(os.environ["YOUTUBE_CLIENT_SECRET_JSON"])
-
-print("Secrets loaded.")
-
-# ---------------------------------------------------------------------
-# 1. LLM connection (Groq)
-# ---------------------------------------------------------------------
-import requests
-from crewai import LLM, Agent, Task, Crew, Process
-from crewai.tools import tool
-
-# WORKAROUND for a known CrewAI bug (crewAIInc/crewAI#5886): CrewAI's own
-# code injects an Anthropic-style 'cache_breakpoint' property into every
-# system message, but the function that's supposed to strip it back out for
-# non-Anthropic providers never actually gets called. Groq's API has no
-# concept of that field and rejects the whole request outright with
-# "property 'cache_breakpoint' is unsupported" — this has nothing to do
-# with which Groq model is selected, it happens for any Groq/OpenAI-
-# compatible provider. No-op'ing the injection function fixes it.
-import crewai.llms.cache as _crewai_cache
-_crewai_cache.mark_cache_breakpoint = lambda msg: msg
-
-llm = LLM(
-    model="groq/openai/gpt-oss-120b",
-    api_key=GROQ_KEY,
-    timeout=300,
-    max_retries=5,
-    max_tokens=2048,  # Groq's free tier caps openai/gpt-oss-120b at 8000
-                       # TOKENS PER MINUTE total. Topic Scout/Researcher/SEO
-                       # only need short outputs so this still leaves headroom.
-)
-
-
-def call_with_retry(llm_obj, prompt, attempts=5, base_delay=10):
-    last_error = None
-    for i in range(attempts):
-        try:
-            return llm_obj.call(prompt)
-        except Exception as e:
-            last_error = e
-            wait = base_delay * (i + 1)
-            print(f"LLM call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"LLM call failed after {attempts} attempts: {last_error}")
-
-
-GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL_ID = "openai/gpt-oss-120b"
-
-
-def _call_groq_direct(messages, max_tokens=8192, temperature=0.4, attempts=6, base_delay=15):
-    """Calls Groq's chat/completions endpoint directly with raw `requests`,
-    bypassing CrewAI/litellm entirely — used for the Scriptwriter's outline
-    and per-beat generation calls: full control over exactly what's sent,
-    independent of CrewAI's system-prompt templating. openai/gpt-oss-120b IS
-    a reasoning model, but Groq puts its reasoning trace in a separate
-    "reasoning" field on the response rather than mixing it into "content" —
-    include_reasoning: false below tells Groq to drop that field entirely.
-
-    On a 429 (rate limit — Groq's free tier is only 8000 tokens/minute for
-    this model), this parses the actual suggested wait time out of Groq's
-    error response ("Please try again in 12.915s") rather than guessing."""
-    last_error = None
-    for i in range(attempts):
-        try:
-            resp = requests.post(
-                GROQ_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": GROQ_MODEL_ID,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "include_reasoning": False,
-                },
-                timeout=120,
-            )
-            if resp.status_code == 429:
-                wait = base_delay * (i + 1)
-                retry_after = resp.headers.get("retry-after")
-                if retry_after:
-                    try:
-                        wait = max(wait, float(retry_after) + 2)
-                    except ValueError:
-                        pass
-                else:
-                    match = re.search(r"try again in ([\d.]+)s", resp.text)
-                    if match:
-                        wait = max(wait, float(match.group(1)) + 2)
-                print(f"Groq rate limit hit (attempt {i+1}/{attempts}), waiting {wait:.1f}s: {resp.text[:200]}")
-                last_error = f"429 rate limited: {resp.text[:300]}"
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            last_error = e
-            wait = base_delay * (i + 1)
-            print(f"Groq direct call failed (attempt {i+1}/{attempts}): {e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"Groq direct call failed after {attempts} attempts: {last_error}")
-
-
-test = call_with_retry(llm, "Reply with exactly one word: OK")
-print("LLM connection test:", test)
-
-# ---------------------------------------------------------------------
-# 1b. Timing instrumentation
-# ---------------------------------------------------------------------
-PIPELINE_START = time.time()
-_last_checkpoint = {"t": PIPELINE_START}
-
-
-def _timing_callback(task_label):
-    def _cb(output):
-        now = time.time()
-        since_last = now - _last_checkpoint["t"]
-        since_start = now - PIPELINE_START
-        print(f"[TIMING] '{task_label}' finished — took {since_last:.1f}s "
-              f"(total elapsed {since_start:.1f}s)")
-        _last_checkpoint["t"] = now
-    return _cb
-
-
-def _step_callback(step):
-    since_start = time.time() - PIPELINE_START
-    print(f"[STEP] t+{since_start:.1f}s — {type(step).__name__}")
-
-
-# ---------------------------------------------------------------------
-# 2. Search tools
-# ---------------------------------------------------------------------
-SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://localhost:8888")
-WIKI_USER_AGENT = "MotiveUnknownBot/1.0 (automated video pipeline; contact: replace-with-your-email@example.com)"
-
-
-@tool("Web Search")
-def search_tool(query: str) -> str:
-    """Searches the web via a self-hosted SearXNG instance and returns top results with titles, snippets, and links. Best for trending topics, angles, and general web context."""
-    last_error = None
-    for attempt in range(3):
-        try:
-            resp = requests.get(
-                f"{SEARXNG_URL}/search",
-                params={"q": query, "format": "json"},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            results = resp.json().get("results", [])[:3]
-            if not results:
-                return "No results found for this query. Try a different angle."
-            formatted = []
-            for r in results:
-                formatted.append(f"{r.get('title','')}\n{r.get('content','')}\n{r.get('url','')}")
-            return "\n\n".join(formatted)
-        except Exception as e:
-            last_error = e
-            time.sleep(2 * (attempt + 1))
-    return f"Search failed after 3 attempts ({last_error}). Proceed using general knowledge instead."
-
-
-@tool("Wikipedia Lookup")
-def wikipedia_tool(query: str) -> str:
-    """Looks up a topic, figure, or event on Wikipedia and returns summaries of the top matching pages. Best for verifying specific historical facts, figures, and events — use this before falling back to general web search."""
-    last_error = None
-    for attempt in range(3):
-        try:
-            search_resp = requests.get(
-                "https://en.wikipedia.org/w/api.php",
-                params={
-                    "action": "query",
-                    "list": "search",
-                    "srsearch": query,
-                    "format": "json",
-                    "srlimit": 2,
-                },
-                headers={"User-Agent": WIKI_USER_AGENT},
-                timeout=15,
-            )
-            search_resp.raise_for_status()
-            hits = search_resp.json().get("query", {}).get("search", [])
-            if not hits:
-                return "No Wikipedia results found for this query. Try a different angle or use Web Search instead."
-
-            formatted = []
-            for hit in hits:
-                title = hit["title"]
-                summary_resp = requests.get(
-                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(title)}",
-                    headers={"User-Agent": WIKI_USER_AGENT},
-                    timeout=15,
-                )
-                if summary_resp.status_code != 200:
-                    continue
-                summary = summary_resp.json()
-                extract = summary.get("extract", "")[:800]
-                url = summary.get("content_urls", {}).get("desktop", {}).get("page", "")
-                formatted.append(f"{title}\n{extract}\n{url}")
-
-            if not formatted:
-                return "Found matching titles but couldn't fetch summaries. Try Web Search instead."
-            return "\n\n".join(formatted)
-        except Exception as e:
-            last_error = e
-            time.sleep(2 * (attempt + 1))
-    return f"Wikipedia lookup failed after 3 attempts ({last_error}). Proceed using general knowledge instead."
-
-
-# ---------------------------------------------------------------------
-# 3. Agents
-# ---------------------------------------------------------------------
-topic_scout = Agent(
-    role="Topic Scout",
-    goal=(
-        "Find a single, highly clickable video topic that is a specific historical "
-        "story, event, or figure from ANY era or civilization in history."
-    ),
-    backstory=(
-        "You track trending searches, Reddit threads, and history content that performs "
-        "well on YouTube. Your job is to spot a specific angle (not a broad topic) — a "
-        "particular event, figure, or moment — that has strong curiosity-gap potential, "
-        "ideally with a twist, mystery, or unresolved question. You're not limited to any "
-        "one era or civilization — Ancient Egypt, Rome, Greece, China, Japan, the Vikings, "
-        "medieval Europe, the Aztec and Inca empires, and beyond are all fair game. You "
-        "lean toward well-known, popular figures and civilizations (people already have a "
-        "reason to click) but always find a specific, surprising angle on them rather than "
-        "a generic biography — a lesser-known story, twist, or mystery about someone "
-        "famous draws more curiosity than an obscure figure nobody's heard of. You pick "
-        "ONE topic and justify why it will perform well."
-    ),
-    tools=[search_tool],
-    llm=llm,
-    max_iter=4,
-    verbose=True,
-)
-
-researcher = Agent(
-    role="Video Researcher",
-    goal="Find the most surprising, well-sourced facts or story beats on the chosen historical topic",
-    backstory=(
-        "You're an obsessive researcher for a history storytelling channel. You dig up "
-        "real, verifiable, surprising details and put them in the order they'd be told "
-        "as a story. You avoid generic facts everyone already knows. You always check "
-        "Wikipedia Lookup first for the topic and any figures/events it mentions — it's "
-        "your primary, most reliable source. Only reach for Web Search when Wikipedia "
-        "doesn't have enough detail on a specific angle."
-    ),
-    tools=[wikipedia_tool, search_tool],
-    llm=llm,
-    max_iter=6,
-    verbose=True,
-)
-
-# NOTE: there is deliberately no CrewAI Agent for the Scriptwriter — the
-# JSON-only output requirement was too strict for CrewAI's system-prompt
-# templating to reliably satisfy, so script generation is done via direct
-# API calls further down instead.
-
-seo_specialist = Agent(
-    role="YouTube SEO Specialist",
-    goal="Generate a high-CTR title, description, and tag list for the video",
-    backstory=(
-        "You've studied thousands of high-performing history-channel uploads and know "
-        "how to write curiosity-driven titles and keyword-rich descriptions."
-    ),
-    llm=llm,
-    max_iter=5,
-    verbose=True,
-)
-
-print("Agents ready.")
-
-# ---------------------------------------------------------------------
-# 4. Tasks — Topic Scout + Researcher
-# ---------------------------------------------------------------------
-topic_task = Task(
-    description=(
-        "Search for a specific, under-covered historical story, event, or figure from ANY "
-        "era or civilization in history — do not limit yourself to one region or period. "
-        "Favor well-known, popular figures and civilizations for broader appeal, but find a "
-        "specific, surprising angle on them rather than a generic biography. Favor stories "
-        "with genuine mystery, conflict, or a twist — not just a dry historical fact. Pick "
-        "ONE specific angle. State the topic clearly, name the era/civilization it's from "
-        "as a short readable label (e.g. 'Ancient Egypt', 'Viking Age Scandinavia', "
-        "'Napoleonic France'), and give 2-3 sentences on why it will perform well."
-    ),
-    expected_output="One clearly stated topic, its era/civilization as a short readable label, and a short justification.",
-    agent=topic_scout,
-    callback=_timing_callback("Topic Scout"),
-)
-
-research_task = Task(
-    description=(
-        "Using the topic chosen by the Topic Scout, research 8-12 specific, surprising, "
-        "and verifiable facts or story beats, each with a one-line source or context. "
-        "Prioritize facts with real dramatic weight — betrayals, unsolved mysteries, "
-        "shocking reversals, vivid physical detail — over dry background information. "
-        "Put them roughly in the order they'd be told as a story."
-    ),
-    expected_output="A bullet list of 8-12 facts/story beats in story order, each with a short source note.",
-    agent=researcher,
-    context=[topic_task],
-    callback=_timing_callback("Researcher"),
-)
-
-print("Tasks ready.")
-
-# ---------------------------------------------------------------------
-# 5. Run Topic Scout and Researcher as TWO SEPARATE crew runs, not one —
-# spreads their token usage across separate 60s TPM windows on Groq's free
-# tier instead of stacking it in one.
-# ---------------------------------------------------------------------
-MAX_CREW_ATTEMPTS = 3
-
-
-def _run_single_task_crew(agent, task, label):
-    single_crew = Crew(
-        agents=[agent],
-        tasks=[task],
-        process=Process.sequential,
-        verbose=True,
-        step_callback=_step_callback,
-    )
-    for attempt in range(1, MAX_CREW_ATTEMPTS + 1):
-        try:
-            return single_crew.kickoff()
-        except Exception as e:
-            wait = 70
-            print(f"[{label} RETRY] Attempt {attempt}/{MAX_CREW_ATTEMPTS} failed: {e}\nWaiting {wait}s...")
-            if attempt == MAX_CREW_ATTEMPTS:
-                raise
-            time.sleep(wait)
-
-
-_run_single_task_crew(topic_scout, topic_task, "TOPIC SCOUT")
-print("[PACING] Waiting 20s before Researcher to keep token usage spread across TPM windows...")
-time.sleep(20)
-result = _run_single_task_crew(researcher, research_task, "RESEARCHER")
-
-print("\n\n===== TOPIC + RESEARCH OUTPUT =====\n")
-print(result)
-
-# ---------------------------------------------------------------------
-# 6. Parse + validate the Scriptwriter's JSON output
-# ---------------------------------------------------------------------
-def _extract_json_object(raw_text: str, required_key: str = "segments") -> dict:
-    """Some models write out a 'thinking process' before the real answer no
-    matter how firmly you tell them not to — and that reasoning text can
-    itself contain brace-like snippets that break a naive first-brace/
-    last-brace slice. This scans for every *balanced* {...} block in the
-    text and tries them from LAST to FIRST (the real answer comes after the
-    reasoning, not before it), returning the first one that both parses as
-    JSON and has the key the CALLER actually needs — 'segments' for the
-    final script, 'beats' for the outline step."""
-    candidates = []
-    stack = []
-    start = None
-    for i, ch in enumerate(raw_text):
-        if ch == "{":
-            if not stack:
-                start = i
-            stack.append(ch)
-        elif ch == "}":
-            if stack:
-                stack.pop()
-                if not stack and start is not None:
-                    candidates.append(raw_text[start:i + 1])
-                    start = None
-
-    last_error = None
-    for cand in reversed(candidates):
-        try:
-            data = json.loads(cand)
-            if isinstance(data, dict) and required_key in data:
-                return data
-        except json.JSONDecodeError as e:
-            last_error = e
-            continue
-
-    raise RuntimeError(
-        f"No valid JSON object with a '{required_key}' key found anywhere in the output "
-        f"({len(candidates)} brace-balanced candidate(s) tried, last parse error: {last_error}). "
-        f"Raw output:\n{raw_text[:1500]}"
-    )
-
-
-def _is_valid_era(era) -> bool:
-    """Era is now a free-text label the model provides (e.g. 'Ancient Egypt',
-    'Viking Age Scandinavia') rather than a fixed enum — just needs to be a
-    real, non-trivial string, not empty or some obviously broken value."""
-    return isinstance(era, str) and len(era.strip()) >= 3
-
-
-def validate_script_dict(data: dict) -> dict:
-    era = data.get("era")
-    if not _is_valid_era(era):
-        raise RuntimeError(f"Script has invalid/missing era: {era!r}")
-
-    segments = data.get("segments")
-    if not isinstance(segments, list) or len(segments) < 4:
-        raise RuntimeError("Script has too few segments (or 'segments' missing/not a list).")
-
-    total_words = 0
-    for i, seg in enumerate(segments):
-        if seg.get("type") != "narration":
-            raise RuntimeError(f"Segment {i} has invalid type: {seg.get('type')!r} (only 'narration' is used now).")
-        total_words += len(seg.get("text", "").split())
-        if not seg.get("image_file"):
-            raise RuntimeError(f"Segment {i} is missing its generated image_file.")
-
-    if total_words < 1000 or total_words > 3200:
-        raise RuntimeError(
-            f"Script word count ({total_words}) is way outside the expected 1600-2400 "
-            "word range — likely a truncated or malformed generation."
-        )
-
-    print(f"Script validated: era={era}, {len(segments)} clips, ~{total_words} words.")
-    return data
-
-
-def flatten_script_to_text(parsed_script: dict) -> str:
-    return "\n".join(seg["text"] for seg in parsed_script["segments"])
-
-
-OUTLINE_TASK_DESCRIPTION = (
-    "Using the research, plan a 10-15 minute narrated history video as a BEAT OUTLINE — "
-    "structure only, not the full narration text yet.\n\n"
-    "Output ONLY a single JSON object with this exact shape, nothing else:\n"
-    "{\n"
-    '  "era": "<short readable label for the era/civilization, e.g. \\"Ancient Egypt\\", '
-    '\\"Viking Age Scandinavia\\", \\"Napoleonic France\\">",\n'
-    '  "beats": [\n'
-    '    {"type": "narration", "gist": "<1 sentence: what happens in this beat, described '
-    'concretely and visually enough to base an illustration on>"}\n'
-    "  ]\n"
-    "}\n\n"
-    "Rules:\n"
-    "- Produce 12-16 beats total, covering the full story arc from the research, in order. "
-    "Every beat is narration — there's just a narrator over illustrated scenes.\n"
-    "- Frame this like a suspenseful mystery/true-crime documentary, not a dry timeline of "
-    "facts. Build curiosity and tension — favor beats that reveal something surprising, "
-    "unsettling, or that raise a new question, especially in the middle and toward the end.\n"
-    "- Each 'gist' must describe a concrete, visualizable moment (a place, an action, "
-    "people doing something specific) — it's used to generate an illustration, so avoid "
-    "vague or abstract gists like 'tensions rise'.\n"
-    "- The first beat should be a strong hook.\n"
-    "- Output must be ONLY the JSON object — first character '{', last character '}'."
-)
-
-
-def _generate_outline_direct(research_text: str, extra_note: str = "") -> dict:
-    """Step 1 of 2: ask for a compact structural outline, not the full script.
-    Chunking (outline, then one small generation per beat) is more reliable
-    for hitting an aggregate word-count target than one big single-shot
-    generation, regardless of model."""
-    description = OUTLINE_TASK_DESCRIPTION
-    if extra_note:
-        description += f"\n\nIMPORTANT — this is a retry. Previous attempt was rejected: {extra_note}"
-    messages = [
-        {"role": "system", "content": "You are a precise JSON generator. Output ONLY the requested JSON object, nothing else."},
-        {"role": "user", "content": f"Research to base the outline on:\n{research_text}\n\n{description}"},
-    ]
-    raw = _call_groq_direct(messages, max_tokens=2048, temperature=0.3)
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
-    data = _extract_json_object(text, required_key="beats")
-
-    era = data.get("era")
-    if not _is_valid_era(era):
-        raise RuntimeError(f"Outline has invalid/missing era: {era!r}")
-    beats = data.get("beats")
-    if not isinstance(beats, list) or len(beats) < 10:
-        raise RuntimeError(f"Outline has too few beats ({len(beats) if isinstance(beats, list) else 0}, need >=10).")
-    for i, beat in enumerate(beats):
-        if beat.get("type") != "narration":
-            raise RuntimeError(f"Outline beat {i} has invalid type: {beat.get('type')!r}")
-        if not beat.get("gist"):
-            raise RuntimeError(f"Outline beat {i} is missing a 'gist'.")
-
-    return data
-
-
-NARRATION_MIN_WORDS, NARRATION_MAX_WORDS = 110, 170
-
-
-def _generate_narration_text(gist: str, era: str, attempts: int = 3) -> str:
-    text = ""
-    for attempt in range(1, attempts + 1):
-        messages = [
-            {"role": "system", "content": (
-                "You write narration for a suspenseful history documentary — think true-crime "
-                "or mystery-show narrator, not a textbook. Output ONLY the narration text, "
-                "nothing else."
-            )},
-            {"role": "user", "content": (
-                f"Write {NARRATION_MIN_WORDS}-{NARRATION_MAX_WORDS} words of narration for a "
-                f"cartoon-illustrated history video (era: {era}). This is ONE beat of a larger "
-                "script — write ONLY the narration text itself, nothing else: no JSON, no "
-                "labels, no preamble, no markdown.\n\n"
-                f"What happens in this beat: {gist}\n\n"
-                "Write in a punchy, suspenseful documentary-narrator voice. Use vivid, concrete "
-                "sensory detail. Keep sentences SHORT — this is read aloud by AI voiceover, and "
-                "short sentences also make for punchier on-screen captions. Where it fits "
-                "naturally, use a rhetorical question or a line that raises tension. Avoid dry, "
-                "encyclopedic phrasing — make the listener want to know what happens next."
-            )},
-        ]
-        text = _call_groq_direct(messages, max_tokens=800, temperature=0.75).strip()
-        text = re.sub(r"^```\s*|\s*```$", "", text)
-        if len(text.split()) >= NARRATION_MIN_WORDS * 0.7:
-            return text
-        print(f"[BEAT RETRY] narration beat too short ({len(text.split())} words), "
-              f"retrying ({attempt}/{attempts})...")
-    return text
-
-
-def _split_into_phrases(text: str, target_words: int = 8) -> list:
-    """Splits narration into short phrases (~2-3 seconds of speech each at
-    normal speaking pace) — each phrase gets its own image AND is the
-    subtitle burned onto that image, so caption timing is automatically
-    exact instead of needing separate alignment."""
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    phrases = []
-    for sentence in sentences:
-        words = sentence.split()
-        if not words:
-            continue
-        if len(words) <= target_words + 4:
-            phrases.append(sentence.strip())
-            continue
-        # Long sentence — split on comma boundaries first, then just chunk by
-        # word count if there weren't enough commas to work with.
-        parts = re.split(r"(?<=,)\s+", sentence)
-        buffer = []
-        for part in parts:
-            buffer.extend(part.split())
-            if len(buffer) >= target_words:
-                phrases.append(" ".join(buffer))
-                buffer = []
-        if buffer:
-            if phrases and len(buffer) < 3:
-                phrases[-1] = phrases[-1] + " " + " ".join(buffer)
-            else:
-                phrases.append(" ".join(buffer))
-    return [p for p in phrases if p]
-
-
-# ---------------------------------------------------------------------
-# 6b. Image generation — Pollinations.ai (free, no API key)
-#
-# One generated cartoon-illustration image per short phrase (not per whole
-# beat) — this is what makes images change every 2-3 seconds in step with
-# what's actually being said, instead of one image sitting on screen for a
-# whole 30-45 second beat. A fixed style suffix keeps the look consistent
-# across the whole video.
-#
-# Two providers now, round-robined per clip — this is the real fix for the
-# sustained 429s, not just better backoff on one provider. Pollinations'
-# actual documented anonymous rate cap is ~1 request per 15 seconds, which
-# is far too slow on its own for a 150-250 image batch; splitting the load
-# with Cloudflare Workers AI (a real account with real per-model rate
-# limits, not a shared anonymous IP bucket) means neither provider sees the
-# full volume. Weighted 2:1 toward Cloudflare since its real capacity is
-# much higher — Pollinations only needs to carry a third of the load to
-# stop being the bottleneck, and if either provider fails a given clip
-# outright, the other one is tried as a fallback rather than failing the
-# whole run over one image.
-# ---------------------------------------------------------------------
-STYLE_SUFFIX = (
-    "flat vector cartoon illustration, bold clean outlines, warm vibrant colors, "
-    "detailed and clear, educational storybook art style, no text, no watermark, no logo"
-)
-IMAGE_GEN_WORKERS = 4  # can afford a bit more concurrency now that Cloudflare is
-                        # carrying most of the load and has real rate limits
-TTS_GEN_WORKERS = 5
-
-CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
-CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
-CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
-CLOUDFLARE_IMAGE_URL = (
-    f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}"
-    f"/ai/run/{CLOUDFLARE_IMAGE_MODEL}"
-)
-
-# Global throttle shared across every worker thread for Pollinations only —
-# per-clip retry/backoff alone doesn't help against a rate limit, since
-# while one thread backs off the others keep firing, so the aggregate rate
-# never actually drops. This forces a minimum spacing between successive
-# request STARTS regardless of which thread is asking. Set to Pollinations'
-# actual documented anonymous limit (~1 req/15s), not a guess.
-_pollinations_lock = threading.Lock()
-_pollinations_last_call = {"t": 0.0}
-POLLINATIONS_MIN_INTERVAL = 15.0
-
-
-def _throttle_pollinations():
-    with _pollinations_lock:
-        wait = POLLINATIONS_MIN_INTERVAL - (time.time() - _pollinations_last_call["t"])
-        if wait > 0:
-            time.sleep(wait)
-        _pollinations_last_call["t"] = time.time()
-
-
-def _build_image_prompt(phrase: str, era: str, context_gist: str = "") -> str:
-    context_part = f" Broader scene context: {context_gist}." if context_gist else ""
-    return f"{era} scene, illustrating exactly this moment: {phrase}.{context_part} {STYLE_SUFFIX}"
-
-
-def _generate_image_pollinations(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
-    """Pollinations.ai has no formal SLA. A too-small response is treated as
-    a failure too, since that's usually an error page, not a real image."""
-    prompt = _build_image_prompt(phrase, era, context_gist)
-    encoded_prompt = requests.utils.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            _throttle_pollinations()
-            resp = requests.get(
-                url,
-                params={"width": 1600, "height": 900, "nologo": "true"},
-                timeout=90,
-            )
-            if resp.status_code == 429:
-                wait = 25 * attempt
-                print(f"[IMAGE RETRY-Pollinations] '{filename}' rate-limited (429), attempt "
-                      f"{attempt}/{attempts}, waiting {wait}s before retrying...")
-                last_error = "429 Too Many Requests"
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            if len(resp.content) < 2000:
-                raise RuntimeError(f"Response too small to be a real image ({len(resp.content)} bytes)")
-            with open(filename, "wb") as f:
-                f.write(resp.content)
-            return filename
-        except Exception as e:
-            last_error = e
-            wait = 8 * attempt
-            print(f"[IMAGE RETRY-Pollinations] '{filename}' failed (attempt {attempt}/{attempts}): "
-                  f"{e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"Pollinations image generation failed for '{filename}' after {attempts} attempts: {last_error}")
-
-
-def _generate_image_cloudflare(phrase: str, era: str, filename: str, context_gist: str = "", attempts: int = 4) -> str:
-    """Cloudflare Workers AI (FLUX-1-schnell) — a real account with real
-    per-model rate limits, not a shared anonymous IP bucket, so this can
-    carry the bulk of the image load. Returns base64-encoded image data
-    wrapped in Cloudflare's standard {"result": {...}, "success": bool}
-    API envelope."""
-    prompt = _build_image_prompt(phrase, era, context_gist)[:2000]  # model caps prompts at 2048 chars
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            resp = requests.post(
-                CLOUDFLARE_IMAGE_URL,
-                headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"},
-                json={"prompt": prompt, "steps": 6},
-                timeout=60,
-            )
-            if resp.status_code == 429:
-                wait = 20 * attempt
-                print(f"[IMAGE RETRY-Cloudflare] '{filename}' rate-limited (429), attempt "
-                      f"{attempt}/{attempts}, waiting {wait}s before retrying...")
-                last_error = "429 Too Many Requests"
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-            if not data.get("success") or "image" not in data.get("result", {}):
-                raise RuntimeError(f"Unexpected Cloudflare response shape: {str(data)[:300]}")
-            image_bytes = base64.b64decode(data["result"]["image"])
-            if len(image_bytes) < 2000:
-                raise RuntimeError(f"Decoded image too small ({len(image_bytes)} bytes)")
-            with open(filename, "wb") as f:
-                f.write(image_bytes)
-            return filename
-        except Exception as e:
-            last_error = e
-            wait = 8 * attempt
-            print(f"[IMAGE RETRY-Cloudflare] '{filename}' failed (attempt {attempt}/{attempts}): "
-                  f"{e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"Cloudflare image generation failed for '{filename}' after {attempts} attempts: {last_error}")
-
-
-def generate_beat_image(phrase: str, era: str, filename: str, context_gist: str = "", index: int = 0) -> str:
-    """Round-robins between providers per clip index (2 Cloudflare : 1
-    Pollinations), and falls back to the other provider if the chosen one
-    fails outright for a given clip, rather than failing the whole run."""
-    use_pollinations_first = (index % 3 == 0)
-    primary, fallback = (
-        (_generate_image_pollinations, _generate_image_cloudflare)
-        if use_pollinations_first else
-        (_generate_image_cloudflare, _generate_image_pollinations)
-    )
-    try:
-        return primary(phrase, era, filename, context_gist=context_gist)
-    except Exception as e:
-        print(f"[IMAGE FALLBACK] Primary provider failed for '{filename}' ({e}); trying the other provider...")
-        return fallback(phrase, era, filename, context_gist=context_gist)
-
-
-def _assemble_script_from_outline(outline: dict) -> dict:
-    era = outline["era"]
-    os.makedirs("beat_images", exist_ok=True)
-
-    # Step 1: generate the full narration text per BIG beat (sequential —
-    # these are real LLM calls against Groq's rate limit).
-    beat_texts = []
-    for beat in outline["beats"]:
-        beat_texts.append((beat["gist"], _generate_narration_text(beat["gist"], era)))
-
-    # Step 2: flatten into short phrase-level clips (~2-3s of speech each).
-    clip_specs = []
-    idx = 0
-    for beat_gist, text in beat_texts:
-        for phrase in _split_into_phrases(text, target_words=11):
-            clip_specs.append((idx, phrase, beat_gist))
-            idx += 1
-
-    print(f"[SCRIPT] Split into {len(clip_specs)} short clips (~2-3s each) for image generation.")
-
-    # Step 3: generate all images in parallel, round-robined across providers.
-    segments = [None] * len(clip_specs)
-
-    def _gen_one(spec):
-        i, phrase, beat_gist = spec
-        image_file = generate_beat_image(phrase, era, f"beat_images/clip_{i:04d}.jpg", context_gist=beat_gist, index=i)
-        return i, {"type": "narration", "text": phrase, "image_file": image_file}
-
-    with ThreadPoolExecutor(max_workers=IMAGE_GEN_WORKERS) as executor:
-        futures = [executor.submit(_gen_one, spec) for spec in clip_specs]
-        for future in as_completed(futures):
-            i, seg = future.result()
-            segments[i] = seg
-
-    return {"era": era, "segments": segments}
-
-
-research_text = getattr(research_task.output, "raw", str(research_task.output))
-
-MAX_OUTLINE_ATTEMPTS = 3
-outline = None
-last_error = None
-
-for attempt in range(1, MAX_OUTLINE_ATTEMPTS + 1):
-    print(f"[OUTLINE] Generating outline (attempt {attempt}/{MAX_OUTLINE_ATTEMPTS})...")
-    t0 = time.time()
-    try:
-        outline = _generate_outline_direct(research_text, extra_note=str(last_error) if last_error else "")
-        print(f"[TIMING] 'Outline (attempt {attempt})' finished — took {time.time() - t0:.1f}s, "
-              f"{len(outline['beats'])} beats")
-        break
-    except RuntimeError as e:
-        last_error = e
-        print(f"[OUTLINE RETRY] Attempt {attempt}/{MAX_OUTLINE_ATTEMPTS} failed: {e}")
-
-if outline is None:
-    raise RuntimeError(f"Outline generation failed after {MAX_OUTLINE_ATTEMPTS} attempts. Last error: {last_error}")
-
-print(f"[SCRIPT] Generating narration text + clips for {len(outline['beats'])} beats...")
-t0 = time.time()
-script_dict = _assemble_script_from_outline(outline)
-print(f"[TIMING] 'All clips generated' finished — took {time.time() - t0:.1f}s")
-
-parsed_script = validate_script_dict(script_dict)
-
-# ---------------------------------------------------------------------
-# 6c. SEO — runs AFTER the script is validated. Locked into a strict,
-# parseable format instead of hoping to regex-match free-form natural
-# language — that's what was causing the video title to fall back to
-# "Automated Video" before.
-# ---------------------------------------------------------------------
-seo_task = Task(
-    description=(
-        "Based on the following finished script, write SEO metadata.\n\n"
-        "Output in EXACTLY this format, nothing else — no extra commentary, no markdown, "
-        "no headers:\n"
-        "TITLE_1: <title, under 60 characters, curiosity-driven, no clickbait flags>\n"
-        "TITLE_2: <title>\n"
-        "TITLE_3: <title>\n"
-        "DESCRIPTION: <YouTube description — first 2 lines keyword-rich, then a short summary>\n"
-        "TAGS: <15 relevant tags, comma-separated>\n\n"
-        f"SCRIPT:\n{flatten_script_to_text(parsed_script)}"
-    ),
-    expected_output="Exactly the TITLE_1/TITLE_2/TITLE_3/DESCRIPTION/TAGS format described above, nothing else.",
-    agent=seo_specialist,
-    callback=_timing_callback("SEO Specialist"),
-)
-_run_single_task_crew(seo_specialist, seo_task, "SEO")
-seo_output = getattr(seo_task.output, "raw", str(seo_task.output))
-
-
-def extract_seo_title(text: str) -> str:
-    for pattern in [r"TITLE_1:\s*(.+)", r"Title\s*1[:\-]\s*(.+)", r"^1\.\s*(.+)"]:
-        match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
-        if match:
-            return match.group(1).strip().strip("\"'\u201c\u201d").strip()
-    return "Automated Video"
-
-
-# ---------------------------------------------------------------------
-# 7. Voiceover — one narration file per short clip
-# ---------------------------------------------------------------------
-import edge_tts
-
-# Deeper, more mysterious voice for a documentary tone. Rate slowed and
-# pitch lowered further on top of the voice's natural pitch, for weight.
-NARRATOR_VOICE = "en-US-DavisNeural"
-NARRATION_RATE = "-8%"
-NARRATION_PITCH = "-15Hz"
-TTS_FALLBACK_VOICE = "en-US-AriaNeural"
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+ROOT = Path(__file__).resolve().parent
+STATE_DIR = ROOT / "state"
+WORK_DIR = ROOT / "run_work"
+SCENE_DIR = WORK_DIR / "scenes"
+AUDIO_DIR = WORK_DIR / "audio"
+THUMB_DIR = WORK_DIR / "thumbnails"
+OUTPUT_DIR = WORK_DIR / "output"
+
+for d in (STATE_DIR, WORK_DIR, SCENE_DIR, AUDIO_DIR, THUMB_DIR, OUTPUT_DIR):
+    d.mkdir(parents=True, exist_ok=True)
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_RESEARCH_MODEL = os.environ.get("GROQ_RESEARCH_MODEL", "openai/gpt-oss-120b")
+GROQ_WRITER_MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
+GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
+
+KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_onyx").strip()
+KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "0.96"))
+
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Motive Unknown").strip()
+YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
+if YOUTUBE_PRIVACY_STATUS not in {"private", "public", "unlisted"}:
+    YOUTUBE_PRIVACY_STATUS = "private"
 
 VIDEO_W, VIDEO_H = 1280, 720
 VIDEO_FPS = 30
+AUDIO_SR = 24000
+MUSIC_PATH = ROOT / "assets" / "music" / "background.mp3"
+
+SCENE_MIN = 18
+SCENE_MAX = 38
+SCRIPT_MIN_WORDS = 1700
+SCRIPT_MAX_WORDS = 2600
+
+FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# Small, reusable color palette for a child-friendly illustrated look.
+PAPER = (248, 244, 232)
+INK = (38, 37, 35)
+WHITE = (255, 255, 255)
+BLACK = (15, 15, 15)
+SKY = (220, 236, 246)
+GRASS = (175, 203, 146)
+SAND = (228, 199, 143)
+STONE = (166, 163, 150)
+RED = (185, 75, 63)
+BLUE = (75, 113, 158)
+GOLD = (214, 167, 66)
+BROWN = (128, 91, 57)
+GREEN = (77, 126, 81)
+PURPLE = (117, 88, 138)
+
+# ---------------------------------------------------------------------------
+# Files / persistence
+# ---------------------------------------------------------------------------
+HISTORY_PATH = STATE_DIR / "content_history.json"
+RUN_META_PATH = STATE_DIR / "last_run.json"
+RESEARCH_PATH = WORK_DIR / "research.txt"
+TOPIC_PATH = WORK_DIR / "topic.json"
+STORY_PATH = WORK_DIR / "story.json"
+SEO_PATH = WORK_DIR / "seo.json"
+SCRIPT_PATH = WORK_DIR / "script.json"
+MANIFEST_PATH = WORK_DIR / "manifest.json"
 
 
-def tts_to_file(text: str, voice: str, filename: str, attempts: int = 4,
-                 rate: str = NARRATION_RATE, pitch: str = NARRATION_PITCH):
-    """edge-tts's NoAudioReceived error is a known, still-unresolved issue
-    upstream (it's an unofficial wrapper around Edge's internal "Read Aloud"
-    service, not a real public API). Plain retries don't always help since
-    it can be voice-specific throttling, so after 2 failures we also switch
-    to a fallback voice (at that point the rate/pitch tweak is dropped too,
-    since it's more important to get SOME audio than the exact tone)."""
-    async def _run(v, use_rate, use_pitch):
-        communicate = edge_tts.Communicate(text=text, voice=v, rate=use_rate, pitch=use_pitch)
-        await communicate.save(filename)
-
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        if attempt <= 2:
-            use_voice, use_rate, use_pitch = voice, rate, pitch
-        else:
-            use_voice, use_rate, use_pitch = TTS_FALLBACK_VOICE, "+0%", "+0Hz"
-        try:
-            asyncio.run(_run(use_voice, use_rate, use_pitch))
-            return
-        except Exception as e:
-            last_error = e
-            wait = 5 * attempt
-            print(f"[TTS RETRY] '{filename}' failed with voice '{use_voice}' "
-                  f"(attempt {attempt}/{attempts}): {e}\nRetrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"TTS failed for '{filename}' after {attempts} attempts. Last error: {last_error}")
+def atomic_write_text(path: Path, content: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(path)
 
 
-def generate_all_voiceovers(parsed_script: dict, out_dir: str = "audio"):
-    """Parallelized — with 150-250+ short clips now instead of ~15 beats,
-    sequential TTS generation would be far too slow."""
-    os.makedirs(out_dir, exist_ok=True)
-    segments = parsed_script["segments"]
-
-    def _gen_one(i):
-        fname = os.path.join(out_dir, f"clip_{i:04d}_narration.mp3")
-        tts_to_file(segments[i]["text"], NARRATOR_VOICE, fname)
-        return i, fname
-
-    with ThreadPoolExecutor(max_workers=TTS_GEN_WORKERS) as executor:
-        futures = [executor.submit(_gen_one, i) for i in range(len(segments))]
-        for future in as_completed(futures):
-            i, fname = future.result()
-            segments[i]["audio_file"] = fname
-
-    print(f"Generated {len(segments)} voiceover clips in {out_dir}/")
-    return parsed_script
+def atomic_write_json(path: Path, data: Any) -> None:
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 
-def _get_audio_duration(path: str) -> float:
-    """Uses ffmpeg itself (not ffprobe) to get duration — ffprobe isn't
-    guaranteed to be installed alongside ffmpeg on every runner image."""
-    result = subprocess.run(
-        ["ffmpeg", "-i", path, "-f", "null", "-"],
-        capture_output=True, text=True,
-    )
-    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", result.stderr)
-    if not match:
-        raise RuntimeError(f"Could not determine duration of '{path}' from ffmpeg output:\n{result.stderr[-500:]}")
-    hours, minutes, seconds = match.groups()
-    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-
-
-# ---------------------------------------------------------------------
-# 8. Ken Burns rendering + burned-in subtitles
-#
-# One generated image per short clip, a faster/more noticeable zoom given
-# clips are now only ~2-3s each (the old slow zoom was tuned for 30-45s
-# beats and would barely be visible now), plus the clip's own narration
-# text burned in as a caption — timing is automatically exact since both
-# the image AND the caption come from the same phrase-level split.
-# ---------------------------------------------------------------------
-CAPTION_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-ZOOM_TARGET = 1.35  # ~35% zoom over each clip's duration — much faster/more
-                     # noticeable than before, appropriate for a 2-3s clip
-                     # instead of a 30-45s one
-
-
-def _ffmpeg_escape_text(text: str) -> str:
-    """Escapes characters that break ffmpeg's drawtext filter syntax.
-    Apostrophes are swapped for a visually-identical unicode character
-    instead of escaped, since backslash-escaping apostrophes inside
-    drawtext's own quoting is unreliable across ffmpeg builds."""
-    return (
-        text.replace("\\", "\\\\")
-            .replace(":", "\\:")
-            .replace("'", "\u2019")
-            .replace("%", "\\%")
-    )
-
-
-def _render_ken_burns_clip(image_path: str, duration: float, caption_text: str, out_path: str, fps: int = VIDEO_FPS):
-    total_frames = max(1, int(round(duration * fps)))
-    zoom_per_frame = (ZOOM_TARGET - 1.0) / max(total_frames, 1)
-    escaped = _ffmpeg_escape_text(caption_text)
-    vf = (
-        f"scale=2000:-1,zoompan=z='min(zoom+{zoom_per_frame:.6f},{ZOOM_TARGET})':"
-        f"d={total_frames}:s={VIDEO_W}x{VIDEO_H}:fps={fps},"
-        f"drawtext=fontfile={CAPTION_FONT}:text='{escaped}':fontsize=46:fontcolor=white:"
-        f"borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-160"
-    )
-    subprocess.run(
-        ["ffmpeg", "-y", "-loop", "1", "-i", image_path,
-         "-vf", vf, "-t", f"{duration:.3f}",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", out_path],
-        check=True, capture_output=True,
-    )
-
-
-def _build_render_plan(parsed_script: dict):
-    """Returns (image_path, duration, caption_text) triples plus the
-    ordered list of audio files to concatenate."""
-    plan = []
-    audio_files_in_order = []
-
-    for seg in parsed_script["segments"]:
-        duration = _get_audio_duration(seg["audio_file"])
-        plan.append((seg["image_file"], duration, seg["text"]))
-        audio_files_in_order.append(seg["audio_file"])
-
-    return plan, audio_files_in_order
-
-
-# ---------------------------------------------------------------------
-# 8b. Background music (optional — skips gracefully if no file is present)
-#
-# Drop a royalty-free track (YouTube Audio Library, Pixabay Music, etc.)
-# at the path below. Not something this pipeline can source on its own —
-# music licensing needs a human picking a track they're actually cleared
-# to use, not an automated download of whatever's easiest to find.
-# ---------------------------------------------------------------------
-BACKGROUND_MUSIC_PATH = "assets/music/background.mp3"
-MUSIC_VOLUME_DB = -22
-
-
-def _mix_background_music(narration_audio_path: str, out_path: str) -> str:
-    if not os.path.exists(BACKGROUND_MUSIC_PATH):
-        print(f"No background music found at '{BACKGROUND_MUSIC_PATH}' — using narration-only "
-              f"audio. Drop a royalty-free track there to enable background music.")
-        return narration_audio_path
-    subprocess.run(
-        ["ffmpeg", "-y",
-         "-i", narration_audio_path,
-         "-stream_loop", "-1", "-i", BACKGROUND_MUSIC_PATH,
-         "-filter_complex",
-         f"[1:a]volume={MUSIC_VOLUME_DB}dB[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-         "-map", "[aout]", out_path],
-        check=True, capture_output=True,
-    )
-    print(f"Mixed background music from '{BACKGROUND_MUSIC_PATH}' under the narration.")
-    return out_path
-
-
-def build_video(parsed_script: dict, out_path: str = "final_video.mp4"):
-    plan, audio_files_in_order = _build_render_plan(parsed_script)
-    print(f"Render plan: {len(plan)} clips.")
-
-    os.makedirs("clips", exist_ok=True)
-    clip_paths = []
-    for i, (image_path, duration, caption_text) in enumerate(plan):
-        clip_path = f"clips/clip_{i:04d}.mp4"
-        _render_ken_burns_clip(image_path, duration, caption_text, clip_path)
-        clip_paths.append(clip_path)
-
-    video_concat_path = "video_concat_list.txt"
-    with open(video_concat_path, "w") as f:
-        for path in clip_paths:
-            f.write(f"file '{os.path.abspath(path)}'\n")
-
-    audio_concat_path = "audio_concat_list.txt"
-    with open(audio_concat_path, "w") as f:
-        for path in audio_files_in_order:
-            f.write(f"file '{os.path.abspath(path)}'\n")
-    subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", audio_concat_path,
-         "-c", "copy", "full_audio.mp3"],
-        check=True, capture_output=True,
-    )
-
-    final_audio_path = _mix_background_music("full_audio.mp3", "full_audio_mixed.mp3")
-
-    subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", video_concat_path,
-         "-i", final_audio_path,
-         "-c:v", "copy",
-         "-c:a", "aac", "-shortest", out_path],
-        check=True, capture_output=True,
-    )
-    total_duration = sum(d for _, d, _ in plan)
-    print(f"Video ready: {out_path} (~{total_duration:.0f}s of content, {len(plan)} clips)")
-    return out_path
-
-
-# ---------------------------------------------------------------------
-# 9. Thumbnail — reuse the first clip's generated image, with title text
-# overlaid on top.
-# ---------------------------------------------------------------------
-def generate_thumbnail(parsed_script: dict, title: str, out_path: str = "thumbnail.jpg"):
-    first_image_path = parsed_script["segments"][0]["image_file"]
-    frame = Image.open(first_image_path).convert("RGB").resize((VIDEO_W, VIDEO_H))
-    draw = ImageDraw.Draw(frame)
+def load_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        font = ImageFont.load_default()
-
-    words = title.upper().split(" ")
-    y = 30
-    for word in words:
-        for dx, dy in [(-3, 0), (3, 0), (0, -3), (0, 3)]:
-            draw.text((30 + dx, y + dy), word, font=font, fill="black")
-        draw.text((30, y), word, font=font, fill="white")
-        y += 100
-
-    frame.save(out_path, quality=90)
-    print(f"Thumbnail ready: {out_path}")
-    return out_path
+        return default
 
 
-# ---------------------------------------------------------------------
-# 10. Upload
-# ---------------------------------------------------------------------
-def upload_video(video_path: str, thumbnail_path: str, title: str, description: str, tags: list):
+def load_history() -> dict[str, Any]:
+    data = load_json(HISTORY_PATH, {"videos": []})
+    if not isinstance(data, dict) or not isinstance(data.get("videos"), list):
+        return {"videos": []}
+    return data
+
+
+def save_history(data: dict[str, Any]) -> None:
+    atomic_write_json(HISTORY_PATH, data)
+
+
+def checkpoint(stage: str, **extra: Any) -> None:
+    data = {
+        "stage": stage,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        **extra,
+    }
+    atomic_write_json(RUN_META_PATH, data)
+    print(f"[CHECKPOINT] {stage}")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def require_secret(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment secret: {name}")
+    return value
+
+
+def clean_json_text(raw: str) -> str:
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\s*```$", "", raw)
+    return raw.strip()
+
+
+def extract_last_json_object(raw: str) -> dict[str, Any]:
+    """Find the last balanced JSON object that parses successfully."""
+    candidates: list[str] = []
+    stack = 0
+    start = None
+    for i, ch in enumerate(raw):
+        if ch == "{":
+            if stack == 0:
+                start = i
+            stack += 1
+        elif ch == "}" and stack:
+            stack -= 1
+            if stack == 0 and start is not None:
+                candidates.append(raw[start : i + 1])
+                start = None
+    for candidate in reversed(candidates):
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            continue
+    raise RuntimeError("No valid JSON object found in model response.")
+
+
+def count_words(text: str) -> int:
+    return len(re.findall(r"\b[\w'’-]+\b", text))
+
+
+def normalize_spaces(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def text_wrap_for_image(text: str, width_chars: int) -> list[str]:
+    return textwrap.wrap(normalize_spaces(text), width=width_chars, break_long_words=False)
+
+
+def safe_filename(text: str, max_len: int = 80) -> str:
+    text = re.sub(r"[^A-Za-z0-9_-]+", "_", text.strip())
+    return text[:max_len].strip("_") or "untitled"
+
+
+def parse_wait_seconds(resp: requests.Response | Exception, default: float = 8.0) -> float:
+    if isinstance(resp, requests.Response):
+        ra = resp.headers.get("retry-after")
+        if ra:
+            try:
+                return max(float(ra) + 1.0, default)
+            except ValueError:
+                pass
+        match = re.search(r"try again in ([\d.]+)s", resp.text or "", flags=re.IGNORECASE)
+        if match:
+            return max(float(match.group(1)) + 1.0, default)
+    return default
+
+
+# ---------------------------------------------------------------------------
+# Groq
+# ---------------------------------------------------------------------------
+if not GROQ_API_KEY:
+    # Do not crash voice_test if someone simply imports this file in an IDE.
+    client: Groq | None = None
+else:
+    client = Groq(api_key=GROQ_API_KEY)
+
+
+def groq_call(
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    max_completion_tokens: int,
+    temperature: float = 0.6,
+    browser_search: bool = False,
+    attempts: int = 5,
+) -> str:
+    if client is None:
+        raise RuntimeError("GROQ_API_KEY is required for this step.")
+
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "max_completion_tokens": max_completion_tokens,
+                "temperature": temperature,
+                "include_reasoning": False,
+            }
+            if browser_search:
+                kwargs["tools"] = [{"type": "browser_search"}]
+                kwargs["tool_choice"] = "required"
+                kwargs["citation_options"] = "enabled"
+
+            response = client.chat.completions.create(**kwargs)
+            content = response.choices[0].message.content or ""
+            if not content.strip():
+                raise RuntimeError("Groq returned an empty response.")
+            return content.strip()
+        except Exception as exc:  # SDK raises distinct subclasses depending on failure
+            last_error = exc
+            message = str(exc)
+            # Groq's SDK may surface 429 as a plain exception string.
+            wait = 10.0 * attempt
+            match = re.search(r"try again in ([\d.]+)s", message, flags=re.IGNORECASE)
+            if match:
+                wait = max(float(match.group(1)) + 1.0, wait)
+            print(f"[GROQ RETRY] {model} attempt {attempt}/{attempts}: {exc}; sleeping {wait:.1f}s")
+            time.sleep(wait)
+    raise RuntimeError(f"Groq call failed after {attempts} attempts: {last_error}")
+
+
+def groq_json(
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    max_completion_tokens: int,
+    temperature: float,
+    attempts: int = 3,
+) -> dict[str, Any]:
+    if client is None:
+        raise RuntimeError("GROQ_API_KEY is required for this step.")
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=max_completion_tokens,
+                temperature=temperature,
+                include_reasoning=False,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content or ""
+            return extract_last_json_object(clean_json_text(raw))
+        except Exception as exc:
+            last_error = exc
+            wait = 8 * attempt
+            match = re.search(r"try again in ([\d.]+)s", str(exc), flags=re.IGNORECASE)
+            if match:
+                wait = max(wait, float(match.group(1)) + 1)
+            print(f"[GROQ JSON RETRY] {model} attempt {attempt}/{attempts}: {exc}; sleeping {wait:.1f}s")
+            time.sleep(wait)
+    raise RuntimeError(f"Groq JSON call failed: {last_error}")
+
+
+# ---------------------------------------------------------------------------
+# Topic scouting / research
+# ---------------------------------------------------------------------------
+TOPIC_PROMPT = """
+You are a curiosity-first history channel producer.
+
+Your job is NOT to pick a generic history topic. Generate one specific historical
+QUESTION that a normal person might genuinely wonder about after hearing it.
+
+Good patterns:
+- Why did ...?
+- How did ...?
+- What happened when ...?
+- Why were ... so important to ...?
+- How did an ordinary decision cause ...?
+- Why did people suddenly start/stop ...?
+- What was really happening behind ...?
+
+Prefer stories involving a famous civilization, ruler, event, object, belief, or
+place when there is a genuinely strange or surprising question attached to it.
+Avoid fake mysteries, conspiracy framing, paranormal claims presented as fact,
+and "history of X" topics.
+
+The eventual video should be understandable to an intelligent young teenager,
+while still being interesting to adults.
+
+Return exactly this JSON object:
+{
+  "question": "one irresistible historical question",
+  "topic": "short internal topic label",
+  "era": "short era/civilization label",
+  "why_curious": "2-4 sentences explaining why the question creates curiosity",
+  "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
+}
+""".strip()
+
+
+def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
+    previous = []
+    for item in history.get("videos", [])[-60:]:
+        q = item.get("question") or item.get("topic") or item.get("title")
+        if q:
+            previous.append(q)
+    history_text = "\n".join(f"- {x}" for x in previous) or "(no previous videos recorded)"
+
+    raw = groq_call(
+        GROQ_LIGHT_MODEL,
+        [
+            {
+                "role": "user",
+                "content": TOPIC_PROMPT
+                + "\n\nPreviously used topics/questions. Avoid these and close variations:\n"
+                + history_text,
+            }
+        ],
+        max_completion_tokens=1100,
+        temperature=0.8,
+        browser_search=True,
+    )
+    data = extract_last_json_object(clean_json_text(raw))
+    for key in ("question", "topic", "era", "why_curious", "search_angles"):
+        if not data.get(key):
+            raise RuntimeError(f"Topic scout missing field: {key}")
+    if count_words(data["question"]) < 4:
+        raise RuntimeError("Topic question is too short.")
+    return data
+
+
+def research_topic(topic: dict[str, Any]) -> str:
+    prompt = f"""
+You are the lead historical researcher for a documentary channel.
+
+Central question:
+{topic['question']}
+
+Topic:
+{topic['topic']}
+
+Era/civilization:
+{topic['era']}
+
+Research angles:
+{json.dumps(topic.get('search_angles', []), ensure_ascii=False)}
+
+Use browser search extensively. Prefer reliable sources such as museums,
+universities, national archives, reputable reference works, academic/history
+institutions, and well-maintained reference pages. Wikipedia is acceptable as a
+starting point but should not be the only authority for a surprising claim.
+
+Return a compact research dossier in plain text with these headings:
+1. CORE ANSWER
+2. STORY BEATS (10-16 numbered beats)
+3. IMPORTANT PEOPLE / PLACES / OBJECTS
+4. DISPUTES OR UNCERTAINTY
+5. SOURCES (at least 6 sources with title + URL)
+
+Do not optimize for shock. Optimize for a fascinating question that can be
+answered honestly. Clearly flag claims that are uncertain, legendary, or disputed.
+The final script will be factual and non-graphic.
+""".strip()
+    return groq_call(
+        GROQ_RESEARCH_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=4200,
+        temperature=0.45,
+        browser_search=True,
+        attempts=5,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Story architecture + script
+# ---------------------------------------------------------------------------
+STORY_ARCHITECT_PROMPT = """
+You are a story architect for a premium history YouTube channel.
+
+Turn the research dossier into a suspenseful STORY PLAN, not a textbook outline.
+The video must have one central curiosity question and a satisfying answer.
+
+Structure:
+1. Cold open: start with the strangest or most important moment, without a long intro.
+2. Immediate question: make the viewer understand what they are trying to figure out.
+3. Minimal context: only the background needed to understand the mystery.
+4. Escalation: each section should reveal something that changes the viewer's picture.
+5. Midpoint turn: a fact, decision, discovery, or contradiction that surprises us.
+6. Deepening: show why the obvious explanation is not enough.
+7. Payoff: answer the central question using the strongest evidence.
+8. Ending: leave the viewer with one memorable implication or final twist grounded in fact.
+
+Avoid chronological padding. Avoid atmosphere-for-atmosphere's-sake.
+
+Return JSON:
+{
+  "central_question": "...",
+  "hook": "1-3 sentence cold open concept",
+  "story_arc": [
+    {"section": 1, "purpose": "...", "reveal": "...", "required_facts": ["..."]}
+  ],
+  "ending_payoff": "..."
+}
+""".strip()
+
+
+def build_story_plan(topic: dict[str, Any], research: str) -> dict[str, Any]:
+    prompt = (
+        STORY_ARCHITECT_PROMPT
+        + "\n\nTOPIC:\n"
+        + json.dumps(topic, ensure_ascii=False)
+        + "\n\nRESEARCH DOSSIER:\n"
+        + research
+    )
+    plan = groq_json(
+        GROQ_LIGHT_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=3500,
+        temperature=0.55,
+    )
+    if not plan.get("story_arc") or len(plan["story_arc"]) < 8:
+        raise RuntimeError("Story architect returned too little structure.")
+    return plan
+
+
+SCRIPTWRITER_PROMPT = """
+You are the head writer of an excellent history storytelling channel.
+
+Write a 10-15 minute narration that answers one irresistible historical question.
+The target audience is a curious young teenager AND adults. The language is simple,
+but the thinking is not childish.
+
+VOICE OF THE WRITING
+- Modern, conversational, confident, vivid.
+- Sounds like a brilliant storyteller talking directly to the viewer.
+- Short and medium sentences mixed for rhythm.
+- Use concrete actions and decisions instead of decorative prose.
+- Reveal information in the order that creates curiosity.
+- Ask a question only when it genuinely advances the story.
+- Use humor lightly when it fits the facts.
+- Let characters make choices and let consequences matter.
+- Make the viewer feel like they are discovering the answer with you.
+
+DO NOT WRITE LIKE
+- a school essay
+- an old-fashioned novel
+- an encyclopedia
+- a travel brochure
+- a movie trailer full of fake suspense
+
+Avoid filler such as "the sun was shining," "the water was calm," "little did they know,"
+"in the annals of history," and long scenery descriptions unless the detail changes the story.
+Never add a fact simply to make the script longer.
+Never invent dialogue or inner thoughts and present them as historical facts.
+When evidence is uncertain or disputed, say so naturally.
+Do not use graphic descriptions.
+
+VERY IMPORTANT: the first 20-30 seconds must make a viewer who has never heard of this
+story think: "Wait, why did that happen?"
+
+Return JSON in exactly this shape:
+{
+  "title_question": "the central curiosity question",
+  "era": "short era/civilization label",
+  "scenes": [
+    {
+      "id": 1,
+      "narration": "35-100 words of narration for this scene",
+      "setting": "simple place description",
+      "characters": ["role/person 1", "role/person 2"],
+      "action": "what the characters are visibly doing",
+      "props": ["prop 1", "prop 2"],
+      "mood": "curious / tense / triumphant / confused / etc"
+    }
+  ],
+  "thumbnail": {
+    "headline": "2-5 words, not the full title",
+    "subject": "main visual subject",
+    "supporting_prop": "one strong prop or symbol",
+    "emotion": "clear facial/body emotion",
+    "composition": "left_subject_right_prop / right_subject_left_prop / central_subject",
+    "preferred_variant": 1
+  }
+}
+
+Scene count: 18-38.
+Total narration: 1700-2600 words.
+Each scene must describe a distinct, useful visual moment. Do not create a new scene just
+because a sentence changed. Scenes can hold for several seconds.
+""".strip()
+
+
+def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> dict[str, Any]:
+    prompt = (
+        SCRIPTWRITER_PROMPT
+        + "\n\nTOPIC:\n"
+        + json.dumps(topic, ensure_ascii=False)
+        + "\n\nSTORY PLAN:\n"
+        + json.dumps(plan, ensure_ascii=False)
+        + "\n\nRESEARCH DOSSIER:\n"
+        + research
+    )
+    script = groq_json(
+        GROQ_WRITER_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=7000,
+        temperature=0.78,
+        attempts=4,
+    )
+    validate_script(script)
+    return script
+
+
+def validate_script(script: dict[str, Any]) -> None:
+    scenes = script.get("scenes")
+    if not isinstance(scenes, list) or not (SCENE_MIN <= len(scenes) <= SCENE_MAX):
+        raise RuntimeError(f"Script scene count must be {SCENE_MIN}-{SCENE_MAX}; got {len(scenes) if isinstance(scenes, list) else 0}.")
+    total_words = 0
+    for i, scene in enumerate(scenes, 1):
+        if not scene.get("narration"):
+            raise RuntimeError(f"Scene {i} is missing narration.")
+        words = count_words(scene["narration"])
+        if words < 25 or words > 120:
+            raise RuntimeError(f"Scene {i} narration is {words} words; expected 25-120.")
+        for key in ("setting", "characters", "action", "props", "mood"):
+            if key not in scene:
+                raise RuntimeError(f"Scene {i} missing {key}.")
+        total_words += words
+    if not (SCRIPT_MIN_WORDS <= total_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(f"Total script word count {total_words} outside {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}.")
+    print(f"[SCRIPT] validated: {len(scenes)} scenes, ~{total_words} words")
+
+
+# ---------------------------------------------------------------------------
+# Kokoro TTS
+# ---------------------------------------------------------------------------
+_kokoro_pipeline = None
+
+
+def get_kokoro_pipeline():
+    global _kokoro_pipeline
+    if _kokoro_pipeline is None:
+        try:
+            from kokoro import KPipeline
+        except Exception as exc:
+            raise RuntimeError(
+                "Kokoro is not installed. The GitHub workflow should install it "
+                "and espeak-ng before running the pipeline."
+            ) from exc
+        print(f"[TTS] Loading Kokoro voice pipeline for {KOKORO_VOICE}...")
+        _kokoro_pipeline = KPipeline(lang_code="a")
+    return _kokoro_pipeline
+
+
+def synthesize_kokoro(text: str) -> np.ndarray:
+    pipeline = get_kokoro_pipeline()
+    chunks: list[np.ndarray] = []
+    generator = pipeline(text, voice=KOKORO_VOICE, speed=KOKORO_SPEED)
+    for _, _, audio in generator:
+        if audio is None:
+            continue
+        arr = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if arr.size:
+            chunks.append(arr)
+    if not chunks:
+        raise RuntimeError("Kokoro produced no audio.")
+    return np.concatenate(chunks)
+
+
+def generate_voiceovers(script: dict[str, Any]) -> None:
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    silence = np.zeros(int(AUDIO_SR * 0.04), dtype=np.float32)
+    for idx, scene in enumerate(script["scenes"], 1):
+        out = AUDIO_DIR / f"scene_{idx:03d}.wav"
+        if out.exists() and out.stat().st_size > 10000:
+            print(f"[TTS] Reusing {out.name}")
+            continue
+        print(f"[TTS] Scene {idx}/{len(script['scenes'])}: generating")
+        audio = synthesize_kokoro(scene["narration"])
+        sf.write(out, audio, AUDIO_SR)
+        if idx != len(script["scenes"]):
+            # Add a tiny silence to keep cuts clean without sounding like a gap.
+            sf.write(out, np.concatenate([audio, silence]), AUDIO_SR)
+    checkpoint("voiceovers_complete")
+
+
+def voice_test() -> Path:
+    sample = (
+        "For years, historians thought they knew the answer. Then one tiny detail "
+        "started causing problems. The people involved had left clues behind. The clues "
+        "looked ordinary. But put them together, and the story suddenly changes. Why? "
+        "Because the obvious explanation leaves one very strange question unanswered."
+    )
+    out = ROOT / "voice_test_onyx.wav"
+    audio = synthesize_kokoro(sample)
+    sf.write(out, audio, AUDIO_SR)
+    print(f"[VOICE TEST] wrote {out} ({len(audio) / AUDIO_SR:.1f}s) using {KOKORO_VOICE}")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Stickman / storybook renderer
+# ---------------------------------------------------------------------------
+def load_font(path: str, size: int):
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception:
+        return ImageFont.load_default()
+
+
+FONT_24 = load_font(FONT_REGULAR, 24)
+FONT_28 = load_font(FONT_BOLD, 28)
+FONT_42 = load_font(FONT_BOLD, 42)
+FONT_64 = load_font(FONT_BOLD, 64)
+FONT_88 = load_font(FONT_BOLD, 88)
+
+
+def contains_any(text: str, words: Iterable[str]) -> bool:
+    text = text.lower()
+    return any(w.lower() in text for w in words)
+
+
+def era_theme(era: str, setting: str) -> dict[str, Any]:
+    all_text = f"{era} {setting}".lower()
+    if contains_any(all_text, ["egypt", "pharaoh", "nile", "pyramid"]):
+        return {"sky": (244, 226, 181), "ground": SAND, "accent": GOLD, "building": (194, 165, 105), "water": (98, 160, 180), "kind": "egypt"}
+    if contains_any(all_text, ["china", "chinese", "han", "qin", "ming", "imperial"]):
+        return {"sky": (219, 231, 244), "ground": (193, 181, 151), "accent": RED, "building": (174, 88, 69), "water": (93, 146, 178), "kind": "china"}
+    if contains_any(all_text, ["rome", "roman", "latin"]):
+        return {"sky": (222, 229, 235), "ground": (178, 168, 149), "accent": RED, "building": (170, 157, 139), "water": (100, 145, 167), "kind": "rome"}
+    if contains_any(all_text, ["viking", "norse", "scandinavia"]):
+        return {"sky": (193, 216, 229), "ground": (146, 164, 145), "accent": BLUE, "building": (130, 106, 82), "water": (82, 133, 166), "kind": "viking"}
+    if contains_any(all_text, ["japan", "japanese", "shogun", "samurai"]):
+        return {"sky": (231, 221, 221), "ground": (154, 181, 135), "accent": RED, "building": (152, 95, 78), "water": (95, 146, 177), "kind": "japan"}
+    if contains_any(all_text, ["aztec", "maya", "inca", "mesoamerica"]):
+        return {"sky": (212, 229, 214), "ground": (131, 174, 111), "accent": GOLD, "building": (154, 131, 91), "water": (92, 155, 170), "kind": "meso"}
+    if contains_any(all_text, ["medieval", "castle", "europe", "kingdom"]):
+        return {"sky": (216, 226, 236), "ground": (163, 184, 144), "accent": PURPLE, "building": (136, 141, 151), "water": (96, 148, 174), "kind": "medieval"}
+    return {"sky": SKY, "ground": GRASS, "accent": BLUE, "building": STONE, "water": (100, 152, 174), "kind": "generic"}
+
+
+def draw_background(draw: ImageDraw.ImageDraw, theme: dict[str, Any], setting: str) -> None:
+    draw.rectangle([0, 0, VIDEO_W, VIDEO_H], fill=theme["sky"])
+    draw.rectangle([0, 470, VIDEO_W, VIDEO_H], fill=theme["ground"])
+    # Sun/moon
+    draw.ellipse([1070, 70, 1170, 170], fill=(245, 208, 102))
+
+    s = setting.lower()
+    kind = theme["kind"]
+    if contains_any(s, ["river", "nile", "harbor", "sea", "ship", "lake"]):
+        draw.rectangle([0, 385, VIDEO_W, 500], fill=theme["water"])
+    elif contains_any(s, ["desert", "sand"]):
+        draw.rectangle([0, 405, VIDEO_W, VIDEO_H], fill=SAND)
+    elif contains_any(s, ["palace", "temple", "court", "throne"]):
+        draw.rectangle([80, 180, 1200, 475], fill=theme["building"])
+        draw.rectangle([130, 260, 240, 470], fill=(145, 131, 112))
+        draw.rectangle([1040, 260, 1150, 470], fill=(145, 131, 112))
+        draw.polygon([(540, 180), (640, 90), (740, 180)], fill=theme["accent"])
+        draw.rectangle([570, 285, 710, 470], fill=(108, 87, 68))
+    elif contains_any(s, ["street", "market", "town", "city"]):
+        for x in [100, 350, 720, 1020]:
+            draw.polygon([(x, 270), (x + 90, 210), (x + 180, 270)], fill=theme["building"])
+            draw.rectangle([x + 20, 270, x + 160, 470], fill=theme["building"])
+            draw.rectangle([x + 72, 350, x + 110, 470], fill=theme["sky"])
+    elif contains_any(s, ["battlefield", "field", "camp"]):
+        for x in range(80, 1250, 160):
+            draw.line([x, 470, x + 40, 330], fill=BROWN, width=8)
+            draw.polygon([(x + 40, 330), (x + 90, 355), (x + 40, 380)], fill=theme["accent"])
+    elif kind == "egypt":
+        draw.polygon([(130, 470), (290, 270), (450, 470)], fill=(201, 173, 112))
+        draw.polygon([(760, 470), (900, 300), (1040, 470)], fill=(204, 176, 116))
+    elif kind == "china":
+        draw.rectangle([120, 260, 1160, 470], fill=theme["building"])
+        for x in range(170, 1130, 120):
+            draw.polygon([(x, 250), (x + 40, 210), (x + 80, 250)], fill=RED)
+            draw.rectangle([x + 30, 250, x + 50, 470], fill=(115, 79, 55))
+    elif kind == "rome":
+        for x in [140, 300, 460, 800, 960, 1120]:
+            draw.rectangle([x, 220, x + 55, 470], fill=theme["building"])
+            draw.arc([x - 10, 175, x + 65, 260], 180, 360, fill=theme["building"], width=10)
+    elif kind == "japan":
+        draw.polygon([(200, 290), (360, 210), (520, 290)], fill=theme["building"])
+        draw.rectangle([260, 290, 460, 470], fill=theme["building"])
+        draw.ellipse([830, 190, 1050, 410], outline=RED, width=24)
+    else:
+        # Light decorative clouds
+        for x in [140, 490, 910]:
+            draw.ellipse([x, 120, x + 90, 170], fill=(255, 255, 255))
+            draw.ellipse([x + 40, 105, x + 120, 165], fill=(255, 255, 255))
+
+    # Storybook border
+    draw.rectangle([16, 16, VIDEO_W - 16, VIDEO_H - 16], outline=INK, width=5)
+
+
+def archetype_style(label: str, era: str) -> dict[str, Any]:
+    t = f"{label} {era}".lower()
+    if contains_any(t, ["pharaoh", "egyptian", "scribe"]):
+        return {"body": (228, 198, 150), "outfit": GOLD if "pharaoh" in t else WHITE, "hat": GOLD if "pharaoh" in t else None, "kind": "egypt"}
+    if contains_any(t, ["roman", "legionary", "centurion"]):
+        return {"body": (222, 184, 141), "outfit": RED, "hat": STONE, "kind": "rome"}
+    if contains_any(t, ["chinese", "emperor", "courtier", "mandarin"]):
+        return {"body": (228, 192, 155), "outfit": RED if "emperor" in t else BLUE, "hat": BLACK, "kind": "china"}
+    if contains_any(t, ["viking", "norse", "warrior"]):
+        return {"body": (216, 179, 143), "outfit": BROWN, "hat": STONE, "kind": "viking"}
+    if contains_any(t, ["samurai", "japanese", "shogun"]):
+        return {"body": (218, 180, 148), "outfit": BLACK if "samurai" in t else RED, "hat": BLACK, "kind": "japan"}
+    if contains_any(t, ["king", "queen", "monarch", "noble"]):
+        return {"body": (222, 181, 146), "outfit": PURPLE, "hat": GOLD, "kind": "royal"}
+    return {"body": (224, 185, 148), "outfit": BLUE, "hat": None, "kind": "generic"}
+
+
+def draw_stickman(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    scale: float,
+    label: str,
+    era: str,
+    action: str,
+    flip: bool = False,
+) -> None:
+    style = archetype_style(label, era)
+    r = int(24 * scale)
+    body = style["body"]
+    outfit = style["outfit"]
+    head_y = y - int(140 * scale)
+    torso_y = y - int(85 * scale)
+    hip_y = y - int(25 * scale)
+
+    # Head
+    draw.ellipse([x - r, head_y - r, x + r, head_y + r], fill=body, outline=INK, width=max(2, int(4 * scale)))
+
+    # Hair / hat
+    if style["kind"] in {"china", "viking", "japan", "royal"} and style["hat"]:
+        draw.rectangle([x - r - 5, head_y - r - 8, x + r + 5, head_y - r + 6], fill=style["hat"], outline=INK, width=2)
+    if style["kind"] == "egypt":
+        draw.polygon([(x - r - 8, head_y - r), (x, head_y - r - 30), (x + r + 8, head_y - r)], fill=style["hat"] or GOLD, outline=INK)
+
+    # Face
+    draw.ellipse([x - int(8 * scale), head_y - 5, x - int(4 * scale), head_y - 1], fill=INK)
+    draw.ellipse([x + int(4 * scale), head_y - 5, x + int(8 * scale), head_y - 1], fill=INK)
+
+    # Torso / costume
+    draw.line([x, head_y + r, x, hip_y], fill=INK, width=max(4, int(6 * scale)))
+    draw.line([x - int(18 * scale), torso_y, x + int(18 * scale), torso_y], fill=outfit, width=max(8, int(15 * scale)))
+    # Cape / robe for royal or emperor-like characters.
+    if style["kind"] == "royal" or contains_any(label, ["emperor", "pharaoh", "shogun"]):
+        draw.polygon(
+            [(x - int(18 * scale), torso_y), (x - int(45 * scale), hip_y), (x + int(45 * scale), hip_y), (x + int(18 * scale), torso_y)],
+            fill=outfit,
+            outline=INK,
+        )
+
+    act = action.lower()
+    raise_arm = contains_any(act, ["raise", "hold up", "lift", "signal", "point", "pointing"])
+    hold_item = contains_any(act, ["hold", "carry", "read", "show", "present"])
+    wave = contains_any(act, ["wave", "greet"])
+
+    if flip:
+        direction = -1
+    else:
+        direction = 1
+
+    arm_dx = int(55 * scale)
+    if raise_arm:
+        draw.line([x, torso_y, x + direction * arm_dx, torso_y - int(60 * scale)], fill=INK, width=max(4, int(5 * scale)))
+        draw.line([x, torso_y, x - direction * int(40 * scale), torso_y + int(25 * scale)], fill=INK, width=max(4, int(5 * scale)))
+    elif wave:
+        draw.line([x, torso_y, x + direction * arm_dx, torso_y - int(25 * scale)], fill=INK, width=max(4, int(5 * scale)))
+        draw.line([x + direction * arm_dx, torso_y - int(25 * scale), x + direction * int(75 * scale), torso_y - int(80 * scale)], fill=INK, width=max(4, int(5 * scale)))
+    else:
+        draw.line([x, torso_y, x - direction * int(42 * scale), torso_y + int(30 * scale)], fill=INK, width=max(4, int(5 * scale)))
+        draw.line([x, torso_y, x + direction * int(42 * scale), torso_y + int(30 * scale)], fill=INK, width=max(4, int(5 * scale)))
+
+    # Legs
+    walking = contains_any(act, ["walk", "run", "leave", "move", "approach"])
+    if walking:
+        draw.line([x, hip_y, x - int(38 * scale), hip_y + int(70 * scale)], fill=INK, width=max(4, int(6 * scale)))
+        draw.line([x, hip_y, x + int(50 * scale), hip_y + int(55 * scale)], fill=INK, width=max(4, int(6 * scale)))
+    else:
+        draw.line([x, hip_y, x - int(30 * scale), hip_y + int(75 * scale)], fill=INK, width=max(4, int(6 * scale)))
+        draw.line([x, hip_y, x + int(30 * scale), hip_y + int(75 * scale)], fill=INK, width=max(4, int(6 * scale)))
+
+    # Tiny accessory cues make archetypes readable.
+    if contains_any(label, ["soldier", "warrior", "guard", "samurai", "roman"]):
+        draw.line([x + direction * int(50 * scale), torso_y + int(10 * scale), x + direction * int(65 * scale), torso_y - int(55 * scale)], fill=INK, width=max(2, int(4 * scale)))
+    if contains_any(label, ["scribe", "scholar", "monk", "student"]):
+        draw.rectangle([x + direction * int(28 * scale), torso_y + int(22 * scale), x + direction * int(60 * scale), torso_y + int(45 * scale)], fill=PAPER, outline=INK)
+
+
+def draw_prop(draw: ImageDraw.ImageDraw, x: int, y: int, prop: str, scale: float = 1.0) -> None:
+    p = prop.lower()
+    if contains_any(p, ["scroll", "document", "letter", "papyrus"]):
+        draw.rectangle([x - 35, y - 12, x + 35, y + 12], fill=PAPER, outline=INK, width=3)
+        draw.arc([x - 45, y - 25, x - 15, y + 5], 90, 270, fill=BROWN, width=4)
+        draw.arc([x + 15, y - 5, x + 45, y + 25], 270, 90, fill=BROWN, width=4)
+    elif contains_any(p, ["sword", "blade"]):
+        draw.line([x - 10, y + 40, x + 55, y - 40], fill=STONE, width=8)
+        draw.line([x - 5, y + 20, x + 18, y + 43], fill=BROWN, width=8)
+    elif contains_any(p, ["shield"]):
+        draw.ellipse([x - 35, y - 45, x + 35, y + 45], fill=BLUE, outline=INK, width=4)
+    elif contains_any(p, ["crown"]):
+        pts = [(x - 35, y + 20), (x - 25, y - 20), (x, y + 5), (x + 25, y - 20), (x + 35, y + 20)]
+        draw.polygon(pts, fill=GOLD, outline=INK)
+    elif contains_any(p, ["torch", "fire"]):
+        draw.rectangle([x - 6, y, x + 6, y + 55], fill=BROWN)
+        draw.polygon([(x, y - 20), (x - 14, y + 6), (x, y + 18), (x + 14, y + 6)], fill=GOLD, outline=RED)
+    elif contains_any(p, ["book", "tablet", "stone"]):
+        draw.rectangle([x - 30, y - 35, x + 30, y + 35], fill=STONE, outline=INK, width=4)
+        for i in range(-15, 20, 12):
+            draw.line([x - 18, y + i, x + 18, y + i], fill=INK, width=2)
+    elif contains_any(p, ["coin", "gold"]):
+        draw.ellipse([x - 25, y - 25, x + 25, y + 25], fill=GOLD, outline=INK, width=3)
+    elif contains_any(p, ["pyramid"]):
+        draw.polygon([(x, y - 75), (x - 75, y + 45), (x + 75, y + 45)], fill=SAND, outline=INK)
+    elif contains_any(p, ["ship", "boat"]):
+        draw.polygon([(x - 80, y), (x + 80, y), (x + 50, y + 35), (x - 55, y + 35)], fill=BROWN, outline=INK)
+        draw.line([x, y, x, y - 90], fill=INK, width=5)
+        draw.polygon([(x, y - 80), (x + 45, y - 35), (x, y - 35)], fill=PAPER, outline=INK)
+    elif contains_any(p, ["temple", "gate"]):
+        draw.rectangle([x - 70, y - 50, x + 70, y + 50], fill=theme_color_from_prop(p), outline=INK, width=4)
+        draw.polygon([(x - 85, y - 50), (x, y - 95), (x + 85, y - 50)], fill=GOLD, outline=INK)
+    else:
+        # Generic box/marker so unknown props still leave a visual cue.
+        draw.rectangle([x - 28, y - 28, x + 28, y + 28], fill=STONE, outline=INK, width=3)
+
+
+def theme_color_from_prop(_: str) -> tuple[int, int, int]:
+    return (171, 92, 65)
+
+
+def make_scene(scene: dict[str, Any], era: str, output_path: Path) -> None:
+    img = Image.new("RGB", (VIDEO_W, VIDEO_H), PAPER)
+    draw = ImageDraw.Draw(img)
+    theme = era_theme(era, scene.get("setting", ""))
+    draw_background(draw, theme, scene.get("setting", ""))
+
+    chars = scene.get("characters") or ["historical figure"]
+    # Keep scenes readable: max 4 core figures.
+    char_positions = [(260, 600), (520, 600), (820, 600), (1060, 600)]
+    actions = scene.get("action", "")
+    for idx, label in enumerate(chars[:4]):
+        x, y = char_positions[idx]
+        if len(chars) > 2:
+            scale = 0.82
+        else:
+            scale = 1.0
+        draw_stickman(draw, x, y, scale, str(label), era, actions, flip=(idx % 2 == 1))
+
+    props = scene.get("props") or []
+    prop_positions = [(1050, 520), (180, 500), (640, 430)]
+    for idx, prop in enumerate(props[:3]):
+        x, y = prop_positions[idx]
+        draw_prop(draw, x, y, str(prop), 1.0)
+
+    # A small scene label is useful visually, but never burns narration/subtitles.
+    label = normalize_spaces(scene.get("setting", ""))[:48]
+    if label:
+        draw.rounded_rectangle([40, 40, 40 + min(580, 25 * len(label) + 40), 92], radius=16, fill=(255, 255, 255), outline=INK, width=3)
+        draw.text((58, 53), label, font=FONT_28, fill=INK)
+
+    # Tiny decorative hand-drawn dots/lines to keep the frame from feeling too sterile.
+    random.seed(scene.get("id", 0) * 7919)
+    for _ in range(22):
+        x = random.randint(60, 1210)
+        y = random.randint(105, 440)
+        r = random.choice([2, 3, 4])
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=(140, 140, 140))
+
+    img.save(output_path, quality=92)
+
+
+def render_scenes(script: dict[str, Any]) -> None:
+    SCENE_DIR.mkdir(parents=True, exist_ok=True)
+    for idx, scene in enumerate(script["scenes"], 1):
+        out = SCENE_DIR / f"scene_{idx:03d}.jpg"
+        if out.exists() and out.stat().st_size > 5000:
+            print(f"[SCENE] Reusing {out.name}")
+            continue
+        make_scene(scene, script["era"], out)
+    checkpoint("scenes_complete")
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail
+# ---------------------------------------------------------------------------
+def render_thumbnail(script: dict[str, Any], title: str, variant: int, out_path: Path) -> None:
+    thumb = script.get("thumbnail", {})
+    image = Image.new("RGB", (1280, 720), PAPER)
+    draw = ImageDraw.Draw(image)
+    theme = era_theme(script.get("era", ""), thumb.get("subject", ""))
+    draw_background(draw, theme, thumb.get("subject", ""))
+
+    composition = str(thumb.get("composition", "left_subject_right_prop"))
+    subject_x = 360 if "left" in composition else 900 if "right" in composition else 640
+    prop_x = 930 if subject_x < 600 else 350
+    if variant == 2:
+        subject_x, prop_x = prop_x, subject_x
+    elif variant == 3:
+        subject_x, prop_x = 640, 640
+
+    draw_stickman(
+        draw,
+        subject_x,
+        610,
+        1.65,
+        str(thumb.get("subject", "historical figure")),
+        script.get("era", ""),
+        str(thumb.get("emotion", "surprised and curious")),
+        flip=subject_x > prop_x,
+    )
+    draw_prop(draw, prop_x, 500, str(thumb.get("supporting_prop", "scroll")), 1.8)
+
+    headline = normalize_spaces(str(thumb.get("headline", "WHY DID THIS HAPPEN?"))).upper()
+    lines = text_wrap_for_image(headline, 14)
+    x = 60 if variant != 2 else 720
+    y = 55
+    for line in lines[:3]:
+        draw.rounded_rectangle([x - 10, y - 5, min(1230, x + 600), y + 80], radius=18, fill=BLACK)
+        draw.text((x + 8, y + 8), line, font=FONT_64, fill=WHITE)
+        y += 86
+
+    draw.text((50, 655), script.get("era", "History"), font=FONT_24, fill=INK)
+    draw.rectangle([10, 10, 1270, 710], outline=INK, width=6)
+    image.save(out_path, quality=95)
+
+
+def make_thumbnail(script: dict[str, Any], title: str) -> Path:
+    THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    preferred = int(script.get("thumbnail", {}).get("preferred_variant", 1) or 1)
+    preferred = min(3, max(1, preferred))
+    outputs: list[Path] = []
+    for variant in (1, 2, 3):
+        out = THUMB_DIR / f"thumbnail_v{variant}.jpg"
+        render_thumbnail(script, title, variant, out)
+        outputs.append(out)
+    chosen = outputs[preferred - 1]
+    final = OUTPUT_DIR / "thumbnail.jpg"
+    final.write_bytes(chosen.read_bytes())
+    print(f"[THUMBNAIL] chosen variant {preferred}: {final}")
+    return final
+
+
+# ---------------------------------------------------------------------------
+# SEO
+# ---------------------------------------------------------------------------
+SEO_PROMPT = """
+You are the YouTube packaging editor for a history storytelling channel.
+
+The video answers a specific historical curiosity question.
+Create metadata that is discoverable without sounding like spam.
+
+Rules:
+- One primary title under 70 characters. Natural curiosity, no fake claims.
+- Two alternate titles.
+- Description: the first two lines should clearly explain the question and why the story matters.
+  Then a concise spoiler-light summary, followed by a Sources section using the supplied sources.
+- Tags: 12-15 relevant terms. Tags are secondary; do not stuff unrelated keywords.
+- Thumbnail headline: 2-5 words that complement the title instead of repeating it.
+
+Return JSON only:
+{
+  "title": "...",
+  "alternate_titles": ["...", "..."],
+  "description": "...",
+  "tags": ["..."],
+  "primary_keywords": ["..."],
+  "thumbnail_headline": "..."
+}
+""".strip()
+
+
+def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> dict[str, Any]:
+    prompt = (
+        SEO_PROMPT
+        + "\n\nCENTRAL QUESTION:\n"
+        + topic["question"]
+        + "\n\nSCRIPT:\n"
+        + "\n\n".join(scene["narration"] for scene in script["scenes"])
+        + "\n\nRESEARCH SOURCES / NOTES:\n"
+        + research[-12000:]
+    )
+    seo = groq_json(
+        GROQ_LIGHT_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=3000,
+        temperature=0.55,
+    )
+    if not seo.get("title") or not seo.get("description") or not seo.get("tags"):
+        raise RuntimeError("SEO output is incomplete.")
+    seo["title"] = normalize_spaces(str(seo["title"]))[:100]
+    seo["tags"] = [normalize_spaces(str(x)) for x in seo.get("tags", []) if normalize_spaces(str(x))]
+    seo["tags"] = seo["tags"][:15]
+    return seo
+
+
+# ---------------------------------------------------------------------------
+# FFmpeg / video assembly
+# ---------------------------------------------------------------------------
+def run_cmd(args: list[str], label: str) -> None:
+    print(f"[FFMPEG] {label}")
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{label} failed (exit {result.returncode}).\n"
+            f"STDERR:\n{result.stderr[-4000:]}"
+        )
+
+
+def audio_duration(path: Path) -> float:
+    data, sr = sf.read(path, always_2d=False)
+    length = len(data) / sr
+    return float(length)
+
+
+def build_concat_file(paths: list[Path], output: Path, durations: list[float] | None = None) -> None:
+    lines: list[str] = []
+    for idx, path in enumerate(paths):
+        lines.append(f"file '{path.resolve().as_posix()}'")
+        if durations is not None:
+            lines.append(f"duration {durations[idx]:.4f}")
+    if durations is not None and paths:
+        lines.append(f"file '{paths[-1].resolve().as_posix()}'")
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def build_video(script: dict[str, Any], out_path: Path) -> float:
+    scenes = script["scenes"]
+    image_paths = [SCENE_DIR / f"scene_{i:03d}.jpg" for i in range(1, len(scenes) + 1)]
+    audio_paths = [AUDIO_DIR / f"scene_{i:03d}.wav" for i in range(1, len(scenes) + 1)]
+    for path in image_paths + audio_paths:
+        if not path.exists():
+            raise RuntimeError(f"Missing render asset: {path}")
+
+    durations = [audio_duration(path) for path in audio_paths]
+    total = sum(durations)
+
+    video_list = WORK_DIR / "video_concat.txt"
+    build_concat_file(image_paths, video_list, durations)
+    video_silent = OUTPUT_DIR / "video_silent.mp4"
+    run_cmd(
+        [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(video_list),
+            "-vf", f"scale={VIDEO_W}:{VIDEO_H}:force_original_aspect_ratio=decrease,pad={VIDEO_W}:{VIDEO_H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+            "-r", str(VIDEO_FPS),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            str(video_silent),
+        ],
+        "render static scene video",
+    )
+
+    audio_list = WORK_DIR / "audio_concat.txt"
+    build_concat_file(audio_paths, audio_list)
+    full_audio = OUTPUT_DIR / "full_audio.wav"
+    run_cmd(
+        [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(audio_list),
+            "-ar", str(AUDIO_SR), "-ac", "1", "-c:a", "pcm_s16le",
+            str(full_audio),
+        ],
+        "concatenate narration",
+    )
+
+    mixed_audio = OUTPUT_DIR / "full_audio_mixed.m4a"
+    if MUSIC_PATH.exists():
+        run_cmd(
+            [
+                "ffmpeg", "-y",
+                "-i", str(full_audio),
+                "-stream_loop", "-1", "-i", str(MUSIC_PATH),
+                "-filter_complex",
+                "[0:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[n];"
+                "[1:a]volume=0.06[m];[n][m]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                "-map", "[a]", "-c:a", "aac", "-b:a", "192k",
+                str(mixed_audio),
+            ],
+            "mix background music",
+        )
+    else:
+        run_cmd(
+            [
+                "ffmpeg", "-y", "-i", str(full_audio),
+                "-af", "highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-c:a", "aac", "-b:a", "192k",
+                str(mixed_audio),
+            ],
+            "normalize narration",
+        )
+
+    run_cmd(
+        [
+            "ffmpeg", "-y",
+            "-i", str(video_silent),
+            "-i", str(mixed_audio),
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest",
+            str(out_path),
+        ],
+        "mux final video",
+    )
+    print(f"[VIDEO] ready: {out_path} (~{total / 60:.1f} min)")
+    checkpoint("video_complete", duration_seconds=round(total, 2))
+    return total
+
+
+# ---------------------------------------------------------------------------
+# YouTube upload
+# ---------------------------------------------------------------------------
+def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) -> str:
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
-    SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
-    credentials = Credentials.from_authorized_user_file("youtube_token.json", SCOPES)
+    token_text = require_secret("YOUTUBE_TOKEN_JSON")
+    client_secret_text = require_secret("YOUTUBE_CLIENT_SECRET_JSON")
+    token_path = ROOT / "youtube_token.json"
+    client_secret_path = ROOT / "client_secret.json"
+    token_path.write_text(token_text, encoding="utf-8")
+    client_secret_path.write_text(client_secret_text, encoding="utf-8")
+
+    scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+    credentials = Credentials.from_authorized_user_file(str(token_path), scopes)
     if not credentials.valid:
         if credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
         else:
-            raise RuntimeError(
-                "YouTube token is invalid and can't be refreshed automatically. "
-                "Re-run the one-time manual login step to generate a fresh youtube_token.json."
-            )
+            raise RuntimeError("YouTube token is invalid/expired and has no usable refresh token.")
 
     youtube = build("youtube", "v3", credentials=credentials)
-
-    request_body = {
+    body = {
         "snippet": {
-            "title": title[:100],
-            "description": description[:4900],
-            "tags": tags,
+            "title": seo["title"][:100],
+            "description": seo["description"][:4900],
+            "tags": seo["tags"][:15],
             "categoryId": "24",
         },
         "status": {
-            "privacyStatus": "private",  # keep this until you've watched a few uploads and trust it
+            "privacyStatus": YOUTUBE_PRIVACY_STATUS,
             "selfDeclaredMadeForKids": False,
         },
     }
-    media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
-    response = youtube.videos().insert(part="snippet,status", body=request_body, media_body=media).execute()
+    media = MediaFileUpload(str(video_path), mimetype="video/mp4", chunksize=-1, resumable=True)
+    response = youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
     video_id = response["id"]
-    print(f"Uploaded! https://youtu.be/{video_id}")
+    print(f"[YOUTUBE] uploaded {video_id} ({YOUTUBE_PRIVACY_STATUS})")
 
     try:
-        youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(thumbnail_path)).execute()
-        print("Thumbnail set.")
-    except Exception as e:
-        print(f"Thumbnail upload failed (likely phone verification not done yet): {e}")
+        youtube.thumbnails().set(
+            videoId=video_id,
+            media_body=MediaFileUpload(str(thumbnail_path), mimetype="image/jpeg"),
+        ).execute()
+        print("[YOUTUBE] thumbnail set")
+    except Exception as exc:
+        print(f"[YOUTUBE] thumbnail upload warning: {exc}")
 
     return video_id
 
 
-# ---------------------------------------------------------------------
-# 11. Run everything
-# ---------------------------------------------------------------------
-parsed_script = generate_all_voiceovers(parsed_script)
-video_path = build_video(parsed_script)
+# ---------------------------------------------------------------------------
+# Run orchestration
+# ---------------------------------------------------------------------------
+def update_history(topic: dict[str, Any], seo: dict[str, Any], video_id: str | None) -> None:
+    history = load_history()
+    item = {
+        "date": datetime.now(timezone.utc).date().isoformat(),
+        "question": topic.get("question"),
+        "topic": topic.get("topic"),
+        "era": topic.get("era"),
+        "title": seo.get("title"),
+        "video_id": video_id,
+    }
+    history["videos"].append(item)
+    # Keep the file useful but bounded.
+    history["videos"] = history["videos"][-200:]
+    save_history(history)
 
-video_title = extract_seo_title(seo_output)[:100]
-thumb_path = generate_thumbnail(parsed_script, video_title)
 
-upload_video(
-    video_path, thumb_path, video_title, seo_output[:4900],
-    tags=["history", parsed_script["era"]],
-)
+def save_manifests(topic: dict[str, Any], research: str, story: dict[str, Any], script: dict[str, Any], seo: dict[str, Any]) -> None:
+    atomic_write_json(TOPIC_PATH, topic)
+    RESEARCH_PATH.write_text(research, encoding="utf-8")
+    atomic_write_json(STORY_PATH, story)
+    atomic_write_json(SCRIPT_PATH, script)
+    atomic_write_json(SEO_PATH, seo)
+    atomic_write_json(
+        MANIFEST_PATH,
+        {
+            "topic": topic,
+            "script_file": str(SCRIPT_PATH.relative_to(ROOT)),
+            "scene_count": len(script.get("scenes", [])),
+            "title": seo.get("title"),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
-print("\nDone.")
+
+def main(mode: str = "full") -> None:
+    print(f"=== {CHANNEL_NAME} / Motive Unknown v2 ===")
+    print(f"MODE={mode} | KOKORO_VOICE={KOKORO_VOICE} | SPEED={KOKORO_SPEED}")
+
+    if mode == "voice_test":
+        voice_test()
+        return
+
+    require_secret("GROQ_API_KEY")
+    require_secret("YOUTUBE_TOKEN_JSON")
+    require_secret("YOUTUBE_CLIENT_SECRET_JSON")
+
+    checkpoint("starting")
+    history = load_history()
+
+    # Stage 1: curiosity question
+    topic = choose_topic(history)
+    atomic_write_json(TOPIC_PATH, topic)
+    checkpoint("topic_complete", question=topic["question"])
+
+    # Stage 2: research
+    research = research_topic(topic)
+    RESEARCH_PATH.write_text(research, encoding="utf-8")
+    checkpoint("research_complete")
+
+    # Stage 3: story architecture
+    story = build_story_plan(topic, research)
+    atomic_write_json(STORY_PATH, story)
+    checkpoint("story_plan_complete")
+
+    # Stage 4: final narration + scene plan
+    script = write_script(topic, research, story)
+    atomic_write_json(SCRIPT_PATH, script)
+    checkpoint("script_complete", scene_count=len(script["scenes"]), words=sum(count_words(s["narration"]) for s in script["scenes"]))
+
+    # Stage 5: local audio
+    generate_voiceovers(script)
+
+    # Stage 6: local illustrated scenes
+    render_scenes(script)
+
+    # Stage 7: SEO
+    seo = build_seo(topic, script, research)
+    atomic_write_json(SEO_PATH, seo)
+    checkpoint("seo_complete", title=seo["title"])
+
+    # Stage 8: dedicated thumbnail
+    thumb = make_thumbnail(script, seo["title"])
+
+    # Stage 9: final video
+    video_path = OUTPUT_DIR / "final_video.mp4"
+    build_video(script, video_path)
+
+    # Stage 10: upload
+    video_id = upload_video(video_path, thumb, seo)
+    update_history(topic, seo, video_id)
+    atomic_write_json(
+        MANIFEST_PATH,
+        {
+            "topic": topic,
+            "title": seo["title"],
+            "video_id": video_id,
+            "privacy_status": YOUTUBE_PRIVACY_STATUS,
+            "scene_count": len(script["scenes"]),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    checkpoint("complete", video_id=video_id, title=seo["title"])
+    print("DONE")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["full", "voice_test"], default="full")
+    args = parser.parse_args()
+    main(args.mode)
