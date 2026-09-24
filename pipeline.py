@@ -1244,8 +1244,11 @@ Continuity:
 Preserve the established illustration language and recurring character design from the
 reference frames, while creating a distinct composition and setting.
 
-No text, captions, subtitles, logos, watermarks, modern objects, photorealism, 3D CGI,
-anime, stick figures, doodles, or flat geometric art.
+No readable text, captions, subtitles, logos, watermarks, letters, numbers, pseudo-writing,
+modern objects, modern roads, asphalt, lane markings, traffic signs, power lines, cars,
+photorealism, 3D CGI, anime, stick figures, doodles, or flat geometric art. Use a genuinely
+period-appropriate road or path rather than a modern paved roadway. Flags and banners must be
+blank or non-readable unless the scene explicitly requires a documented inscription.
 """.strip()
 
         print(f"[VISUAL TEST] Generating sample {idx}/{len(samples)}")
@@ -1357,7 +1360,11 @@ storytelling in every frame, appealing to teenagers and adults.
 
 Do NOT make stick figures, doodles, primitive geometric drawings, flat clip-art,
 photorealism, 3D CGI, anime, modern objects, UI elements, captions, subtitles,
-logos, watermarks, or written words inside the image.
+logos, watermarks, readable text, letters, numbers, pseudo-writing, or written words
+inside the image. Avoid modern roads, asphalt, lane markings, traffic signs, power lines,
+streetlights, cars, modern furniture, modern tools, and other anachronistic infrastructure
+unless the narration explicitly requires a modern setting. Use historically plausible
+roads, materials, tools, clothing, architecture, and transport for the stated era.
 """.strip()
 
 
@@ -1522,7 +1529,10 @@ the same visual world.
 CONTINUITY:
 {continuity}
 
-Create a finished, polished illustration. No text anywhere in the image.
+Create a finished, polished illustration. No readable text, lettering, numbers,
+inscriptions, pseudo-text, logos, or symbols resembling modern writing anywhere in the image.
+Flags, banners, walls, tablets, scrolls, signs, and books must have blank or non-readable
+surfaces unless the narration explicitly requires a specific historical inscription.
 """.strip()
 
 
