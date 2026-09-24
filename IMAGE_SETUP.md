@@ -5,6 +5,7 @@ Motive Unknown uses a multi-provider image-generation chain:
 1. Cloudflare Workers AI — FLUX.2 [klein] 4B
 2. Hugging Face Inference Providers — FLUX.1-schnell
 3. Replicate — FLUX 1.1 [pro] as an emergency fallback
+4. Local CPU/OpenVINO — LCM Dreamshaper INT8 as the no-API fallback
 
 The pipeline tries providers in the order configured by the IMAGE_PROVIDERS GitHub variable. When a provider returns a quota/authentication failure, it is disabled for the rest of that run and the next provider takes over. A normal transient error only falls through for the current image.
 
@@ -18,12 +19,14 @@ Optional API fallbacks:
 - HUGGINGFACE_TOKEN
 - REPLICATE_API_TOKEN
 
-Local CPU test:
+Local CPU fallback:
 - No API token required.
-- The separate `local_image_test` workflow mode uses OpenVINO's INT8 LCM Dreamshaper model on the GitHub runner CPU.
-- This is a feasibility test first; it is NOT yet enabled as the production fallback.
+- The `local_image_test` workflow mode uses OpenVINO's INT8 LCM Dreamshaper model on the GitHub runner CPU.
+- The production fallback creates an isolated Python environment on first use, so the local image stack does not change the main Kokoro/LLM dependency set.
+- The local worker compacts the visual prompt to stay within the model's CLIP context window.
 
 The workflow passes these as secrets; do not place tokens in source files.
+The local CPU path does not require a provider token.
 
 ## Provider details
 
@@ -43,7 +46,8 @@ Because provider limits and free allowances can change, the fallback chain is de
 - Maximum 36 generated visual beats per episode.
 - A persistent style reference is used for Cloudflare generations.
 - A previous-frame reference is used for Cloudflare when recurring characters continue.
-- Fallback providers preserve the detailed visual prompt and historical art direction, but their current integrations are text-to-image, so they do not receive the local reference image directly.
+- Fallback providers preserve the historical art direction, but text-to-image fallbacks do not receive the local reference image directly.
+- The local CPU fallback uses a compact prompt because the model's CLIP text encoder has a short context window.
 
 The generated images are instructed to avoid captions, subtitles, logos, watermarks, stick figures, primitive doodles, modern infrastructure, anachronistic objects, and photorealistic/3D rendering.
 
