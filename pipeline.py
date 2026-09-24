@@ -1419,6 +1419,49 @@ roads, materials, tools, clothing, architecture, and transport for the stated er
 """.strip()
 
 
+def build_visual_plan(script: dict[str, Any]) -> list[list[str]]:
+    """Build one deterministic visual-beat plan for both rendering and video assembly.
+
+    Each scene starts with the normal 1-2 beat splitter. If the episode exceeds the
+    per-episode image cap, the least information-dense two-beat scenes are merged
+    until the plan fits. This keeps narration intact while preventing a hard failure.
+    """
+    plans = [
+        split_visual_beats(str(scene.get("narration", "")))
+        for scene in script["scenes"]
+    ]
+    initial = sum(len(beats) for beats in plans)
+
+    while sum(len(beats) for beats in plans) > MAX_VISUAL_BEATS_PER_VIDEO:
+        candidates = [
+            idx for idx, beats in enumerate(plans)
+            if len(beats) > 1
+        ]
+        if not candidates:
+            break
+        idx = min(
+            candidates,
+            key=lambda i: (
+                sum(count_words(part) for part in plans[i]),
+                i,
+            ),
+        )
+        merged = " ".join(part for part in plans[idx] if part).strip()
+        plans[idx] = [merged]
+
+    final = sum(len(beats) for beats in plans)
+    if initial != final:
+        print(
+            f"[IMAGE PLAN] Reduced visual beats from {initial} to {final} "
+            f"to respect the {MAX_VISUAL_BEATS_PER_VIDEO}-image episode cap."
+        )
+    if final > MAX_VISUAL_BEATS_PER_VIDEO:
+        raise RuntimeError(
+            f"Could not reduce visual plan below {MAX_VISUAL_BEATS_PER_VIDEO} images."
+        )
+    return plans
+
+
 def _image_seed(scene_id: int, beat_index: int) -> int:
     return ((scene_id + 1) * 10007 + (beat_index + 1) * 7919) & 0x7FFFFFFF
 
@@ -1794,22 +1837,14 @@ surfaces unless the narration explicitly requires a specific historical inscript
 def render_scenes(script: dict[str, Any]) -> None:
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
     style_ref = _small_reference(_decode_style_reference(), "style")
-    total_beats = sum(
-        len(split_visual_beats(str(scene.get("narration", ""))))
-        for scene in script["scenes"]
-    )
-    if total_beats > MAX_VISUAL_BEATS_PER_VIDEO:
-        raise RuntimeError(
-            f"Planned {total_beats} visual beats, above the configured per-episode image cap of "
-            f"{MAX_VISUAL_BEATS_PER_VIDEO}. The pipeline intentionally limits daily image generation "
-            "to keep image generation bounded and allow fallbacks to finish in one run."
-        )
+    visual_plan = build_visual_plan(script)
+    total_beats = sum(len(beats) for beats in visual_plan)
 
     previous_image: Path | None = None
     previous_characters: set[str] = set()
 
     for idx, scene in enumerate(script["scenes"], 1):
-        beats = split_visual_beats(str(scene.get("narration", "")))
+        beats = visual_plan[idx - 1]
         current_characters = {
             normalize_spaces(str(x)).lower()
             for x in (scene.get("characters") or [])
@@ -2158,8 +2193,12 @@ def build_concat_file(paths: list[Path], output: Path, durations: list[float] | 
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _visual_beat_durations(narration: str, total_audio_duration: float) -> list[float]:
-    beats = split_visual_beats(narration)
+def _visual_beat_durations(
+    narration: str,
+    total_audio_duration: float,
+    beats: list[str] | None = None,
+) -> list[float]:
+    beats = beats or split_visual_beats(narration)
     if len(beats) == 1:
         return [total_audio_duration]
 
@@ -2184,11 +2223,13 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
     all_durations: list[float] = []
     scene_audio_durations: list[float] = []
 
+    visual_plan = build_visual_plan(script)
+
     for idx, scene in enumerate(scenes, 1):
         audio_path = AUDIO_DIR / f"scene_{idx:03d}.wav"
         duration = audio_duration(audio_path)
         scene_audio_durations.append(duration)
-        beats = split_visual_beats(str(scene.get("narration", "")))
+        beats = visual_plan[idx - 1]
         beat_paths = [
             SCENE_DIR / f"scene_{idx:03d}_beat_{beat_idx:02d}.jpg"
             for beat_idx in range(1, len(beats) + 1)
@@ -2196,7 +2237,11 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
         for path in beat_paths:
             if not path.exists():
                 raise RuntimeError(f"Missing visual beat asset: {path}")
-        beat_durations = _visual_beat_durations(str(scene.get("narration", "")), duration)
+        beat_durations = _visual_beat_durations(
+            str(scene.get("narration", "")),
+            duration,
+            beats,
+        )
         all_images.extend(beat_paths)
         all_durations.extend(beat_durations)
 
