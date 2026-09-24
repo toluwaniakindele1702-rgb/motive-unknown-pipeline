@@ -275,7 +275,7 @@ def groq_call(
             if browser_search:
                 kwargs["tools"] = [{"type": "browser_search"}]
                 kwargs["tool_choice"] = "required"
-                kwargs["citation_options"] = "enabled"
+                kwargs["citation_options"] = "disabled"
 
             response = client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content or ""
