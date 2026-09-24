@@ -95,7 +95,7 @@ CLOUDFLARE_IMAGE_MODEL = os.environ.get(
 ).strip()
 IMAGE_W = 1024
 IMAGE_H = 576
-MAX_VISUAL_BEATS_PER_VIDEO = 80
+MAX_VISUAL_BEATS_PER_VIDEO = 36
 STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Motive Unknown").strip()
@@ -1294,7 +1294,7 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Turn narration into 1-4 natural visual beats, roughly one image every ~33 words."""
+    """Turn narration into 1-4 natural visual beats, roughly one image every ~60 words, with at most two beats per scene."""
     text = normalize_spaces(narration)
     if not text:
         return [""]
@@ -1324,7 +1324,7 @@ def split_visual_beats(narration: str) -> list[str]:
             expanded.append(sentence)
 
     word_total = count_words(text)
-    target_beats = max(1, min(4, int(np.ceil(word_total / 33))))
+    target_beats = max(1, min(2, int(np.ceil(word_total / 60))))
     target_beats = min(target_beats, len(expanded))
 
     while len(expanded) > target_beats:
@@ -1545,8 +1545,9 @@ def render_scenes(script: dict[str, Any]) -> None:
     )
     if total_beats > MAX_VISUAL_BEATS_PER_VIDEO:
         raise RuntimeError(
-            f"Planned {total_beats} visual beats, above the free-tier-safe cap of "
-            f"{MAX_VISUAL_BEATS_PER_VIDEO}. Reduce the script length or beat density."
+            f"Planned {total_beats} visual beats, above the configured Cloudflare budget cap of "
+            f"{MAX_VISUAL_BEATS_PER_VIDEO}. The pipeline intentionally limits daily image generation "
+            "to stay below the free allocation more reliably."
         )
 
     previous_image: Path | None = None
