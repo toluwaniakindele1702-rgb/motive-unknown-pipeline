@@ -1600,6 +1600,159 @@ def render_scenes(script: dict[str, Any]) -> None:
     )
 
 
+
+# ---------------------------------------------------------------------------
+# SEO
+# ---------------------------------------------------------------------------
+SEO_PROMPT = """
+You are the YouTube packaging editor for a history storytelling channel.
+
+The video answers a specific historical curiosity question.
+Create metadata that is discoverable without sounding like spam.
+
+Rules:
+- One primary title under 70 characters. Natural curiosity, no fake claims.
+- Two alternate titles.
+- Description: the first two lines should clearly explain the question and why the story matters.
+  Then a concise spoiler-light summary, followed by a Sources section using the supplied sources.
+- Tags: 12-15 relevant terms. Tags are secondary; do not stuff unrelated keywords.
+- Thumbnail headline: 2-5 words that complement the title instead of repeating it.
+
+Return JSON only:
+{
+  "title": "...",
+  "alternate_titles": ["...", "..."],
+  "description": "...",
+  "tags": ["..."],
+  "primary_keywords": ["..."],
+  "thumbnail_headline": "..."
+}
+""".strip()
+
+
+SEO_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "maxLength": 70},
+        "alternate_titles": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 2,
+        },
+        "description": {"type": "string", "minLength": 80},
+        "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 12,
+            "maxItems": 15,
+        },
+        "primary_keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 8,
+        },
+        "thumbnail_headline": {"type": "string", "minLength": 2, "maxLength": 40},
+    },
+    "required": [
+        "title",
+        "alternate_titles",
+        "description",
+        "tags",
+        "primary_keywords",
+        "thumbnail_headline",
+    ],
+    "additionalProperties": False,
+}
+
+
+def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> dict[str, Any]:
+    prompt = (
+        SEO_PROMPT
+        + "\n\nCENTRAL QUESTION:\n"
+        + topic["question"]
+        + "\n\nSCRIPT:\n"
+        + "\n\n".join(scene["narration"] for scene in script["scenes"])
+        + "\n\nRESEARCH SOURCES / NOTES:\n"
+        + research[-12000:]
+        + """
+
+IMPORTANT JSON RULES:
+- "description" must be one plain string value. Do not put Tags, Sources, or any other JSON key inside it.
+- "tags" must be a JSON array of strings, separate from description.
+- "alternate_titles" must contain exactly two strings.
+- Return only the JSON object. No markdown fences.
+"""
+    )
+
+    if client is None:
+        raise RuntimeError("GROQ_API_KEY is required for SEO generation.")
+
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            response = client.chat.completions.create(
+                model=GROQ_LIGHT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=3200,
+                temperature=0.45,
+                reasoning_effort="low",
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "motive_unknown_seo",
+                        "strict": True,
+                        "schema": SEO_JSON_SCHEMA,
+                    },
+                },
+            )
+            raw = response.choices[0].message.content or ""
+            if not raw.strip():
+                raise RuntimeError("Strict SEO JSON call returned an empty response.")
+            seo = json.loads(raw)
+            if not seo.get("title") or not seo.get("description") or not seo.get("tags"):
+                raise RuntimeError("SEO output is incomplete.")
+            break
+        except Exception as exc:
+            last_error = exc
+            if _is_non_retryable(exc):
+                raise RuntimeError(f"SEO request was rejected: {exc}") from exc
+            if attempt >= 3:
+                raise RuntimeError(f"SEO generation failed after 3 attempts: {exc}") from exc
+            wait = _retry_wait(exc, attempt, base=3.0)
+            print(f"[SEO RETRY] attempt {attempt}/3: {exc}; sleeping {wait:.1f}s")
+            time.sleep(wait)
+
+    if not isinstance(seo, dict):
+        raise RuntimeError("SEO generation returned an invalid object.")
+
+    seo["title"] = normalize_spaces(str(seo["title"]))[:70]
+    seo["alternate_titles"] = [
+        normalize_spaces(str(x))[:100]
+        for x in seo.get("alternate_titles", [])[:2]
+    ]
+    seo["description"] = str(seo["description"]).strip()
+    seo["tags"] = [
+        normalize_spaces(str(x))
+        for x in seo.get("tags", [])
+        if normalize_spaces(str(x))
+    ][:15]
+    seo["primary_keywords"] = [
+        normalize_spaces(str(x))
+        for x in seo.get("primary_keywords", [])
+        if normalize_spaces(str(x))
+    ]
+    seo["thumbnail_headline"] = normalize_spaces(
+        str(seo.get("thumbnail_headline", "History Mystery"))
+    )[:40]
+
+    if len(seo["alternate_titles"]) != 2 or not (12 <= len(seo["tags"]) <= 15):
+        raise RuntimeError("SEO output did not satisfy title/tag requirements.")
+
+    return seo
+
+
 # ---------------------------------------------------------------------------
 # FFmpeg / video assembly
 # ---------------------------------------------------------------------------
