@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 import torch
-from PIL import ImageOps
+from PIL import Image, ImageOps
 from optimum.intel import OVLatentConsistencyModelPipeline
 
 
@@ -169,7 +169,7 @@ def main() -> int:
     image = ImageOps.fit(
         image.convert("RGB"),
         (1024, 576),
-        method=__import__("PIL").Image.Resampling.LANCZOS,
+        method=Image.Resampling.LANCZOS,
     )
     image.save(output_path, format="JPEG", quality=92, optimize=True)
 
