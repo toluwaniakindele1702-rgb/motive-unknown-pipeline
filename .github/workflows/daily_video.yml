@@ -85,8 +85,7 @@ jobs:
       - name: Run pipeline
         shell: bash
         run: |
-          python pipeline_v2.py --mode "$PIPELINE_MODE"
-
+         python pipeline.py --mode "$PIPELINE_MODE"
       - name: Commit topic history and checkpoints
         if: success() && env.PIPELINE_MODE == 'full'
         shell: bash
