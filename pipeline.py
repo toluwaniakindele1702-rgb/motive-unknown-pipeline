@@ -8,7 +8,7 @@ Design goals
 - GPT-OSS 120B for research/storytelling; GPT-OSS 20B for lightweight
   structuring/SEO tasks.
 - Local/open-weight Kokoro TTS (no paid voice API).
-- Polished AI-generated historical illustrations using Cloudflare Workers AI.
+- Polished AI-generated historical illustrations using a multi-provider fallback chain.
 - Each narration scene is split into 1-4 visual beats so the picture changes frequently.
 - A persistent style-reference image plus prior-frame references improve visual continuity.
 - No Ken Burns zoom and no burned-in subtitles.
@@ -41,8 +41,8 @@ Optional repo assets
 assets/music/background.mp3  royalty-free / licensed music only
 assets/visual_style_reference.jpg.b64  embedded JPEG style reference used as an image-model style anchor
 
-The workflow file supplied with this package runs daily and also supports a
-manual "voice_test" mode before committing to a full production run.
+The workflow file supplied with this package runs daily and also supports manual
+"voice_test", "visual_test", and "local_image_test" modes.
 """
 
 from __future__ import annotations
@@ -93,11 +93,11 @@ KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "0.96"))
 # Polished AI illustration generation.
 IMAGE_PROVIDER_ORDER = [
     x.strip().lower()
-    for x in os.environ.get("IMAGE_PROVIDERS", "cloudflare,huggingface,replicate").split(",")
+    for x in os.environ.get("IMAGE_PROVIDERS", "cloudflare,huggingface,replicate,local").split(",")
     if x.strip()
 ]
 if not IMAGE_PROVIDER_ORDER:
-    IMAGE_PROVIDER_ORDER = ["cloudflare", "huggingface", "replicate"]
+    IMAGE_PROVIDER_ORDER = ["cloudflare", "huggingface", "replicate", "local"]
 IMAGE_PROVIDER = IMAGE_PROVIDER_ORDER[0]
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
@@ -112,6 +112,13 @@ REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-la
 IMAGE_W = 1024
 IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = 36
+LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
+LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
+LOCAL_IMAGE_WIDTH = int(os.environ.get("LOCAL_IMAGE_WIDTH", "768"))
+LOCAL_IMAGE_HEIGHT = int(os.environ.get("LOCAL_IMAGE_HEIGHT", "512"))
+LOCAL_IMAGE_ENV_DIR = WORK_DIR / ".local_image_env"
+LOCAL_IMAGE_WORKER = ROOT / "local_image_worker.py"
+LOCAL_IMAGE_DEPS = ROOT / "requirements-local-image.txt"
 STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Motive Unknown").strip()
@@ -1206,74 +1213,32 @@ def voice_test() -> Path:
 
 
 def local_image_test() -> None:
-    """Generate one CPU image with an open, quantized OpenVINO model.
-
-    This is deliberately a separate test mode so we can measure whether CPU
-    generation is practical on the GitHub-hosted runner before making it an
-    unattended production fallback.
-    """
+    """Generate one CPU image with the isolated OpenVINO worker."""
     test_dir = WORK_DIR / "local_image_test"
     test_dir.mkdir(parents=True, exist_ok=True)
     out = test_dir / "sample_01.jpg"
 
-    model_id = os.environ.get(
-        "LOCAL_IMAGE_MODEL",
-        "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
-    ).strip()
-
-    prompt = f"""
-{POLISHED_VISUAL_STYLE}
-
-Create one polished 16:9 historical documentary illustration.
-
-SCENE:
-A bustling ancient African market beside a river at sunrise. A historically grounded
-merchant speaks with a traveler beside woven baskets and traded goods. Mud-brick buildings,
-wooden boats, fabrics, pottery, trees, and other period-appropriate details create a rich,
-layered environment. Faces and gestures are expressive and anatomically believable.
-The image should feel like a premium hand-illustrated history documentary frame.
-
-No readable text, captions, subtitles, logos, watermarks, letters, numbers, pseudo-writing,
-modern roads, asphalt, lane markings, cars, power lines, modern clothing, photorealism,
-3D CGI, anime, stick figures, doodles, or flat clip-art.
+    prompt = """
+Polished 2D historical cartoon, cinematic storybook, expressive believable people,
+richly layered environment, crisp ink contours, painterly cel-shaded color, warm natural light.
+Ancient African river market at sunrise. A historically grounded merchant speaks with a traveler
+beside woven baskets and traded goods. Mud-brick buildings, wooden boats, fabrics, pottery and
+trees create depth. No readable text, logos, modern objects, photorealism, 3D CGI, anime, cars,
+asphalt or lane markings.
 """.strip()
 
     started = time.time()
-    print(f"[LOCAL IMAGE TEST] Loading OpenVINO model: {model_id}")
-    try:
-        from optimum.intel import OVLatentConsistencyModelPipeline
-    except Exception as exc:
-        raise RuntimeError(
-            "Local image test dependencies are missing. The workflow installs "
-            "optimum[openvino] only for local_image_test."
-        ) from exc
-
-    try:
-        pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id, safety_checker=None)
-        image = pipeline(
-            prompt,
-            num_inference_steps=4,
-            width=768,
-            height=512,
-        ).images[0]
-        image = image.convert("RGB")
-        image = ImageOps.fit(image, (1024, 576), method=Image.Resampling.LANCZOS)
-        image.save(out, format="JPEG", quality=92, optimize=True)
-    except Exception as exc:
-        raise RuntimeError(f"Local OpenVINO image generation failed: {exc}") from exc
+    print(f"[LOCAL IMAGE TEST] Loading OpenVINO model: {LOCAL_IMAGE_MODEL}")
+    _run_local_image(prompt, out, 9001)
 
     elapsed = time.time() - started
-    if not out.exists() or out.stat().st_size < 10000:
-        raise RuntimeError("Local image test produced no valid image file.")
-
     checkpoint(
         "local_image_test_complete",
-        image_model=model_id,
+        image_model=LOCAL_IMAGE_MODEL,
         output=str(out.relative_to(ROOT)),
         seconds=round(elapsed, 2),
     )
     print(f"[LOCAL IMAGE TEST] Complete in {elapsed:.1f}s: {out}")
-
 
 def visual_test() -> None:
     """Generate a few polished sample frames without LLM, TTS, or YouTube."""
@@ -1572,55 +1537,90 @@ def _replicate_image(prompt: str, out_path: Path, seed: int) -> None:
     _save_provider_image_bytes(out_path, image_response.content, "replicate")
 
 
-def _local_image(prompt: str, out_path: Path, seed: int) -> None:
-    """CPU-only emergency provider using an OpenVINO INT8 LCM model."""
-    model_id = os.environ.get(
-        "LOCAL_IMAGE_MODEL",
-        "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
-    ).strip()
+def _local_python() -> Path:
+    return LOCAL_IMAGE_ENV_DIR / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def _ensure_local_image_environment() -> Path:
+    """Create the isolated local-image environment on first use in a run."""
+    if not LOCAL_IMAGE_WORKER.exists():
+        raise ImageProviderError("local", f"Missing local image worker: {LOCAL_IMAGE_WORKER}", disable_for_run=True)
+    if not LOCAL_IMAGE_DEPS.exists():
+        raise ImageProviderError("local", f"Missing local image dependency file: {LOCAL_IMAGE_DEPS}", disable_for_run=True)
+
+    python_bin = _local_python()
+    marker = LOCAL_IMAGE_ENV_DIR / ".ready"
+    if python_bin.exists() and marker.exists():
+        return python_bin
+
+    print("[LOCAL IMAGE] Creating isolated CPU environment...")
     try:
-        from optimum.intel import OVLatentConsistencyModelPipeline
-    except Exception as exc:
+        if not python_bin.exists():
+            subprocess.run(
+                [sys.executable, "-m", "venv", "--system-site-packages", str(LOCAL_IMAGE_ENV_DIR)],
+                check=True,
+                timeout=180,
+            )
+        subprocess.run(
+            [
+                str(python_bin), "-m", "pip", "install",
+                "--disable-pip-version-check",
+                "--upgrade-strategy", "only-if-needed",
+                "-r", str(LOCAL_IMAGE_DEPS),
+            ],
+            check=True,
+            timeout=900,
+        )
+        atomic_write_text(marker, "ready\n")
+    except subprocess.SubprocessError as exc:
         raise ImageProviderError(
             "local",
-            f"Local OpenVINO dependencies are unavailable: {exc}",
+            f"Could not prepare isolated local image environment: {str(exc)[:1800]}",
             disable_for_run=True,
         ) from exc
+    return python_bin
 
-    print(f"[IMAGE] Local OpenVINO {model_id} seed={seed}")
+
+def _run_local_image(prompt: str, out_path: Path, seed: int) -> None:
+    python_bin = _ensure_local_image_environment()
+    request_path = WORK_DIR / f"local_image_request_{seed}.json"
+    atomic_write_json(
+        request_path,
+        {
+            "model_id": LOCAL_IMAGE_MODEL,
+            "prompt": prompt,
+            "output_path": str(out_path.resolve()),
+            "seed": seed,
+            "steps": LOCAL_IMAGE_STEPS,
+            "width": LOCAL_IMAGE_WIDTH,
+            "height": LOCAL_IMAGE_HEIGHT,
+        },
+    )
+    print(f"[IMAGE] Local OpenVINO {LOCAL_IMAGE_MODEL} seed={seed}")
     try:
-        pipeline = getattr(_local_image, "_pipeline", None)
-        loaded_model = getattr(_local_image, "_model_id", None)
-        if pipeline is None or loaded_model != model_id:
-            pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id, safety_checker=None)
-            setattr(_local_image, "_pipeline", pipeline)
-            setattr(_local_image, "_model_id", model_id)
-
-        generator = None
-        try:
-            import torch
-            generator = torch.Generator(device="cpu").manual_seed(seed)
-        except Exception:
-            pass
-
-        result = pipeline(
-            prompt,
-            num_inference_steps=int(os.environ.get("LOCAL_IMAGE_STEPS", "4")),
-            width=int(os.environ.get("LOCAL_IMAGE_WIDTH", "768")),
-            height=int(os.environ.get("LOCAL_IMAGE_HEIGHT", "512")),
-            generator=generator,
+        subprocess.run(
+            [str(python_bin), str(LOCAL_IMAGE_WORKER), str(request_path)],
+            check=True,
+            timeout=900,
         )
-        image = result.images[0].convert("RGB")
-        image = ImageOps.fit(image, (IMAGE_W, IMAGE_H), method=Image.Resampling.LANCZOS)
-        image.save(out_path, format="JPEG", quality=92, optimize=True)
-    except Exception as exc:
+    except subprocess.SubprocessError as exc:
         raise ImageProviderError(
             "local",
-            f"Local OpenVINO image generation failed: {str(exc)[:1800]}",
+            f"Local OpenVINO worker failed: {str(exc)[:1800]}",
         ) from exc
+    finally:
+        try:
+            request_path.unlink()
+        except OSError:
+            pass
 
     if not out_path.exists() or out_path.stat().st_size < 10000:
         raise ImageProviderError("local", "Local provider produced no valid image file.")
+
+
+def _local_image(prompt: str, out_path: Path, seed: int) -> None:
+    """CPU-only emergency provider using an isolated OpenVINO LCM worker."""
+    _run_local_image(prompt, out_path, seed)
 
 
 def _generate_image_with_fallback(prompt: str, out_path: Path, seed: int, references: list[Path]) -> str:
