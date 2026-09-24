@@ -1,34 +1,53 @@
-# Polished image generation setup
+# Image generation setup
 
-Motive Unknown now uses Cloudflare Workers AI with FLUX.2 [klein] 4B for scene illustrations.
+Motive Unknown uses a multi-provider image-generation chain:
+
+1. Cloudflare Workers AI — FLUX.2 [klein] 4B
+2. Hugging Face Inference Providers — FLUX.1-schnell
+3. Replicate — FLUX 1.1 [pro] as an emergency fallback
+
+The pipeline tries providers in the order configured by the IMAGE_PROVIDERS GitHub variable. When a provider returns a quota/authentication failure, it is disabled for the rest of that run and the next provider takes over. A normal transient error only falls through for the current image.
 
 ## Required GitHub Actions secrets
 
-Add these repository secrets:
+Main pipeline:
+- CLOUDFLARE_ACCOUNT_ID
+- CLOUDFLARE_API_TOKEN
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
+Fallbacks:
+- HUGGINGFACE_TOKEN
+- REPLICATE_API_TOKEN
 
-Cloudflare's current Workers AI REST setup is documented at:
-https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+The workflow passes these as secrets; do not place tokens in source files.
 
-For a custom API token, Cloudflare says the token needs Workers AI Read and Workers AI Edit permissions.
+## Provider details
 
-The repository can remain private.
+Cloudflare is the primary provider and currently uses FLUX.2 [klein] 4B.
 
-## GitHub
+Hugging Face provides text-to-image through its Inference Providers API. Free users currently receive a small monthly credit allowance, so this is intended as a backup rather than an unlimited second pool.
 
-Repository Settings -> Secrets and variables -> Actions -> New repository secret.
+Replicate's current Try for Free collection includes FLUX 1.1 [pro] for a limited number of free runs. After the free allowance is exhausted, Replicate requires paid credits for continued API use.
+
+Because provider limits and free allowances can change, the fallback chain is designed to skip a provider that is unavailable rather than assume every provider is permanently free.
 
 ## Visual behavior
 
 - 1024x576 source illustrations, scaled to 1280x720 during video assembly.
-- 1-4 visual beats per narration scene.
-- About one new illustration per 33 narration words.
-- Maximum 80 illustrations per episode to stay within the current free-tier budget target.
-- A persistent style reference is used on every generation.
-- A previous-frame reference is also used when the next beat shares recurring characters.
+- Up to 2 visual beats per narration scene.
+- About one new illustration per 60 narration words.
+- Maximum 36 generated visual beats per episode.
+- A persistent style reference is used for Cloudflare generations.
+- A previous-frame reference is used for Cloudflare when recurring characters continue.
+- Fallback providers preserve the detailed visual prompt and historical art direction, but their current integrations are text-to-image, so they do not receive the local reference image directly.
 
-The generated images are instructed to avoid captions, subtitles, logos, watermarks, stick figures, primitive doodles, and photorealistic/3D rendering.
+The generated images are instructed to avoid captions, subtitles, logos, watermarks, stick figures, primitive doodles, modern infrastructure, anachronistic objects, and photorealistic/3D rendering.
 
-Cloudflare currently documents FLUX.2 [klein] 4B as a 4-step image model with support for up to four reference images.
+Cloudflare documentation:
+https://developers.cloudflare.com/workers-ai/get-started/rest-api/
+https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/
+
+Hugging Face text-to-image documentation:
+https://huggingface.co/docs/inference-providers/tasks/text-to-image
+
+Replicate FLUX 1.1 [pro] documentation:
+https://replicate.com/black-forest-labs/flux-1.1-pro
