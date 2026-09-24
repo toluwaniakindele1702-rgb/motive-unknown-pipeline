@@ -1753,6 +1753,125 @@ IMPORTANT JSON RULES:
     return seo
 
 
+
+# ---------------------------------------------------------------------------
+# AI thumbnail
+# ---------------------------------------------------------------------------
+def make_thumbnail(script: dict[str, Any], title: str) -> Path:
+    THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    final = OUTPUT_DIR / "thumbnail.jpg"
+    cached_ai = THUMB_DIR / "thumbnail_ai.jpg"
+
+    thumb = script.get("thumbnail", {}) or {}
+    subject = str(thumb.get("subject", "historical figure")).strip()
+    prop = str(thumb.get("supporting_prop", "important historical object")).strip()
+    emotion = str(thumb.get("emotion", "surprised and curious")).strip()
+    composition = str(thumb.get("composition", "left_subject_right_prop")).strip()
+    era = str(script.get("era", "History")).strip()
+
+    side_note = {
+        "left_subject_right_prop": "Place the main subject prominently on the left and the important object or symbol on the right.",
+        "right_subject_left_prop": "Place the main subject prominently on the right and the important object or symbol on the left.",
+        "central_subject": "Place the main subject prominently near the center with the important object or symbol clearly visible beside them.",
+    }.get(composition, "Use a strong asymmetrical YouTube thumbnail composition with a clear focal subject.")
+
+    style_ref = _small_reference(_decode_style_reference(), "thumbnail_style")
+
+    prompt = f"""
+{POLISHED_VISUAL_STYLE}
+
+Create a polished 16:9 YouTube thumbnail illustration for a history mystery documentary.
+
+ERA:
+{era}
+
+MAIN SUBJECT:
+{subject}
+
+IMPORTANT OBJECT / SYMBOL:
+{prop}
+
+EXPRESSION / BODY LANGUAGE:
+{emotion}
+
+COMPOSITION:
+{side_note}
+
+Make the main subject large enough to read clearly at thumbnail size. Use a dramatic but
+fact-grounded moment, strong silhouette separation, rich historical detail, expressive faces,
+and a clean focal hierarchy. Keep the image visually bold without becoming cluttered.
+
+No readable text, letters, numbers, pseudo-writing, captions, subtitles, logos, watermarks,
+modern infrastructure, modern clothing, cars, asphalt lane markings, or other anachronisms.
+""".strip()
+
+    if not cached_ai.exists() or cached_ai.stat().st_size < 10000:
+        _cloudflare_image(prompt, cached_ai, 71003, [style_ref])
+
+    with Image.open(cached_ai) as base:
+        image = base.convert("RGB").resize((1280, 720))
+
+    draw = ImageDraw.Draw(image)
+    headline = normalize_spaces(
+        str(thumb.get("headline") or title or "HISTORY MYSTERY")
+    ).upper()
+    headline = headline[:36]
+
+    font = FONT_88
+    max_width = 720
+    words = headline.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font, stroke_width=2)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    lines = lines[:3]
+
+    x = 45 if "right" not in composition else 720
+    y = 45
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font, stroke_width=3)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        draw.rounded_rectangle(
+            [x - 12, y - 12, min(1260, x + w + 24), y + h + 24],
+            radius=18,
+            fill=BLACK,
+        )
+        draw.text(
+            (x, y),
+            line,
+            font=font,
+            fill=WHITE,
+            stroke_width=2,
+            stroke_fill=BLACK,
+        )
+        y += h + 24
+
+    draw.rounded_rectangle(
+        [35, 650, 370, 705],
+        radius=14,
+        fill=BLACK,
+    )
+    draw.text(
+        (52, 660),
+        era[:28],
+        font=FONT_28,
+        fill=WHITE,
+    )
+
+    image.save(final, format="JPEG", quality=94, optimize=True)
+    print(f"[THUMBNAIL] AI thumbnail ready: {final}")
+    return final
+
+
 # ---------------------------------------------------------------------------
 # FFmpeg / video assembly
 # ---------------------------------------------------------------------------
