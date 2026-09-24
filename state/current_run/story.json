@@ -1,0 +1,91 @@
+{
+  "central_question": "Why did the Titanic’s wireless operators ignore or delay the ice‑warning messages that could have saved the ship?",
+  "hook": "At 22:55 on April 14, the Titanic’s radio room was flooded with a frantic call from the SS Californian: “We are stopped and surrounded by ice.” The operator, Jack Phillips, replied with a terse code that meant nothing more than “stop transmitting.” The ship’s fate hung on that single, misinterpreted exchange.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Hook the audience with the most dramatic moment of the night.",
+      "reveal": "The Titanic’s wireless room is buzzing; an urgent ice warning arrives, but the operator’s reply is a dead‑end.",
+      "required_facts": [
+        "Californian’s second call 22:55",
+        "Phillips’ reply ‘DDD’"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Pose the mystery that drives the narrative.",
+      "reveal": "Why did the Titanic’s wireless operators fail to act on the ice warnings that could have altered the course?",
+      "required_facts": [
+        "Central question"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Give just enough background to understand the stakes.",
+      "reveal": "The Titanic’s Marconi set had been down for hours, a backlog of passenger telegrams was swelling, and Marconi’s commercial policy gave priority to passenger traffic unless a message bore the special “MSG” prefix.",
+      "required_facts": [
+        "Marconi policy",
+        "Backlog of passenger traffic",
+        "Spark‑gap issues"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Show the first hint of failure.",
+      "reveal": "On April 13, a warning from the SS Baltic is forwarded to the bridge, but later warnings from Mesaba and Californian arrive without the “MSG” tag and are logged but never passed to the bridge.",
+      "required_facts": [
+        "Baltic warning 13 Apr",
+        "Mesaba warning 21:30",
+        "Californian first call 17:35"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Escalate the tension with overlapping signals and operator fatigue.",
+      "reveal": "The spark‑gap transmitter’s interference causes the Californian’s strong signal to drown out weaker messages from Cape Race, while Phillips, exhausted after six hours of repairs and a backlog of telegrams, can’t keep up.",
+      "required_facts": [
+        "Spark‑gap interference",
+        "Phillips’ fatigue",
+        "Cape Race traffic"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint twist – the protocol gap is revealed.",
+      "reveal": "Marconi’s own rules state that only “MSG”‑marked telegrams must be forwarded to the bridge; most ice reports lack that tag, so the operators are not legally obligated to interrupt passenger traffic.",
+      "required_facts": [
+        "Marconi protocol",
+        "MSG requirement"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Deepen the mystery by showing the bridge’s blind spot.",
+      "reveal": "The bridge receives the Baltic warning but not the later Mesaba or Californian alerts, leaving the crew unaware of the growing ice field until the iceberg strikes.",
+      "required_facts": [
+        "Bridge receipt of Baltic warning",
+        "Lack of Mesaba/Californian alerts"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Payoff – explain the systemic failure.",
+      "reveal": "The operators followed Marconi’s commercial policy and the wireless protocol; the failure was not willful neglect but a combination of technical problems, commercial priorities, and a lack of duty to forward every ice report.",
+      "required_facts": [
+        "Inquiries’ findings",
+        "Marconi policy",
+        "Technical issues"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "End with a lasting implication.",
+      "reveal": "The disaster forced the 1914 Radio Act and the 1915 SOLAS convention to mandate 24‑hour radio watches and give ice warnings priority over passenger traffic, forever changing maritime safety.",
+      "required_facts": [
+        "1914 Radio Act",
+        "1915 SOLAS"
+      ]
+    }
+  ],
+  "ending_payoff": "The Titanic’s tragedy was not a single act of negligence but a systemic collapse of technology, policy, and human endurance—an ugly reminder that safety can be sacrificed when commercial interests outpace protocol."
+}
