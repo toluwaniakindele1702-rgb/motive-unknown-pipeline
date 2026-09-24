@@ -1,5 +1,5 @@
 """
-Motive Unknown v2 — curiosity-first automated history video factory.
+Motive Unknown v3 — curiosity-first automated history video factory.
 
 Design goals
 ------------
@@ -1800,9 +1800,9 @@ def render_scenes(script: dict[str, Any]) -> None:
     )
     if total_beats > MAX_VISUAL_BEATS_PER_VIDEO:
         raise RuntimeError(
-            f"Planned {total_beats} visual beats, above the configured Cloudflare budget cap of "
+            f"Planned {total_beats} visual beats, above the configured per-episode image cap of "
             f"{MAX_VISUAL_BEATS_PER_VIDEO}. The pipeline intentionally limits daily image generation "
-            "to stay below the free allocation more reliably."
+            "to keep image generation bounded and allow fallbacks to finish in one run."
         )
 
     previous_image: Path | None = None
