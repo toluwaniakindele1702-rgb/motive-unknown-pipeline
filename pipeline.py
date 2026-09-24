@@ -1189,6 +1189,85 @@ def voice_test() -> Path:
     return out
 
 
+def visual_test() -> None:
+    """Generate a few polished sample frames without LLM, TTS, or YouTube."""
+    if IMAGE_PROVIDER != "cloudflare":
+        raise RuntimeError(
+            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
+            "The visual test currently requires cloudflare."
+        )
+    require_secret("CLOUDFLARE_ACCOUNT_ID")
+    require_secret("CLOUDFLARE_API_TOKEN")
+
+    test_dir = WORK_DIR / "visual_test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    style_ref = _small_reference(_decode_style_reference(), "visual_test_style")
+
+    samples = [
+        (
+            "A powerful ancient African ruler stands before a thriving riverside city at sunrise, "
+            "wearing historically grounded royal garments and holding a ceremonial staff; traders, "
+            "boats, stone buildings, palms, and a busy market fill the layered background."
+        ),
+        (
+            "Inside an ancient royal workshop, skilled artisans examine a mysterious object on a table "
+            "while the ruler and advisors watch closely; detailed period tools, fabrics, architecture, "
+            "lamps, shelves, and expressive faces create a believable historical scene."
+        ),
+        (
+            "At dusk, a small group of historical travelers crosses a monumental desert road toward a "
+            "distant walled city and temple complex; banners move in the wind, pack animals carry supplies, "
+            "and the composition feels like a polished illustrated documentary frame."
+        ),
+    ]
+
+    previous: Path | None = None
+    outputs: list[str] = []
+    for idx, description in enumerate(samples, 1):
+        out = test_dir / f"sample_{idx:02d}.jpg"
+        refs = [style_ref]
+        if previous is not None:
+            refs.append(_small_reference(previous, f"visual_test_prev_{idx:02d}"))
+
+        prompt = f"""
+{POLISHED_VISUAL_STYLE}
+
+Create a polished historical documentary illustration in 16:9.
+The image should feel like a premium hand-illustrated storybook frame rather than clip-art.
+Keep human anatomy convincing, faces expressive, environments richly layered, and historical
+details coherent. Use the supplied style reference as the visual anchor.
+
+SCENE:
+{description}
+
+Continuity:
+Preserve the established illustration language and recurring character design from the
+reference frames, while creating a distinct composition and setting.
+
+No text, captions, subtitles, logos, watermarks, modern objects, photorealism, 3D CGI,
+anime, stick figures, doodles, or flat geometric art.
+""".strip()
+
+        print(f"[VISUAL TEST] Generating sample {idx}/{len(samples)}")
+        _cloudflare_image(
+            prompt,
+            out,
+            _image_seed(9000, idx - 1),
+            refs,
+        )
+        previous = out
+        outputs.append(str(out.relative_to(ROOT)))
+
+    checkpoint(
+        "visual_test_complete",
+        image_provider=IMAGE_PROVIDER,
+        image_model=CLOUDFLARE_IMAGE_MODEL,
+        samples=outputs,
+    )
+    print("[VISUAL TEST] Complete. Inspect the generated sample images in the workflow artifact.")
+
+
+
 # ---------------------------------------------------------------------------
 # Polished AI illustration renderer
 # ---------------------------------------------------------------------------
@@ -1737,6 +1816,45 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
     return video_id
 
 
+def validate_youtube_credentials() -> None:
+    """Preflight the stored YouTube OAuth credentials before expensive work."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    token_text = require_secret("YOUTUBE_TOKEN_JSON")
+    client_secret_text = require_secret("YOUTUBE_CLIENT_SECRET_JSON")
+
+    try:
+        token_info = json.loads(token_text)
+        client_info = json.loads(client_secret_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("YouTube credential secrets must contain valid JSON.") from exc
+
+    if not isinstance(token_info, dict):
+        raise RuntimeError("YOUTUBE_TOKEN_JSON must contain a JSON object.")
+    if not isinstance(client_info, dict):
+        raise RuntimeError("YOUTUBE_CLIENT_SECRET_JSON must contain a JSON object.")
+
+    scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+    credentials = Credentials.from_authorized_user_info(token_info, scopes)
+
+    if not credentials.valid:
+        if credentials.expired and credentials.refresh_token:
+            try:
+                credentials.refresh(Request())
+            except Exception as exc:
+                raise RuntimeError(
+                    "YouTube OAuth refresh failed. The saved refresh token may be expired or revoked."
+                ) from exc
+        else:
+            raise RuntimeError(
+                "YouTube OAuth credentials are invalid and do not have a usable refresh token."
+            )
+
+    print("[YOUTUBE PREFLIGHT] OAuth credentials are usable.")
+
+
+
 # ---------------------------------------------------------------------------
 # Run orchestration
 # ---------------------------------------------------------------------------
@@ -1780,6 +1898,10 @@ def main(mode: str = "full") -> None:
 
     if mode == "voice_test":
         voice_test()
+        return
+
+    if mode == "visual_test":
+        visual_test()
         return
 
     require_secret("GROQ_API_KEY")
@@ -1889,6 +2011,6 @@ def main(mode: str = "full") -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["full", "voice_test"], default="full")
+    parser.add_argument("--mode", choices=["full", "voice_test", "visual_test"], default="full")
     args = parser.parse_args()
     main(args.mode)
