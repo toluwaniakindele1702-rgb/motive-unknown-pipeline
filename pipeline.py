@@ -1538,6 +1538,43 @@ Return JSON only:
 """.strip()
 
 
+SEO_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "maxLength": 70},
+        "alternate_titles": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 2,
+        },
+        "description": {"type": "string", "minLength": 80},
+        "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 12,
+            "maxItems": 15,
+        },
+        "primary_keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 8,
+        },
+        "thumbnail_headline": {"type": "string", "minLength": 2, "maxLength": 40},
+    },
+    "required": [
+        "title",
+        "alternate_titles",
+        "description",
+        "tags",
+        "primary_keywords",
+        "thumbnail_headline",
+    ],
+    "additionalProperties": False,
+}
+
+
 def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> dict[str, Any]:
     prompt = (
         SEO_PROMPT
@@ -1547,19 +1584,60 @@ def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> d
         + "\n\n".join(scene["narration"] for scene in script["scenes"])
         + "\n\nRESEARCH SOURCES / NOTES:\n"
         + research[-12000:]
+        + """
+
+IMPORTANT JSON RULES:
+- "description" must be one plain string value. Do not put Tags, Sources, or any other JSON key inside it.
+- "tags" must be a JSON array of strings, separate from description.
+- "alternate_titles" must contain exactly two strings.
+- Return only the JSON object. No markdown fences.
+"""
     )
-    seo = groq_json(
-        GROQ_LIGHT_MODEL,
-        [{"role": "user", "content": prompt}],
-        max_completion_tokens=3000,
-        temperature=0.55,
-    )
-    if not seo.get("title") or not seo.get("description") or not seo.get("tags"):
-        raise RuntimeError("SEO output is incomplete.")
-    seo["title"] = normalize_spaces(str(seo["title"]))[:100]
+
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            response = client.chat.completions.create(
+                model=GROQ_LIGHT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=3200,
+                temperature=0.45,
+                reasoning_effort="low",
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "motive_unknown_seo",
+                        "strict": True,
+                        "schema": SEO_JSON_SCHEMA,
+                    },
+                },
+            )
+            raw = response.choices[0].message.content or ""
+            if not raw.strip():
+                raise RuntimeError("Strict SEO JSON call returned an empty response.")
+            seo = json.loads(raw)
+            if not seo.get("title") or not seo.get("description") or not seo.get("tags"):
+                raise RuntimeError("SEO output is incomplete.")
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt >= 3:
+                raise RuntimeError(f"SEO generation failed after 3 attempts: {exc}") from exc
+            wait = _retry_wait(exc, attempt, base=3.0)
+            print(f"[SEO RETRY] attempt {attempt}/3: {exc}; sleeping {wait:.1f}s")
+            time.sleep(wait)
+
+    assert isinstance(seo, dict)
+    seo["title"] = normalize_spaces(str(seo["title"]))[:70]
+    seo["alternate_titles"] = [normalize_spaces(str(x))[:100] for x in seo.get("alternate_titles", [])[:2]]
+    seo["description"] = str(seo["description"]).strip()
     seo["tags"] = [normalize_spaces(str(x)) for x in seo.get("tags", []) if normalize_spaces(str(x))]
     seo["tags"] = seo["tags"][:15]
+    seo["primary_keywords"] = [normalize_spaces(str(x)) for x in seo.get("primary_keywords", []) if normalize_spaces(str(x))]
+    seo["thumbnail_headline"] = normalize_spaces(str(seo.get("thumbnail_headline", "History Mystery")))[:40]
     return seo
+
+
 
 
 # ---------------------------------------------------------------------------
