@@ -63,13 +63,14 @@ from PIL import Image, ImageDraw, ImageFont
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
 STATE_DIR = ROOT / "state"
+CURRENT_RUN_DIR = STATE_DIR / "current_run"
 WORK_DIR = ROOT / "run_work"
 SCENE_DIR = WORK_DIR / "scenes"
 AUDIO_DIR = WORK_DIR / "audio"
 THUMB_DIR = WORK_DIR / "thumbnails"
 OUTPUT_DIR = WORK_DIR / "output"
 
-for d in (STATE_DIR, WORK_DIR, SCENE_DIR, AUDIO_DIR, THUMB_DIR, OUTPUT_DIR):
+for d in (STATE_DIR, CURRENT_RUN_DIR, WORK_DIR, SCENE_DIR, AUDIO_DIR, THUMB_DIR, OUTPUT_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
@@ -127,6 +128,15 @@ SCRIPT_PATH = WORK_DIR / "script.json"
 MANIFEST_PATH = WORK_DIR / "manifest.json"
 
 
+# Small text-only artifacts survive a fresh GitHub Actions runner.
+CURRENT_TOPIC_PATH = CURRENT_RUN_DIR / "topic.json"
+CURRENT_RESEARCH_PATH = CURRENT_RUN_DIR / "research.txt"
+CURRENT_STORY_PATH = CURRENT_RUN_DIR / "story.json"
+CURRENT_SCRIPT_PATH = CURRENT_RUN_DIR / "script.json"
+CURRENT_SEO_PATH = CURRENT_RUN_DIR / "seo.json"
+CURRENT_UPLOAD_PATH = CURRENT_RUN_DIR / "upload.json"
+
+
 def atomic_write_text(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
@@ -165,6 +175,38 @@ def checkpoint(stage: str, **extra: Any) -> None:
     }
     atomic_write_json(RUN_META_PATH, data)
     print(f"[CHECKPOINT] {stage}")
+
+
+def _save_current_json(path: Path, data: Any) -> None:
+    atomic_write_json(path, data)
+
+
+def _save_current_text(path: Path, content: str) -> None:
+    atomic_write_text(path, content)
+
+
+def _load_current_json(path: Path) -> Any | None:
+    if not path.exists():
+        return None
+    return load_json(path, None)
+
+
+def _load_current_text(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def clear_current_run() -> None:
+    for path in CURRENT_RUN_DIR.glob("*"):
+        if path.is_file():
+            try:
+                path.unlink()
+            except OSError as exc:
+                print(f"[STATE] Could not remove {path}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -756,13 +798,32 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
     script = groq_json(
         GROQ_WRITER_MODEL,
         [{"role": "user", "content": prompt}],
-        max_completion_tokens=7000,
+        max_completion_tokens=7200,
         temperature=0.78,
-        attempts=4,
+        attempts=3,
     )
+
+    # Do not kill the run just because the model under-produced. First allow a
+    # lenient structural validation, then repair the same story to target length.
+    validate_script(script, allow_short=True)
+    total_words = _script_word_count(script)
+    needs_repair = total_words < SCRIPT_MIN_WORDS or total_words > SCRIPT_MAX_WORDS
+    needs_repair = needs_repair or any(
+        not (110 <= count_words(str(scene.get("narration", ""))) <= 170)
+        for scene in script["scenes"]
+    )
+    if needs_repair:
+        print(f"[SCRIPT] repair pass needed: ~{total_words} words")
+        script = _repair_script_length(topic, research, plan, script)
+
+    validate_script(script)
+    issues = _script_style_issues(script)
+    if issues:
+        print(f"[SCRIPT] style polish pass needed: {issues}")
+        script = _polish_script_style(topic, research, plan, script, issues)
+
     validate_script(script)
     return script
-
 
 def validate_script(script: dict[str, Any]) -> None:
     scenes = script.get("scenes")
@@ -782,6 +843,107 @@ def validate_script(script: dict[str, Any]) -> None:
     if not (SCRIPT_MIN_WORDS <= total_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(f"Total script word count {total_words} outside {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}.")
     print(f"[SCRIPT] validated: {len(scenes)} scenes, ~{total_words} words")
+
+
+SCRIPT_STYLE_RED_FLAGS = (
+    "the sun was shining",
+    "the water was calm",
+    "little did they know",
+    "in the annals of history",
+    "through the mists of time",
+    "from the dawn of time",
+)
+
+
+def _script_word_count(script: dict[str, Any]) -> int:
+    return sum(count_words(str(scene.get("narration", ""))) for scene in script.get("scenes", []))
+
+
+def _script_style_issues(script: dict[str, Any]) -> list[str]:
+    full_text = " ".join(str(scene.get("narration", "")) for scene in script.get("scenes", []))
+    lower = full_text.lower()
+    issues = [f"Avoid stale phrase: {phrase}" for phrase in SCRIPT_STYLE_RED_FLAGS if phrase in lower]
+    q_count = full_text.count("?")
+    if q_count > max(8, len(script.get("scenes", [])) // 2):
+        issues.append("Too many rhetorical questions; keep only questions that genuinely advance the story.")
+    return issues
+
+
+def _repair_script_length(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
+    current_words = _script_word_count(script)
+    prompt = f"""
+The draft below is structurally useful, but its narration is too short or uneven.
+
+Rewrite the SAME story. Preserve supported facts, scene order, characters, settings, actions, and props.
+Do not invent facts, dialogue, motives, or events.
+
+Targets:
+- Keep exactly {len(script["scenes"])} scenes.
+- Make each narration 80-120 words.
+- Aim for about 1900-2200 total words.
+- Add explanation, consequences, concrete actions, and useful context.
+- Never pad with scenery, repetition, generic suspense, or fake dialogue.
+- Keep the modern, conversational storyteller voice.
+- Make the opening immediately curious.
+
+Return JSON only in the same schema as the draft.
+
+TOPIC:
+{json.dumps(topic, ensure_ascii=False)}
+
+STORY PLAN:
+{json.dumps(plan, ensure_ascii=False)}
+
+RESEARCH:
+{research}
+
+DRAFT:
+{json.dumps(script, ensure_ascii=False)}
+""".strip()
+    repaired = groq_json(
+        GROQ_WRITER_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=6500,
+        temperature=0.65,
+        attempts=2,
+    )
+    validate_script(repaired)
+    return repaired
+
+
+def _polish_script_style(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any], issues: list[str]) -> dict[str, Any]:
+    prompt = f"""
+Polish this finished history script because it triggered these style checks:
+{json.dumps(issues, ensure_ascii=False)}
+
+Keep the same factual meaning, central question, scene order, characters, settings, actions, props,
+and approximate length. Remove old-fashioned novel phrasing, decorative scenery, filler, and excessive
+rhetorical questions. Make it sound like a brilliant modern storyteller speaking directly to a curious
+teenager and adults. Do not invent facts, dialogue, motives, or events.
+
+Return JSON only in the same schema as the input.
+
+TOPIC:
+{json.dumps(topic, ensure_ascii=False)}
+
+STORY PLAN:
+{json.dumps(plan, ensure_ascii=False)}
+
+RESEARCH:
+{research}
+
+DRAFT:
+{json.dumps(script, ensure_ascii=False)}
+""".strip()
+    polished = groq_json(
+        GROQ_WRITER_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=6500,
+        temperature=0.55,
+        attempts=2,
+    )
+    validate_script(polished)
+    return polished
 
 
 # ---------------------------------------------------------------------------
@@ -1106,12 +1268,6 @@ def make_scene(scene: dict[str, Any], era: str, output_path: Path) -> None:
         x, y = prop_positions[idx]
         draw_prop(draw, x, y, str(prop), 1.0)
 
-    # A small scene label is useful visually, but never burns narration/subtitles.
-    label = normalize_spaces(scene.get("setting", ""))[:48]
-    if label:
-        draw.rounded_rectangle([40, 40, 40 + min(580, 25 * len(label) + 40), 92], radius=16, fill=(255, 255, 255), outline=INK, width=3)
-        draw.text((58, 53), label, font=FONT_28, fill=INK)
-
     # Tiny decorative hand-drawn dots/lines to keep the frame from feeling too sterile.
     random.seed(scene.get("id", 0) * 7919)
     for _ in range(22):
@@ -1385,6 +1541,22 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
             raise RuntimeError("YouTube token is invalid/expired and has no usable refresh token.")
 
     youtube = build("youtube", "v3", credentials=credentials)
+
+    # Avoid duplicate uploads if a previous runner uploaded before another stage failed.
+    existing_upload = _load_current_json(CURRENT_UPLOAD_PATH)
+    if isinstance(existing_upload, dict) and existing_upload.get("video_id"):
+        video_id = str(existing_upload["video_id"])
+        print(f"[YOUTUBE] Reusing previously uploaded video {video_id}")
+        try:
+            youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(thumbnail_path),
+            ).execute()
+            print("[YOUTUBE] thumbnail set on reused upload")
+        except Exception as exc:
+            print(f"[YOUTUBE] thumbnail upload warning: {exc}")
+        return video_id
+
     body = {
         "snippet": {
             "title": seo["title"][:100],
@@ -1400,6 +1572,11 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
     media = MediaFileUpload(str(video_path), mimetype="video/mp4", chunksize=-1, resumable=True)
     response = youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
     video_id = response["id"]
+    _save_current_json(CURRENT_UPLOAD_PATH, {
+        "video_id": video_id,
+        "privacy_status": YOUTUBE_PRIVACY_STATUS,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    })
     print(f"[YOUTUBE] uploaded {video_id} ({YOUTUBE_PRIVACY_STATUS})")
 
     try:
@@ -1452,7 +1629,7 @@ def save_manifests(topic: dict[str, Any], research: str, story: dict[str, Any], 
 
 
 def main(mode: str = "full") -> None:
-    print(f"=== {CHANNEL_NAME} / Motive Unknown v2 ===")
+    print(f"=== {CHANNEL_NAME} / Motive Unknown v3 ===")
     print(f"MODE={mode} | KOKORO_VOICE={KOKORO_VOICE} | SPEED={KOKORO_SPEED}")
 
     if mode == "voice_test":
@@ -1466,45 +1643,68 @@ def main(mode: str = "full") -> None:
     checkpoint("starting")
     history = load_history()
 
-    # Stage 1: curiosity question
-    topic = choose_topic(history)
-    atomic_write_json(TOPIC_PATH, topic)
-    checkpoint("topic_complete", question=topic["question"])
+    # Reuse small text artifacts saved by a previous failed Actions run.
+    topic = _load_current_json(CURRENT_TOPIC_PATH)
+    topic_resumed = isinstance(topic, dict) and bool(topic.get("question"))
+    if topic_resumed:
+        print("[RESUME] Reusing saved topic.")
+    else:
+        topic = choose_topic(history)
+        _save_current_json(CURRENT_TOPIC_PATH, topic)
+    checkpoint("topic_complete", question=topic["question"], resumed=topic_resumed)
 
-    # Stage 2: research
-    research = research_topic(topic)
+    research = _load_current_text(CURRENT_RESEARCH_PATH)
+    research_resumed = bool(research)
+    if research_resumed:
+        print("[RESUME] Reusing saved research.")
+    else:
+        research = research_topic(topic)
+        _save_current_text(CURRENT_RESEARCH_PATH, research)
     RESEARCH_PATH.write_text(research, encoding="utf-8")
-    checkpoint("research_complete")
+    checkpoint("research_complete", resumed=research_resumed)
 
-    # Stage 3: story architecture
-    story = build_story_plan(topic, research)
+    story = _load_current_json(CURRENT_STORY_PATH)
+    story_resumed = isinstance(story, dict) and bool(story.get("story_arc"))
+    if story_resumed:
+        print("[RESUME] Reusing saved story plan.")
+    else:
+        story = build_story_plan(topic, research)
+        _save_current_json(CURRENT_STORY_PATH, story)
     atomic_write_json(STORY_PATH, story)
-    checkpoint("story_plan_complete")
+    checkpoint("story_plan_complete", resumed=story_resumed)
 
-    # Stage 4: final narration + scene plan
-    script = write_script(topic, research, story)
+    script = _load_current_json(CURRENT_SCRIPT_PATH)
+    if isinstance(script, dict):
+        try:
+            validate_script(script, allow_short=False)
+            print("[RESUME] Reusing saved validated script.")
+        except Exception as exc:
+            print(f"[RESUME] Saved script invalid; regenerating: {exc}")
+            script = None
+    if script is None:
+        script = write_script(topic, research, story)
+        _save_current_json(CURRENT_SCRIPT_PATH, script)
     atomic_write_json(SCRIPT_PATH, script)
-    checkpoint("script_complete", scene_count=len(script["scenes"]), words=sum(count_words(s["narration"]) for s in script["scenes"]))
+    checkpoint("script_complete", scene_count=len(script["scenes"]), words=_script_word_count(script))
 
-    # Stage 5: local audio
+    # Audio/scenes are regenerated on fresh runners from the saved script.
     generate_voiceovers(script)
-
-    # Stage 6: local illustrated scenes
     render_scenes(script)
 
-    # Stage 7: SEO
-    seo = build_seo(topic, script, research)
+    seo = _load_current_json(CURRENT_SEO_PATH)
+    seo_resumed = isinstance(seo, dict) and bool(seo.get("title") and seo.get("description") and seo.get("tags"))
+    if seo_resumed:
+        print("[RESUME] Reusing saved SEO package.")
+    else:
+        seo = build_seo(topic, script, research)
+        _save_current_json(CURRENT_SEO_PATH, seo)
     atomic_write_json(SEO_PATH, seo)
-    checkpoint("seo_complete", title=seo["title"])
+    checkpoint("seo_complete", title=seo["title"], resumed=seo_resumed)
 
-    # Stage 8: dedicated thumbnail
     thumb = make_thumbnail(script, seo["title"])
-
-    # Stage 9: final video
     video_path = OUTPUT_DIR / "final_video.mp4"
     build_video(script, video_path)
 
-    # Stage 10: upload
     video_id = upload_video(video_path, thumb, seo)
     update_history(topic, seo, video_id)
     atomic_write_json(
@@ -1518,6 +1718,8 @@ def main(mode: str = "full") -> None:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
+
+    clear_current_run()
     checkpoint("complete", video_id=video_id, title=seo["title"])
     print("DONE")
 
