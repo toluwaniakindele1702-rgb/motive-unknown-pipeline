@@ -1249,7 +1249,7 @@ modern roads, asphalt, lane markings, cars, power lines, modern clothing, photor
         ) from exc
 
     try:
-        pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id)
+        pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id, safety_checker=None)
         image = pipeline(
             prompt,
             num_inference_steps=4,
@@ -1592,7 +1592,7 @@ def _local_image(prompt: str, out_path: Path, seed: int) -> None:
         pipeline = getattr(_local_image, "_pipeline", None)
         loaded_model = getattr(_local_image, "_model_id", None)
         if pipeline is None or loaded_model != model_id:
-            pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id)
+            pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id, safety_checker=None)
             setattr(_local_image, "_pipeline", pipeline)
             setattr(_local_image, "_model_id", model_id)
 
