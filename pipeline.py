@@ -700,22 +700,62 @@ Return JSON:
 
 
 def build_story_plan(topic: dict[str, Any], research: str) -> dict[str, Any]:
-    prompt = (
+    base_prompt = (
         STORY_ARCHITECT_PROMPT
         + "\n\nTOPIC:\n"
         + json.dumps(topic, ensure_ascii=False)
         + "\n\nRESEARCH DOSSIER:\n"
         + research
     )
-    plan = groq_json(
-        GROQ_LIGHT_MODEL,
-        [{"role": "user", "content": prompt}],
-        max_completion_tokens=3500,
-        temperature=0.55,
+
+    last_plan: dict[str, Any] | None = None
+    for attempt in range(1, 4):
+        prompt = base_prompt
+        if attempt > 1:
+            prompt += """
+REPAIR PASS: The previous story plan was too thin.
+Return at least 10 substantial story_arc sections. Each section must contain:
+section (integer), purpose, reveal, and required_facts (2-4 evidence-backed facts).
+Do not repeat sections or pad with generic suspense.
+""".strip()
+        try:
+            plan = groq_json(
+                GROQ_LIGHT_MODEL,
+                [{"role": "user", "content": prompt}],
+                max_completion_tokens=4200,
+                temperature=0.45,
+                attempts=2,
+            )
+        except Exception as exc:
+            print(f"[STORY] architect attempt {attempt} failed: {exc}")
+            continue
+
+        last_plan = plan
+        arc = plan.get("story_arc")
+        if isinstance(arc, list) and len(arc) >= 8:
+            valid = all(
+                isinstance(item, dict)
+                and item.get("purpose")
+                and item.get("reveal")
+                and isinstance(item.get("required_facts"), list)
+                for item in arc
+            )
+            if valid:
+                print(f"[STORY] validated: {len(arc)} story sections")
+                return plan
+
+        print(
+            f"[STORY] architect attempt {attempt} returned insufficient structure "
+            f"({len(arc) if isinstance(arc, list) else 0} sections)"
+        )
+
+    keys = sorted(last_plan.keys()) if isinstance(last_plan, dict) else []
+    raise RuntimeError(
+        "Story architect could not produce at least 8 complete story sections after 3 attempts. "
+        f"Last response keys: {keys}"
     )
-    if not plan.get("story_arc") or len(plan["story_arc"]) < 8:
-        raise RuntimeError("Story architect returned too little structure.")
-    return plan
+
+
 
 
 SCRIPTWRITER_PROMPT = """
@@ -807,9 +847,13 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
     # lenient structural validation, then repair the same story to target length.
     validate_script(script, allow_short=True)
     total_words = _script_word_count(script)
+    scene_count = len(script["scenes"])
+    avg_target = max(50, min(105, round(2050 / scene_count)))
+    min_scene_words = max(45, avg_target - 10)
+    max_scene_words = min(120, avg_target + 15)
     needs_repair = total_words < SCRIPT_MIN_WORDS or total_words > SCRIPT_MAX_WORDS
     needs_repair = needs_repair or any(
-        not (110 <= count_words(str(scene.get("narration", ""))) <= 170)
+        not (min_scene_words <= count_words(str(scene.get("narration", ""))) <= max_scene_words)
         for scene in script["scenes"]
     )
     if needs_repair:
@@ -825,7 +869,7 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
     validate_script(script)
     return script
 
-def validate_script(script: dict[str, Any]) -> None:
+def validate_script(script: dict[str, Any], allow_short: bool = False) -> None:
     scenes = script.get("scenes")
     if not isinstance(scenes, list) or not (SCENE_MIN <= len(scenes) <= SCENE_MAX):
         raise RuntimeError(f"Script scene count must be {SCENE_MIN}-{SCENE_MAX}; got {len(scenes) if isinstance(scenes, list) else 0}.")
@@ -840,7 +884,7 @@ def validate_script(script: dict[str, Any]) -> None:
             if key not in scene:
                 raise RuntimeError(f"Scene {i} missing {key}.")
         total_words += words
-    if not (SCRIPT_MIN_WORDS <= total_words <= SCRIPT_MAX_WORDS):
+    if not allow_short and not (SCRIPT_MIN_WORDS <= total_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(f"Total script word count {total_words} outside {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}.")
     print(f"[SCRIPT] validated: {len(scenes)} scenes, ~{total_words} words")
 
@@ -871,15 +915,20 @@ def _script_style_issues(script: dict[str, Any]) -> list[str]:
 
 def _repair_script_length(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
     current_words = _script_word_count(script)
+    scene_count = len(script["scenes"])
+    avg_target = max(50, min(105, round(2050 / scene_count)))
+    min_scene_words = max(45, avg_target - 10)
+    max_scene_words = min(120, avg_target + 15)
+
     prompt = f"""
-The draft below is structurally useful, but its narration is too short or uneven.
+The draft below is structurally useful, but its narration is too short or uneven ({current_words} words).
 
 Rewrite the SAME story. Preserve supported facts, scene order, characters, settings, actions, and props.
 Do not invent facts, dialogue, motives, or events.
 
 Targets:
-- Keep exactly {len(script["scenes"])} scenes.
-- Make each narration 80-120 words.
+- Keep exactly {scene_count} scenes.
+- Make each narration about {min_scene_words}-{max_scene_words} words.
 - Aim for about 1900-2200 total words.
 - Add explanation, consequences, concrete actions, and useful context.
 - Never pad with scenery, repetition, generic suspense, or fake dialogue.
@@ -909,6 +958,8 @@ DRAFT:
     )
     validate_script(repaired)
     return repaired
+
+
 
 
 def _polish_script_style(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any], issues: list[str]) -> dict[str, Any]:
