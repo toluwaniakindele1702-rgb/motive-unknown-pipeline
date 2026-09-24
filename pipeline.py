@@ -846,6 +846,8 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
     # Do not kill the run just because the model under-produced. First allow a
     # lenient structural validation, then repair the same story to target length.
     validate_script(script, allow_short=True)
+    atomic_write_json(SCRIPT_PATH, script)
+    _save_current_json(CURRENT_SCRIPT_PATH, script)
     total_words = _script_word_count(script)
     scene_count = len(script["scenes"])
     avg_target = max(50, min(105, round(2050 / scene_count)))
@@ -915,42 +917,44 @@ def _script_style_issues(script: dict[str, Any]) -> list[str]:
 
 def _repair_script_length(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
     """
-    Expand narration in small batches instead of asking the model to rewrite the
-    entire JSON document at once. This makes it much harder for the model to
-    truncate the response while still preserving the original scene structure.
+    Expand narration in small batches. Partial progress is written to the
+    persistent current-run state after every successful batch.
     """
     current_words = _script_word_count(script)
     scene_count = len(script["scenes"])
     avg_target = max(50, min(105, round(2050 / scene_count)))
-    min_scene_words = max(45, avg_target - 10)
+    min_scene_words = max(45, avg_target - 20)
     max_scene_words = min(120, avg_target + 15)
+
+    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    atomic_write_json(SCRIPT_PATH, repaired)
+    _save_current_json(CURRENT_SCRIPT_PATH, repaired)
 
     print(
         f"[SCRIPT] batch repair: {current_words} words -> target ~2050 "
         f"({min_scene_words}-{max_scene_words} words/scene)"
     )
 
-    repaired = json.loads(json.dumps(script, ensure_ascii=False))
     batch_size = 6
-
     for start in range(0, scene_count, batch_size):
         end = min(scene_count, start + batch_size)
         batch = repaired["scenes"][start:end]
+        success = False
 
-        prompt = f"""
+        for attempt in range(1, 4):
+            prompt = f"""
 You are repairing narration for scenes {start + 1}-{end} of a history video.
 
-Expand ONLY the narration text for these scenes. Do not change scene IDs, setting, characters,
-action, props, or mood. Preserve the factual meaning and all supported claims. Do not invent facts,
-dialogue, motives, or events.
+Expand ONLY the narration text. Do not change scene IDs, setting, characters, action, props, or mood.
+Preserve factual meaning and supported claims. Do not invent facts, dialogue, motives, or events.
 
-Each scene must be {min_scene_words}-{max_scene_words} words.
+Each narration should be roughly {min_scene_words}-{max_scene_words} words.
 Add useful historical explanation, consequences, decisions, evidence, and transitions.
 Do NOT add scenery filler, repetition, generic suspense, fake dialogue, or decorative prose.
 Keep the modern, conversational storyteller voice.
 
 Return JSON only:
-{{"narrations": ["narration for scene {start + 1}", "..."]}}
+{{"narrations": ["one narration per scene, in order"]}}
 
 TOPIC:
 {json.dumps(topic, ensure_ascii=False)}
@@ -958,7 +962,7 @@ TOPIC:
 STORY PLAN:
 {json.dumps(plan, ensure_ascii=False)}
 
-SCENES TO REPAIR:
+SCENES:
 {json.dumps(
     [{"id": scene["id"], "narration": scene["narration"], "setting": scene["setting"],
       "characters": scene["characters"], "action": scene["action"], "props": scene["props"],
@@ -967,38 +971,102 @@ SCENES TO REPAIR:
 )}
 """.strip()
 
-        result = groq_json(
-            GROQ_WRITER_MODEL,
-            [{"role": "user", "content": prompt}],
-            max_completion_tokens=2200,
-            temperature=0.55,
-            attempts=3,
-        )
-        narrations = result.get("narrations")
-        if not isinstance(narrations, list) or len(narrations) != len(batch):
-            raise RuntimeError(
-                f"Script repair batch {start + 1}-{end} returned "
-                f"{len(narrations) if isinstance(narrations, list) else 0} narrations; "
-                f"expected {len(batch)}."
-            )
-
-        for scene, narration in zip(batch, narrations):
-            words = count_words(str(narration))
-            if not (min_scene_words <= words <= max_scene_words):
-                raise RuntimeError(
-                    f"Script repair produced {words} words for scene {scene['id']}; "
-                    f"expected {min_scene_words}-{max_scene_words}."
+            try:
+                result = groq_json(
+                    GROQ_WRITER_MODEL,
+                    [{"role": "user", "content": prompt}],
+                    max_completion_tokens=2400,
+                    temperature=0.50,
+                    attempts=3,
                 )
-            scene["narration"] = str(narration).strip()
+                narrations = result.get("narrations")
+                if not isinstance(narrations, list) or len(narrations) != len(batch):
+                    raise RuntimeError(
+                        f"expected {len(batch)} narrations, got "
+                        f"{len(narrations) if isinstance(narrations, list) else 0}"
+                    )
+
+                for scene, narration in zip(batch, narrations):
+                    words = count_words(str(narration))
+                    # Do not fail an otherwise healthy run over a few words on one scene.
+                    if not (45 <= words <= 120):
+                        raise RuntimeError(
+                            f"scene {scene['id']} returned {words} words; accepted range is 45-120"
+                        )
+                    scene["narration"] = str(narration).strip()
+
+                success = True
+                break
+            except Exception as exc:
+                print(f"[SCRIPT] repair batch {start + 1}-{end}, attempt {attempt} failed: {exc}")
+
+        if not success:
+            raise RuntimeError(f"Could not repair narration batch {start + 1}-{end} after 3 attempts.")
+
+        # Persist progress so a fresh scheduled/manual run resumes here.
+        atomic_write_json(SCRIPT_PATH, repaired)
+        _save_current_json(CURRENT_SCRIPT_PATH, repaired)
+        print(f"[SCRIPT] saved repair progress through scene {end} (~{_script_word_count(repaired)} words)")
 
     final_words = _script_word_count(repaired)
+
+    # If the batches still landed slightly short overall, top up in the same
+    # bounded batches rather than failing because of one underlong scene.
+    if final_words < SCRIPT_MIN_WORDS:
+        deficit = SCRIPT_MIN_WORDS - final_words
+        print(f"[SCRIPT] top-up needed: {deficit} words")
+        topup_per_scene = max(8, min(30, int(np.ceil(deficit / scene_count)) + 3))
+
+        for start in range(0, scene_count, batch_size):
+            end = min(scene_count, start + batch_size)
+            batch = repaired["scenes"][start:end]
+            prompt = f"""
+Lightly expand the narration for these history-video scenes.
+
+Preserve every fact and the existing wording as much as practical. Add only useful explanation,
+context, consequences, or transitions. Do not add scenery, repetition, dialogue, or unsupported claims.
+
+Add roughly {topup_per_scene} useful words to EACH narration. Never take any scene above 120 words.
+
+Return JSON only:
+{{"narrations": ["one updated narration per scene, in order"]}}
+
+SCENES:
+{json.dumps(
+    [{"id": scene["id"], "narration": scene["narration"]} for scene in batch],
+    ensure_ascii=False,
+)}
+""".strip()
+            result = groq_json(
+                GROQ_WRITER_MODEL,
+                [{"role": "user", "content": prompt}],
+                max_completion_tokens=1800,
+                temperature=0.40,
+                attempts=3,
+            )
+            narrations = result.get("narrations")
+            if not isinstance(narrations, list) or len(narrations) != len(batch):
+                raise RuntimeError("Top-up returned the wrong number of narrations.")
+            for scene, narration in zip(batch, narrations):
+                words = count_words(str(narration))
+                if not (45 <= words <= 120):
+                    raise RuntimeError(
+                        f"Top-up produced {words} words for scene {scene['id']}; expected 45-120."
+                    )
+                scene["narration"] = str(narration).strip()
+            atomic_write_json(SCRIPT_PATH, repaired)
+            _save_current_json(CURRENT_SCRIPT_PATH, repaired)
+
+        final_words = _script_word_count(repaired)
+
     if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(
-            f"Script batch repair finished at {final_words} words; "
+            f"Script repair finished at {final_words} words; "
             f"expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
         )
+
     validate_script(repaired)
-    print(f"[SCRIPT] batch repair successful: ~{final_words} words")
+    print(f"[SCRIPT] repair successful: ~{final_words} words")
     return repaired
 
 
@@ -1767,14 +1835,22 @@ def main(mode: str = "full") -> None:
     script = _load_current_json(CURRENT_SCRIPT_PATH)
     if isinstance(script, dict):
         try:
-            validate_script(script, allow_short=False)
-            print("[RESUME] Reusing saved validated script.")
+            validate_script(script, allow_short=True)
+            saved_words = _script_word_count(script)
+            if SCRIPT_MIN_WORDS <= saved_words <= SCRIPT_MAX_WORDS:
+                print(f"[RESUME] Reusing saved validated script (~{saved_words} words).")
+            else:
+                print(f"[RESUME] Reusing saved partial script (~{saved_words} words) and continuing repair.")
+                script = _repair_script_length(topic, research, story, script)
+                _save_current_json(CURRENT_SCRIPT_PATH, script)
         except Exception as exc:
             print(f"[RESUME] Saved script invalid; regenerating: {exc}")
             script = None
+
     if script is None:
         script = write_script(topic, research, story)
-        _save_current_json(CURRENT_SCRIPT_PATH, script)
+
+
     atomic_write_json(SCRIPT_PATH, script)
     checkpoint("script_complete", scene_count=len(script["scenes"]), words=_script_word_count(script))
 
