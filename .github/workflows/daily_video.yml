@@ -15,6 +15,7 @@ on:
           - full
           - voice_test
           - visual_test
+          - local_image_test
 
 concurrency:
   group: motive-unknown-production
@@ -93,6 +94,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install local image test dependencies
+        if: env.PIPELINE_MODE == 'local_image_test'
+        shell: bash
+        run: |
+          python -m pip install --upgrade "optimum[openvino]"
 
       - name: Preflight checks
         shell: bash
