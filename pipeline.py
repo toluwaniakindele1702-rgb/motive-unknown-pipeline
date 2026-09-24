@@ -23,6 +23,7 @@ YOUTUBE_TOKEN_JSON
 YOUTUBE_CLIENT_SECRET_JSON
 CLOUDFLARE_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN
+PIXAZO_API_KEY
 
 Optional GitHub Variables / Secrets
 -----------------------------------
@@ -86,13 +87,23 @@ KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_onyx").strip()
 KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "0.96"))
 
 # Polished AI illustration generation.
-IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "cloudflare").strip().lower()
+IMAGE_PROVIDER_ORDER = [
+    x.strip().lower()
+    for x in os.environ.get("IMAGE_PROVIDERS", "cloudflare,pollinations,pixazo").split(",")
+    if x.strip()
+]
+if not IMAGE_PROVIDER_ORDER:
+    IMAGE_PROVIDER_ORDER = ["cloudflare", "pollinations", "pixazo"]
+IMAGE_PROVIDER = IMAGE_PROVIDER_ORDER[0]
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
 CLOUDFLARE_IMAGE_MODEL = os.environ.get(
     "CLOUDFLARE_IMAGE_MODEL",
     "@cf/black-forest-labs/flux-2-klein-4b",
 ).strip()
+POLLINATIONS_IMAGE_MODEL = os.environ.get("POLLINATIONS_IMAGE_MODEL", "flux").strip()
+PIXAZO_API_KEY = os.environ.get("PIXAZO_API_KEY", "").strip()
+PIXAZO_IMAGE_MODEL = os.environ.get("PIXAZO_IMAGE_MODEL", "flux").strip()
 IMAGE_W = 1024
 IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = 36
@@ -1252,18 +1263,19 @@ blank or non-readable unless the scene explicitly requires a documented inscript
 """.strip()
 
         print(f"[VISUAL TEST] Generating sample {idx}/{len(samples)}")
-        _cloudflare_image(
+        provider_used = _generate_image_with_fallback(
             prompt,
             out,
             _image_seed(9000, idx - 1),
             refs,
         )
         previous = out
-        outputs.append(str(out.relative_to(ROOT)))
+        outputs.append({"path": str(out.relative_to(ROOT)), "provider": provider_used})
 
     checkpoint(
         "visual_test_complete",
-        image_provider=IMAGE_PROVIDER,
+        image_providers=IMAGE_PROVIDER_ORDER,
+        primary_image_provider=IMAGE_PROVIDER,
         image_model=CLOUDFLARE_IMAGE_MODEL,
         samples=outputs,
     )
@@ -1401,12 +1413,167 @@ def _small_reference(path: Path, label: str) -> Path:
     return out
 
 
-def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[Path]) -> None:
-    if IMAGE_PROVIDER != "cloudflare":
-        raise RuntimeError(
-            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
-            "The polished image renderer currently requires cloudflare."
+class ImageProviderError(RuntimeError):
+    def __init__(self, provider: str, message: str, *, disable_for_run: bool = False):
+        super().__init__(message)
+        self.provider = provider
+        self.disable_for_run = disable_for_run
+
+
+def _save_provider_image_bytes(out_path: Path, raw: bytes, provider: str) -> None:
+    if len(raw) < 1000:
+        raise ImageProviderError(provider, "Provider returned an empty or tiny image payload.")
+    try:
+        out_path.write_bytes(raw)
+        with Image.open(out_path) as image:
+            image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
+    except Exception as exc:
+        raise ImageProviderError(provider, f"Provider returned invalid image data: {exc}") from exc
+
+
+def _pollinations_image(prompt: str, out_path: Path, seed: int) -> None:
+    url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt, safe='')}"
+    params = {
+        "width": str(IMAGE_W),
+        "height": str(IMAGE_H),
+        "model": POLLINATIONS_IMAGE_MODEL,
+        "seed": str(seed),
+        "nologo": "true",
+        "private": "true",
+        "safe": "true",
+    }
+    print(f"[IMAGE] Pollinations {POLLINATIONS_IMAGE_MODEL} seed={seed}")
+    try:
+        response = requests.get(url, params=params, timeout=300)
+    except requests.RequestException as exc:
+        raise ImageProviderError("pollinations", f"Pollinations request failed: {exc}") from exc
+
+    if response.status_code != 200:
+        disable = response.status_code in {401, 403, 429}
+        raise ImageProviderError(
+            "pollinations",
+            f"Pollinations failed with HTTP {response.status_code}: {response.text[:1200]}",
+            disable_for_run=disable,
         )
+    _save_provider_image_bytes(out_path, response.content, "pollinations")
+
+
+def _pixazo_image(prompt: str, out_path: Path, seed: int) -> None:
+    if not PIXAZO_API_KEY:
+        raise ImageProviderError(
+            "pixazo",
+            "PIXAZO_API_KEY is not configured.",
+            disable_for_run=True,
+        )
+
+    url = "https://gateway.pixazo.ai/flux/text-to-image"
+    headers = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Ocp-Apim-Subscription-Key": PIXAZO_API_KEY,
+    }
+    data = {
+        "prompt": prompt,
+        "seed": seed,
+        "width": IMAGE_W,
+        "height": IMAGE_H,
+    }
+    print(f"[IMAGE] Pixazo {PIXAZO_IMAGE_MODEL} seed={seed}")
+    try:
+        response = requests.post(url, json=data, headers=headers, timeout=180)
+    except requests.RequestException as exc:
+        raise ImageProviderError("pixazo", f"Pixazo request failed: {exc}") from exc
+
+    if response.status_code not in {200, 201, 202}:
+        disable = response.status_code in {401, 403, 429, 402}
+        raise ImageProviderError(
+            "pixazo",
+            f"Pixazo failed with HTTP {response.status_code}: {response.text[:1200]}",
+            disable_for_run=disable,
+        )
+
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise ImageProviderError("pixazo", "Pixazo returned invalid JSON.") from exc
+
+    output_url = None
+    for key in ("output", "image_url", "url", "media_url"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            output_url = value.strip()
+            break
+    if not output_url and isinstance(payload.get("output"), dict):
+        for key in ("url", "media_url", "image_url"):
+            value = payload["output"].get(key)
+            if isinstance(value, str) and value.strip():
+                output_url = value.strip()
+                break
+
+    if not output_url:
+        raise ImageProviderError(
+            "pixazo",
+            f"Pixazo returned no image URL: {json.dumps(payload)[:1600]}",
+        )
+
+    try:
+        image_response = requests.get(output_url, timeout=120)
+    except requests.RequestException as exc:
+        raise ImageProviderError("pixazo", f"Pixazo image download failed: {exc}") from exc
+
+    if image_response.status_code != 200:
+        raise ImageProviderError(
+            "pixazo",
+            f"Pixazo image download failed with HTTP {image_response.status_code}.",
+        )
+    _save_provider_image_bytes(out_path, image_response.content, "pixazo")
+
+
+def _generate_image_with_fallback(
+    prompt: str,
+    out_path: Path,
+    seed: int,
+    references: list[Path],
+) -> str:
+    disabled: set[str] = getattr(_generate_image_with_fallback, "_disabled", set())
+    attempted: list[str] = []
+
+    for provider in IMAGE_PROVIDER_ORDER:
+        if provider in disabled:
+            continue
+        attempted.append(provider)
+        try:
+            if provider == "cloudflare":
+                _cloudflare_image(prompt, out_path, seed, references)
+            elif provider == "pollinations":
+                _pollinations_image(prompt, out_path, seed)
+            elif provider == "pixazo":
+                _pixazo_image(prompt, out_path, seed)
+            else:
+                print(f"[IMAGE] Unknown provider '{provider}', skipping.")
+                continue
+
+            print(f"[IMAGE] provider used: {provider}")
+            return provider
+        except ImageProviderError as exc:
+            print(f"[IMAGE FALLBACK] {provider} failed: {exc}")
+            if exc.disable_for_run:
+                disabled.add(provider)
+                setattr(_generate_image_with_fallback, "_disabled", disabled)
+                print(f"[IMAGE FALLBACK] disabling {provider} for the rest of this run.")
+        except Exception as exc:
+            print(f"[IMAGE FALLBACK] {provider} unexpected failure: {exc}")
+
+    raise RuntimeError(
+        "All configured image providers failed. "
+        f"Attempted: {', '.join(attempted) or '(none)'}. "
+        "Configure another provider or wait for a provider quota to reset."
+    )
+
+
+def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[Path]) -> None:
+    if "cloudflare" not in IMAGE_PROVIDER_ORDER:
+        raise RuntimeError("Cloudflare is not enabled in IMAGE_PROVIDERS.")
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError(
             "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for polished image generation."
@@ -1583,7 +1750,7 @@ def render_scenes(script: dict[str, Any]) -> None:
                 has_previous_reference=use_previous,
             )
             print(f"[IMAGE] Scene {idx}/{len(script['scenes'])} beat {beat_idx}/{len(beats)}")
-            _cloudflare_image(
+            provider_used = _generate_image_with_fallback(
                 prompt,
                 out,
                 _image_seed(idx, beat_idx - 1),
@@ -1807,7 +1974,7 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
 """.strip()
 
     if not cached_ai.exists() or cached_ai.stat().st_size < 10000:
-        _cloudflare_image(prompt, cached_ai, 71003, [style_ref])
+        _generate_image_with_fallback(prompt, cached_ai, 71003, [style_ref])
 
     with Image.open(cached_ai) as base:
         image = base.convert("RGB").resize((1280, 720))
@@ -2190,13 +2357,13 @@ def main(mode: str = "full") -> None:
     require_secret("GROQ_API_KEY")
     require_secret("YOUTUBE_TOKEN_JSON")
     require_secret("YOUTUBE_CLIENT_SECRET_JSON")
-    if IMAGE_PROVIDER == "cloudflare":
+    supported = {"cloudflare", "pollinations", "pixazo"}
+    unknown = [x for x in IMAGE_PROVIDER_ORDER if x not in supported]
+    if unknown:
+        raise RuntimeError(f"Unsupported image providers: {unknown}")
+    if "cloudflare" in IMAGE_PROVIDER_ORDER:
         require_secret("CLOUDFLARE_ACCOUNT_ID")
         require_secret("CLOUDFLARE_API_TOKEN")
-    else:
-        raise RuntimeError(
-            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. Set IMAGE_PROVIDER=cloudflare."
-        )
 
     validate_youtube_credentials()
 
