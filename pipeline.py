@@ -1241,7 +1241,7 @@ modern roads, asphalt, lane markings, cars, power lines, modern clothing, photor
     started = time.time()
     print(f"[LOCAL IMAGE TEST] Loading OpenVINO model: {model_id}")
     try:
-        from optimum.intel.openvino import OVDiffusionPipeline
+        from optimum.intel import OVLatentConsistencyModelPipeline
     except Exception as exc:
         raise RuntimeError(
             "Local image test dependencies are missing. The workflow installs "
@@ -1249,7 +1249,7 @@ modern roads, asphalt, lane markings, cars, power lines, modern clothing, photor
         ) from exc
 
     try:
-        pipeline = OVDiffusionPipeline.from_pretrained(model_id)
+        pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id)
         image = pipeline(
             prompt,
             num_inference_steps=4,
@@ -1579,7 +1579,7 @@ def _local_image(prompt: str, out_path: Path, seed: int) -> None:
         "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
     ).strip()
     try:
-        from optimum.intel.openvino import OVDiffusionPipeline
+        from optimum.intel import OVLatentConsistencyModelPipeline
     except Exception as exc:
         raise ImageProviderError(
             "local",
@@ -1592,7 +1592,7 @@ def _local_image(prompt: str, out_path: Path, seed: int) -> None:
         pipeline = getattr(_local_image, "_pipeline", None)
         loaded_model = getattr(_local_image, "_model_id", None)
         if pipeline is None or loaded_model != model_id:
-            pipeline = OVDiffusionPipeline.from_pretrained(model_id)
+            pipeline = OVLatentConsistencyModelPipeline.from_pretrained(model_id)
             setattr(_local_image, "_pipeline", pipeline)
             setattr(_local_image, "_model_id", model_id)
 
