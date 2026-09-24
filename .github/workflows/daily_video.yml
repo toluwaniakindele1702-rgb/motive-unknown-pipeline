@@ -106,12 +106,16 @@ jobs:
         run: |
           python -m py_compile pipeline.py
           python - <<'PY'
+          import os
           import torch
-          import kokoro
           print("torch:", torch.__version__)
           print("cuda available:", torch.cuda.is_available())
           assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
-          print("Kokoro import: OK")
+          if os.environ.get("PIPELINE_MODE") != "local_image_test":
+              import kokoro
+              print("Kokoro import: OK")
+          else:
+              print("Kokoro import: skipped for local image test")
           PY
 
       - name: Run pipeline
