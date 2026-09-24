@@ -1753,6 +1753,43 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
     return total
 
 
+def validate_youtube_credentials() -> None:
+    """Fail fast before TTS/rendering if the stored OAuth refresh token is unusable."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from google.auth.exceptions import RefreshError
+
+    token_text = require_secret("YOUTUBE_TOKEN_JSON")
+    token_path = ROOT / "youtube_token_preflight.json"
+    token_path.write_text(token_text, encoding="utf-8")
+    try:
+        credentials = Credentials.from_authorized_user_file(
+            str(token_path),
+            ["https://www.googleapis.com/auth/youtube.upload"],
+        )
+        if credentials.valid:
+            print("[YOUTUBE PREFLIGHT] OAuth credential is valid.")
+            return
+        if not credentials.refresh_token:
+            raise RuntimeError(
+                "YOUTUBE_TOKEN_JSON has no refresh_token. Re-authorize the YouTube account "
+                "and replace the GitHub secret."
+            )
+        credentials.refresh(Request())
+        print("[YOUTUBE PREFLIGHT] OAuth refresh succeeded.")
+    except RefreshError as exc:
+        raise RuntimeError(
+            "YouTube OAuth refresh failed (invalid_grant). The saved refresh token has expired "
+            "or been revoked. Re-authorize the YouTube account and replace the GitHub "
+            "YOUTUBE_TOKEN_JSON secret before running another full production job."
+        ) from exc
+    finally:
+        try:
+            token_path.unlink()
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # YouTube upload
 # ---------------------------------------------------------------------------
