@@ -14,9 +14,14 @@ Main pipeline:
 - CLOUDFLARE_ACCOUNT_ID
 - CLOUDFLARE_API_TOKEN
 
-Fallbacks:
+Optional API fallbacks:
 - HUGGINGFACE_TOKEN
 - REPLICATE_API_TOKEN
+
+Local CPU test:
+- No API token required.
+- The separate `local_image_test` workflow mode uses OpenVINO's INT8 LCM Dreamshaper model on the GitHub runner CPU.
+- This is a feasibility test first; it is NOT yet enabled as the production fallback.
 
 The workflow passes these as secrets; do not place tokens in source files.
 
