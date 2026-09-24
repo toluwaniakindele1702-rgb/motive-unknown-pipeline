@@ -8,9 +8,9 @@ Design goals
 - GPT-OSS 120B for research/storytelling; GPT-OSS 20B for lightweight
   structuring/SEO tasks.
 - Local/open-weight Kokoro TTS (no paid voice API).
-- No per-clip external image API calls. A deterministic cartoon/motion-comic renderer
-  creates richer local illustrations quickly and avoids image-provider 429 loops.
-- Each narration scene is split into 2-5 visual beats so the picture changes frequently.
+- Polished AI-generated historical illustrations using Cloudflare Workers AI.
+- Each narration scene is split into 1-4 visual beats so the picture changes frequently.
+- A persistent style-reference image plus prior-frame references improve visual continuity.
 - No Ken Burns zoom and no burned-in subtitles.
 - Dedicated thumbnail generation separate from video scenes.
 - Idempotent stage files so a rerun can skip already-completed stages.
@@ -81,6 +81,19 @@ GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
 
 KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_onyx").strip()
 KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "0.96"))
+
+# Polished AI illustration generation.
+IMAGE_PROVIDER = os.environ.get("IMAGE_PROVIDER", "cloudflare").strip().lower()
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+CLOUDFLARE_IMAGE_MODEL = os.environ.get(
+    "CLOUDFLARE_IMAGE_MODEL",
+    "@cf/black-forest-labs/flux-2-klein-4b",
+).strip()
+IMAGE_W = 1024
+IMAGE_H = 576
+MAX_VISUAL_BEATS_PER_VIDEO = 80
+STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Motive Unknown").strip()
 YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
@@ -1174,7 +1187,7 @@ def voice_test() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Cartoon / motion-comic renderer
+# Polished AI illustration renderer
 # ---------------------------------------------------------------------------
 def load_font(path: str, size: int):
     try:
@@ -1196,7 +1209,7 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Turn a scene into a small number of visual beats, preserving narration order."""
+    """Turn narration into 1-4 natural visual beats, roughly one image every ~33 words."""
     text = normalize_spaces(narration)
     if not text:
         return [""]
@@ -1205,17 +1218,15 @@ def split_visual_beats(narration: str) -> list[str]:
     if not sentences:
         sentences = [text]
 
-    # Split very long sentences at natural punctuation so one image does not sit
-    # on screen for too long.
     expanded: list[str] = []
     for sentence in sentences:
-        if count_words(sentence) > 22:
+        if count_words(sentence) > 24:
             parts = [p.strip() for p in re.split(r"(?<=[,;:])\s+", sentence) if p.strip()]
             if len(parts) > 1:
                 bucket = ""
                 for part in parts:
                     candidate = f"{bucket} {part}".strip()
-                    if count_words(candidate) <= 18 or not bucket:
+                    if count_words(candidate) <= 22 or not bucket:
                         bucket = candidate
                     else:
                         expanded.append(bucket)
@@ -1228,10 +1239,9 @@ def split_visual_beats(narration: str) -> list[str]:
             expanded.append(sentence)
 
     word_total = count_words(text)
-    target_beats = max(2, min(5, int(np.ceil(word_total / 18))))
+    target_beats = max(1, min(4, int(np.ceil(word_total / 33))))
     target_beats = min(target_beats, len(expanded))
 
-    # Merge adjacent short pieces until the target count is reached.
     while len(expanded) > target_beats:
         best_idx = min(
             range(len(expanded) - 1),
@@ -1243,7 +1253,7 @@ def split_visual_beats(narration: str) -> list[str]:
     while len(expanded) < target_beats:
         idx = max(range(len(expanded)), key=lambda i: count_words(expanded[i]))
         words = expanded[idx].split()
-        if len(words) < 10:
+        if len(words) < 14:
             break
         cut = len(words) // 2
         expanded[idx:idx + 1] = [
@@ -1251,458 +1261,251 @@ def split_visual_beats(narration: str) -> list[str]:
             " ".join(words[cut:]),
         ]
 
-    return expanded[:5] or [text]
+    return expanded[:4] or [text]
 
 
-def era_theme(era: str, setting: str) -> dict[str, Any]:
-    all_text = f"{era} {setting}".lower()
-    if contains_any(all_text, ["egypt", "pharaoh", "nile", "pyramid"]):
-        return {"sky_top": (241, 216, 172), "sky_bottom": (249, 237, 210), "ground": (218, 187, 120), "accent": GOLD, "building": (188, 154, 93), "water": (75, 150, 177), "kind": "egypt"}
-    if contains_any(all_text, ["china", "chinese", "han", "qin", "ming", "imperial"]):
-        return {"sky_top": (170, 211, 237), "sky_bottom": (235, 239, 239), "ground": (188, 176, 143), "accent": RED, "building": (170, 79, 68), "water": (72, 139, 176), "kind": "china"}
-    if contains_any(all_text, ["rome", "roman", "latin"]):
-        return {"sky_top": (179, 210, 231), "sky_bottom": (238, 235, 224), "ground": (170, 158, 139), "accent": RED, "building": (174, 157, 138), "water": (83, 143, 166), "kind": "rome"}
-    if contains_any(all_text, ["viking", "norse", "scandinavia"]):
-        return {"sky_top": (151, 193, 219), "sky_bottom": (226, 232, 234), "ground": (135, 157, 141), "accent": BLUE, "building": (121, 91, 67), "water": (65, 126, 163), "kind": "viking"}
-    if contains_any(all_text, ["japan", "japanese", "shogun", "samurai"]):
-        return {"sky_top": (203, 223, 239), "sky_bottom": (248, 235, 226), "ground": (149, 179, 130), "accent": RED, "building": (151, 89, 74), "water": (83, 140, 171), "kind": "japan"}
-    if contains_any(all_text, ["aztec", "maya", "inca", "mesoamerica"]):
-        return {"sky_top": (173, 218, 213), "sky_bottom": (232, 239, 224), "ground": (124, 167, 102), "accent": GOLD, "building": (148, 124, 84), "water": (70, 145, 163), "kind": "meso"}
-    if contains_any(all_text, ["medieval", "castle", "europe", "kingdom"]):
-        return {"sky_top": (166, 201, 226), "sky_bottom": (234, 235, 228), "ground": (151, 174, 137), "accent": PURPLE, "building": (121, 128, 142), "water": (74, 137, 165), "kind": "medieval"}
-    return {"sky_top": (169, 216, 240), "sky_bottom": (240, 242, 234), "ground": (163, 193, 133), "accent": BLUE, "building": (143, 151, 160), "water": (80, 145, 172), "kind": "generic"}
+POLISHED_VISUAL_STYLE = """
+Polished 2D historical cartoon illustration for a premium educational YouTube
+documentary. Cinematic storybook composition, expressive human characters with
+believable anatomy, expressive faces and gestures, period-appropriate clothing
+and architecture, richly detailed environments, layered foreground/midground/
+background depth, crisp hand-drawn ink contours, clean painterly/cel-shaded
+color, warm natural lighting, subtle texture, strong focal subject, visual
+storytelling in every frame, appealing to teenagers and adults.
+
+Do NOT make stick figures, doodles, primitive geometric drawings, flat clip-art,
+photorealism, 3D CGI, anime, modern objects, UI elements, captions, subtitles,
+logos, watermarks, or written words inside the image.
+""".strip()
 
 
-def draw_gradient_sky(img: Image.Image, top: tuple[int, int, int], bottom: tuple[int, int, int]) -> None:
-    strip = Image.new("RGB", (1, VIDEO_H))
-    px = strip.load()
-    for y in range(VIDEO_H):
-        t = y / max(1, VIDEO_H - 1)
-        px[0, y] = tuple(int(top[i] * (1 - t) + bottom[i] * t) for i in range(3))
-    img.paste(strip.resize((VIDEO_W, VIDEO_H)), (0, 0))
+def _image_seed(scene_id: int, beat_index: int) -> int:
+    return ((scene_id + 1) * 10007 + (beat_index + 1) * 7919) & 0x7FFFFFFF
 
 
-def draw_cloud(draw: ImageDraw.ImageDraw, x: int, y: int, scale: float = 1.0) -> None:
-    fill = (246, 248, 245)
-    draw.ellipse([x, y + 18, x + int(95 * scale), y + int(55 * scale)], fill=fill)
-    draw.ellipse([x + int(30 * scale), y, x + int(120 * scale), y + int(60 * scale)], fill=fill)
-    draw.ellipse([x + int(65 * scale), y + int(12 * scale), x + int(155 * scale), y + int(60 * scale)], fill=fill)
+def _decode_style_reference() -> Path:
+    out = WORK_DIR / "visual_style_reference.jpg"
+    if out.exists() and out.stat().st_size > 1000:
+        return out
+    if not STYLE_REFERENCE_B64.exists():
+        raise RuntimeError(
+            "Missing embedded visual style reference at assets/visual_style_reference.jpg.b64"
+        )
+    try:
+        data = base64.b64decode(STYLE_REFERENCE_B64.read_text(encoding="ascii"))
+    except Exception as exc:
+        raise RuntimeError("Embedded visual style reference could not be decoded.") from exc
+    if len(data) < 1000:
+        raise RuntimeError("Embedded visual style reference is unexpectedly small.")
+    out.write_bytes(data)
+    return out
 
 
-def draw_tree(draw: ImageDraw.ImageDraw, x: int, ground_y: int, scale: float = 1.0) -> None:
-    trunk = max(7, int(12 * scale))
-    draw.line([x, ground_y - int(80 * scale), x, ground_y], fill=BROWN, width=trunk)
-    canopy = GREEN
-    for ox, oy, r in [(-35, -90, 45), (0, -115, 56), (38, -92, 44), (5, -65, 48)]:
-        rr = int(r * scale)
-        draw.ellipse([x + int(ox * scale) - rr, ground_y + int(oy * scale) - rr,
-                      x + int(ox * scale) + rr, ground_y + int(oy * scale) + rr], fill=canopy)
+def _small_reference(path: Path, label: str) -> Path:
+    out = WORK_DIR / f"{label}_reference.jpg"
+    if out.exists() and out.stat().st_size > 1000:
+        return out
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+        image.thumbnail((448, 448))
+        image.save(out, format="JPEG", quality=82, optimize=True)
+    return out
 
 
-def draw_background(draw: ImageDraw.ImageDraw, theme: dict[str, Any], setting: str, beat_text: str, seed: int) -> None:
-    all_text = f"{setting} {beat_text}".lower()
-    # Broad, softly layered cartoon landscape.
-    for pts, fill in [
-        ([(0, 415), (180, 305), (390, 400), (610, 280), (840, 400), (1060, 295), (1280, 405), (1280, 505), (0, 505)], (208, 211, 196)),
-        ([(0, 455), (220, 350), (450, 440), (690, 335), (900, 455), (1120, 355), (1280, 445), (1280, 525), (0, 525)], (184, 190, 173)),
-    ]:
-        draw.polygon(pts, fill=fill)
-
-    draw.rectangle([0, 500, VIDEO_W, VIDEO_H], fill=theme["ground"])
-    draw.ellipse([1065, 62, 1165, 162], fill=(247, 205, 91), outline=(230, 184, 68), width=3)
-
-    rng = random.Random(seed)
-    if contains_any(all_text, ["river", "nile", "harbor", "sea", "ship", "lake"]):
-        draw.rectangle([0, 400, VIDEO_W, 535], fill=theme["water"])
-        for y in [425, 455, 485, 515]:
-            for _ in range(8):
-                x = rng.randint(30, 1220)
-                draw.line([x, y, x + rng.randint(30, 90), y], fill=(154, 205, 214), width=2)
-    elif contains_any(all_text, ["desert", "sand"]):
-        draw.rectangle([0, 405, VIDEO_W, VIDEO_H], fill=(229, 199, 139))
-        for _ in range(18):
-            x = rng.randint(0, VIDEO_W)
-            y = rng.randint(480, 695)
-            draw.arc([x, y, x + 70, y + 25], 180, 360, fill=(204, 168, 111), width=2)
-    elif contains_any(all_text, ["street", "market", "town", "city"]):
-        for x, h in [(60, 180), (250, 130), (470, 210), (820, 145), (1030, 195)]:
-            roof = theme["building"]
-            draw.rectangle([x, 500 - h, x + 145, 500], fill=roof, outline=INK, width=4)
-            draw.polygon([(x - 8, 500 - h), (x + 70, 455 - h), (x + 153, 500 - h)], fill=theme["accent"], outline=INK)
-            for wx in [x + 30, x + 88]:
-                draw.rectangle([wx, 390, wx + 28, 430], fill=(242, 218, 156), outline=INK, width=3)
-    elif contains_any(all_text, ["palace", "temple", "court", "throne"]):
-        draw.rectangle([165, 295, 1115, 500], fill=theme["building"], outline=INK, width=5)
-        for x in range(230, 1080, 125):
-            draw.rectangle([x, 315, x + 28, 500], fill=(214, 194, 158), outline=INK, width=3)
-        draw.polygon([(460, 295), (640, 190), (820, 295)], fill=theme["accent"], outline=INK, width=5)
-        draw.rectangle([575, 372, 705, 500], fill=(94, 70, 54), outline=INK, width=4)
-    elif contains_any(all_text, ["battlefield", "battle", "war", "camp", "army"]):
-        for x in [140, 330, 1030, 1170]:
-            draw.line([x, 505, x + 38, 340], fill=BROWN, width=9)
-            draw.polygon([(x + 38, 340), (x + 94, 363), (x + 38, 388)], fill=theme["accent"], outline=INK)
-        draw.ellipse([720, 420, 790, 490], fill=STONE, outline=INK, width=4)
-    elif theme["kind"] == "egypt":
-        draw.polygon([(90, 500), (265, 255), (440, 500)], fill=(201, 172, 110), outline=INK)
-        draw.polygon([(785, 500), (920, 305), (1055, 500)], fill=(209, 177, 113), outline=INK)
-        draw_tree(draw, 1110, 505, 0.7)
-    elif theme["kind"] == "china":
-        draw.rectangle([130, 315, 1150, 500], fill=theme["building"], outline=INK, width=5)
-        draw.polygon([(90, 315), (640, 190), (1190, 315)], fill=RED, outline=INK)
-        for x in range(210, 1100, 130):
-            draw.rectangle([x, 335, x + 25, 500], fill=(109, 74, 52))
-    elif theme["kind"] == "rome":
-        for x in [150, 330, 510, 770, 950, 1130]:
-            draw.rectangle([x, 280, x + 58, 500], fill=theme["building"], outline=INK, width=3)
-            draw.arc([x - 8, 225, x + 66, 315], 180, 360, fill=theme["building"], width=13)
-    elif theme["kind"] == "japan":
-        draw.polygon([(180, 305), (370, 210), (560, 305)], fill=theme["building"], outline=INK)
-        draw.rectangle([240, 305, 500, 500], fill=theme["building"], outline=INK, width=4)
-        draw.ellipse([850, 175, 1050, 375], outline=RED, width=22)
-        draw_tree(draw, 760, 500, 0.8)
-    elif theme["kind"] == "meso":
-        draw.polygon([(160, 500), (310, 270), (460, 500)], fill=theme["building"], outline=INK)
-        draw.polygon([(800, 500), (950, 260), (1100, 500)], fill=theme["building"], outline=INK)
-        draw_tree(draw, 1080, 500, 0.85)
-    elif theme["kind"] == "viking":
-        draw.polygon([(250, 500), (475, 320), (700, 500)], fill=theme["building"], outline=INK)
-        draw.polygon([(610, 500), (860, 300), (1110, 500)], fill=theme["building"], outline=INK)
-    else:
-        draw_cloud(draw, 120, 95, 0.8)
-        draw_cloud(draw, 865, 125, 0.65)
-        draw_tree(draw, 120, 505, 0.75)
-        draw_tree(draw, 1180, 505, 0.75)
-
-    # A few small background marks make the world feel hand-drawn instead of empty.
-    for _ in range(14):
-        x = rng.randint(40, 1240)
-        y = rng.randint(180, 475)
-        draw.arc([x, y, x + 26, y + 14], 200, 330, fill=(125, 135, 139), width=2)
-
-
-def archetype_style(label: str, era: str) -> dict[str, Any]:
-    t = f"{label} {era}".lower()
-    if contains_any(t, ["pharaoh", "egyptian", "scribe"]):
-        return {"skin": (225, 181, 137), "shirt": GOLD if "pharaoh" in t else (240, 232, 202), "pants": (119, 91, 62), "hair": (54, 44, 39), "kind": "egypt"}
-    if contains_any(t, ["roman", "legionary", "centurion"]):
-        return {"skin": (226, 184, 141), "shirt": RED, "pants": STONE, "hair": (62, 48, 39), "kind": "rome"}
-    if contains_any(t, ["chinese", "emperor", "courtier", "mandarin"]):
-        return {"skin": (229, 190, 150), "shirt": RED if "emperor" in t else BLUE, "pants": (69, 61, 57), "hair": (30, 28, 28), "kind": "china"}
-    if contains_any(t, ["viking", "norse", "warrior"]):
-        return {"skin": (224, 181, 142), "shirt": BROWN, "pants": (73, 68, 62), "hair": (75, 51, 38), "kind": "viking"}
-    if contains_any(t, ["samurai", "japanese", "shogun"]):
-        return {"skin": (231, 191, 151), "shirt": BLACK if "samurai" in t else RED, "pants": (57, 54, 50), "hair": (30, 28, 28), "kind": "japan"}
-    if contains_any(t, ["king", "queen", "monarch", "noble"]):
-        return {"skin": (229, 186, 148), "shirt": PURPLE, "pants": (71, 63, 76), "hair": (64, 43, 35), "kind": "royal"}
-    return {"skin": (227, 187, 148), "shirt": BLUE, "pants": (68, 75, 84), "hair": (58, 46, 39), "kind": "generic"}
-
-
-def draw_cartoon_person(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    ground_y: int,
-    scale: float,
-    label: str,
-    era: str,
-    action: str,
-    mood: str,
-    flip: bool = False,
-    beat_index: int = 0,
-) -> None:
-    style = archetype_style(label, era)
-    s = scale
-    direction = -1 if flip else 1
-    head_r = int(38 * s)
-    head_y = ground_y - int(180 * s)
-    shoulder_y = head_y + int(58 * s)
-    hip_y = ground_y - int(65 * s)
-    hand_r = max(7, int(9 * s))
-    line_w = max(4, int(5 * s))
-    act = f"{action} {mood}".lower()
-
-    # Ground shadow.
-    draw.ellipse(
-        [x - int(48 * s), ground_y - int(8 * s), x + int(48 * s), ground_y + int(10 * s)],
-        fill=(109, 105, 94),
-    )
-
-    # Legs and shoes.
-    draw.polygon(
-        [(x - int(18 * s), hip_y), (x + int(8 * s), hip_y), (x + int(12 * s), ground_y - int(12 * s)),
-         (x - int(8 * s), ground_y - int(10 * s))],
-        fill=style["pants"], outline=INK,
-    )
-    draw.polygon(
-        [(x + int(5 * s), hip_y), (x + int(25 * s), hip_y), (x + int(45 * s), ground_y - int(12 * s)),
-         (x + int(30 * s), ground_y - int(7 * s))],
-        fill=style["pants"], outline=INK,
-    )
-    draw.ellipse([x - int(28 * s), ground_y - int(10 * s), x + int(4 * s), ground_y + int(2 * s)], fill=INK)
-    draw.ellipse([x + int(28 * s), ground_y - int(8 * s), x + int(57 * s), ground_y + int(4 * s)], fill=INK)
-
-    # Torso and neck.
-    draw.polygon(
-        [(x - int(31 * s), shoulder_y), (x + int(31 * s), shoulder_y),
-         (x + int(28 * s), hip_y), (x - int(28 * s), hip_y)],
-        fill=style["shirt"], outline=INK,
-    )
-    draw.rectangle([x - int(11 * s), head_y + head_r - 2, x + int(11 * s), shoulder_y + 8], fill=style["skin"], outline=INK, width=line_w)
-
-    # Arms: use the sentence/action to create different poses.
-    if contains_any(act, ["point", "pointing", "indicate"]):
-        far = (x + direction * int(92 * s), shoulder_y - int(52 * s))
-        near = (x - direction * int(48 * s), shoulder_y + int(46 * s))
-    elif contains_any(act, ["raise", "signal", "lift", "hold up"]):
-        far = (x + direction * int(48 * s), shoulder_y - int(78 * s))
-        near = (x - direction * int(50 * s), shoulder_y + int(42 * s))
-    elif contains_any(act, ["hold", "carry", "read", "show", "present"]):
-        far = (x + direction * int(58 * s), shoulder_y + int(8 * s))
-        near = (x - direction * int(34 * s), shoulder_y + int(22 * s))
-    elif contains_any(act, ["cross", "think", "consider"]):
-        far = (x + direction * int(42 * s), shoulder_y + int(5 * s))
-        near = (x + direction * int(5 * s), shoulder_y + int(35 * s))
-    elif contains_any(act, ["wave", "greet"]):
-        far = (x + direction * int(55 * s), shoulder_y - int(35 * s))
-        near = (x + direction * int(74 * s), shoulder_y - int(92 * s))
-    else:
-        far = (x + direction * int(46 * s), shoulder_y + int(44 * s))
-        near = (x - direction * int(46 * s), shoulder_y + int(44 * s))
-
-    for end in (far, near):
-        draw.line([x, shoulder_y, *end], fill=INK, width=max(5, int(7 * s)))
-        draw.ellipse([end[0] - hand_r, end[1] - hand_r, end[0] + hand_r, end[1] + hand_r], fill=style["skin"], outline=INK, width=2)
-
-    # Head and ears.
-    draw.ellipse([x - head_r, head_y - head_r, x + head_r, head_y + head_r], fill=style["skin"], outline=INK, width=line_w)
-    for side in (-1, 1):
-        draw.ellipse(
-            [x + side * (head_r - 2) - int(7 * s), head_y - int(13 * s),
-             x + side * (head_r - 2) + int(7 * s), head_y + int(13 * s)],
-            fill=style["skin"], outline=INK, width=2,
+def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[Path]) -> None:
+    if IMAGE_PROVIDER != "cloudflare":
+        raise RuntimeError(
+            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
+            "The polished image renderer currently requires cloudflare."
+        )
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+        raise RuntimeError(
+            "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for polished image generation."
         )
 
-    # Hair / hat.
-    if style["kind"] in {"china", "viking", "japan"}:
-        draw.arc([x - head_r + 2, head_y - head_r, x + head_r - 2, head_y + 14], 185, 355, fill=style["hair"], width=int(15 * s))
-    elif style["kind"] == "royal":
-        draw.polygon(
-            [(x - head_r - 3, head_y - int(9 * s)),
-             (x - int(20 * s), head_y - head_r - int(16 * s)),
-             (x, head_y - int(5 * s)),
-             (x + int(20 * s), head_y - head_r - int(16 * s)),
-             (x + head_r + 3, head_y - int(9 * s))],
-            fill=GOLD, outline=INK,
-        )
-    elif style["kind"] == "egypt":
-        draw.polygon(
-            [(x - head_r - 4, head_y - int(4 * s)),
-             (x, head_y - head_r - int(23 * s)),
-             (x + head_r + 4, head_y - int(4 * s))],
-            fill=GOLD, outline=INK,
-        )
-    else:
-        draw.arc([x - head_r + 2, head_y - head_r + 4, x + head_r - 2, head_y + 14], 188, 352, fill=style["hair"], width=int(11 * s))
-
-    # Expressive face.
-    face_mood = mood.lower()
-    if contains_any(face_mood, ["confused", "curious", "worried", "uncertain"]):
-        brow_y = head_y - int(12 * s)
-        draw.line([x - int(22 * s), brow_y + int(5 * s), x - int(7 * s), brow_y - int(4 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.line([x + int(7 * s), brow_y - int(4 * s), x + int(22 * s), brow_y + int(5 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.arc([x - int(12 * s), head_y + int(10 * s), x + int(12 * s), head_y + int(25 * s)], 20, 160, fill=INK, width=max(2, int(3 * s)))
-    elif contains_any(face_mood, ["triumphant", "happy", "relieved"]):
-        draw.line([x - int(22 * s), head_y - int(6 * s), x - int(8 * s), head_y - int(10 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.line([x + int(8 * s), head_y - int(10 * s), x + int(22 * s), head_y - int(6 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.arc([x - int(14 * s), head_y + int(9 * s), x + int(14 * s), head_y + int(31 * s)], 200, 340, fill=INK, width=max(2, int(3 * s)))
-    elif contains_any(face_mood, ["angry", "tense", "frustrated"]):
-        draw.line([x - int(22 * s), head_y - int(10 * s), x - int(8 * s), head_y - int(3 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.line([x + int(8 * s), head_y - int(3 * s), x + int(22 * s), head_y - int(10 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.line([x - int(11 * s), head_y + int(22 * s), x + int(12 * s), head_y + int(22 * s)], fill=INK, width=max(2, int(3 * s)))
-    else:
-        draw.line([x - int(21 * s), head_y - int(5 * s), x - int(8 * s), head_y - int(7 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.line([x + int(8 * s), head_y - int(7 * s), x + int(21 * s), head_y - int(5 * s)], fill=INK, width=max(2, int(3 * s)))
-        draw.ellipse([x - int(13 * s), head_y + int(2 * s), x - int(5 * s), head_y + int(10 * s)], fill=INK)
-        draw.ellipse([x + int(5 * s), head_y + int(2 * s), x + int(13 * s), head_y + int(10 * s)], fill=INK)
-        draw.line([x - int(10 * s), head_y + int(24 * s), x + int(11 * s), head_y + int(24 * s)], fill=INK, width=max(2, int(3 * s)))
-
-    # Small period-appropriate clothing cues.
-    if style["kind"] == "rome":
-        draw.rectangle([x - int(30 * s), shoulder_y + int(3 * s), x + int(30 * s), shoulder_y + int(11 * s)], fill=WHITE)
-    if contains_any(label, ["soldier", "warrior", "guard", "samurai", "roman"]):
-        draw.polygon(
-            [(x + direction * int(50 * s), shoulder_y + int(6 * s)),
-             (x + direction * int(77 * s), shoulder_y - int(55 * s)),
-             (x + direction * int(86 * s), shoulder_y - int(50 * s)),
-             (x + direction * int(60 * s), shoulder_y + int(17 * s))],
-            fill=STONE, outline=INK,
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{CLOUDFLARE_ACCOUNT_ID}/ai/run/{CLOUDFLARE_IMAGE_MODEL}"
+    )
+    data = {
+        "prompt": prompt,
+        "width": str(IMAGE_W),
+        "height": str(IMAGE_H),
+        "seed": str(seed),
+    }
+    files: dict[str, tuple[str, bytes, str]] = {}
+    for idx, ref in enumerate(references[:4]):
+        files[f"input_image_{idx}"] = (
+            ref.name,
+            ref.read_bytes(),
+            "image/jpeg",
         )
 
+    print(f"[IMAGE] Cloudflare {CLOUDFLARE_IMAGE_MODEL} seed={seed}")
+    try:
+        response = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"},
+            data=data,
+            files=files or None,
+            timeout=180,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Cloudflare image request failed: {exc}") from exc
 
-def draw_prop(draw: ImageDraw.ImageDraw, x: int, y: int, prop: str, scale: float = 1.0) -> None:
-    p = prop.lower()
-    s = scale
-    if contains_any(p, ["scroll", "document", "letter", "papyrus", "map"]):
-        draw.rectangle([x - int(55 * s), y - int(22 * s), x + int(55 * s), y + int(22 * s)], fill=PAPER, outline=INK, width=4)
-        draw.line([x - int(35 * s), y - int(4 * s), x + int(32 * s), y - int(4 * s)], fill=(110, 104, 95), width=3)
-        draw.line([x - int(28 * s), y + int(8 * s), x + int(22 * s), y + int(8 * s)], fill=(110, 104, 95), width=3)
-    elif contains_any(p, ["sword", "blade", "weapon"]):
-        draw.line([x - int(12 * s), y + int(42 * s), x + int(62 * s), y - int(42 * s)], fill=STONE, width=int(10 * s))
-        draw.line([x - int(5 * s), y + int(25 * s), x + int(20 * s), y + int(48 * s)], fill=BROWN, width=int(9 * s))
-        draw.line([x + int(10 * s), y + int(18 * s), x + int(32 * s), y - int(2 * s)], fill=GOLD, width=int(6 * s))
-    elif contains_any(p, ["shield"]):
-        draw.polygon([(x, y - int(55 * s)), (x + int(45 * s), y - int(30 * s)),
-                      (x + int(37 * s), y + int(35 * s)), (x, y + int(58 * s)),
-                      (x - int(37 * s), y + int(35 * s)), (x - int(45 * s), y - int(30 * s))],
-                     fill=BLUE, outline=INK)
-        draw.line([x, y - int(42 * s), x, y + int(43 * s)], fill=WHITE, width=int(5 * s))
-    elif contains_any(p, ["crown"]):
-        pts = [(x - 42, y + 28), (x - 30, y - 24), (x, y + 5), (x + 28, y - 25), (x + 42, y + 28)]
-        draw.polygon(pts, fill=GOLD, outline=INK)
-        draw.rectangle([x - 42, y + 20, x + 42, y + 34], fill=GOLD, outline=INK)
-    elif contains_any(p, ["torch", "fire"]):
-        draw.rectangle([x - 7, y, x + 7, y + 58], fill=BROWN)
-        draw.polygon([(x, y - 26), (x - 17, y + 5), (x, y + 18), (x + 17, y + 5)],
-                     fill=GOLD, outline=RED)
-    elif contains_any(p, ["book", "tablet", "stone"]):
-        draw.polygon([(x - 42, y - 32), (x + 33, y - 42), (x + 42, y + 34), (x - 33, y + 42)],
-                     fill=STONE, outline=INK)
-        for i in [-14, 2, 18]:
-            draw.line([x - 22, y + i, x + 22, y + i - 2], fill=INK, width=2)
-    elif contains_any(p, ["coin", "gold", "money", "treasure"]):
-        for ox in (-24, 0, 24):
-            draw.ellipse([x + ox - 16, y - 10, x + ox + 16, y + 22], fill=GOLD, outline=INK, width=3)
-    elif contains_any(p, ["ship", "boat"]):
-        draw.polygon([(x - 82, y), (x + 82, y), (x + 48, y + 38), (x - 58, y + 38)], fill=BROWN, outline=INK)
-        draw.line([x, y, x, y - 100], fill=INK, width=6)
-        draw.polygon([(x, y - 92), (x + 55, y - 40), (x, y - 40)], fill=PAPER, outline=INK)
-    elif contains_any(p, ["temple", "gate", "building"]):
-        draw.rectangle([x - 72, y - 48, x + 72, y + 48], fill=theme_color_from_prop(p), outline=INK, width=4)
-        draw.polygon([(x - 88, y - 48), (x, y - 98), (x + 88, y - 48)], fill=GOLD, outline=INK)
-    elif contains_any(p, ["desk", "table"]):
-        draw.rectangle([x - 75, y - 32, x + 75, y + 2], fill=BROWN, outline=INK, width=4)
-        draw.line([x - 55, y + 2, x - 65, y + 55], fill=INK, width=5)
-        draw.line([x + 55, y + 2, x + 65, y + 55], fill=INK, width=5)
-    else:
-        draw.rectangle([x - 34, y - 30, x + 34, y + 30], fill=STONE, outline=INK, width=4)
-        draw.ellipse([x - 12, y - 10, x + 12, y + 10], outline=INK, width=3)
+    if response.status_code != 200:
+        message = response.text[:2500]
+        raise RuntimeError(
+            f"Cloudflare image generation failed with HTTP {response.status_code}: {message}"
+        )
+
+    try:
+        payload = response.json()
+        result = payload.get("result")
+        if isinstance(result, dict):
+            image_b64 = result.get("image")
+        else:
+            image_b64 = None
+    except Exception as exc:
+        raise RuntimeError("Cloudflare image response was not valid JSON.") from exc
+
+    if not isinstance(image_b64, str) or not image_b64.strip():
+        raise RuntimeError("Cloudflare image response did not contain result.image.")
+
+    try:
+        out_path.write_bytes(base64.b64decode(image_b64))
+    except Exception as exc:
+        raise RuntimeError("Cloudflare returned invalid base64 image data.") from exc
+
+    with Image.open(out_path) as image:
+        image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
 
 
-def theme_color_from_prop(_: str) -> tuple[int, int, int]:
-    return (171, 92, 65)
-
-
-def symbolic_hint(beat_text: str, mood: str) -> str | None:
-    t = f"{beat_text} {mood}".lower()
-    if contains_any(t, ["why", "question", "mystery", "wonder"]):
-        return "?"
-    if contains_any(t, ["secret", "hidden", "unknown", "surprise"]):
-        return "!"
-    if contains_any(t, ["money", "coin", "tax", "trade", "price"]):
-        return "money"
-    if contains_any(t, ["law", "rule", "decree", "order", "document", "letter"]):
-        return "document"
-    if contains_any(t, ["battle", "war", "soldier", "army", "fight"]):
-        return "shield"
-    if contains_any(t, ["king", "queen", "emperor", "pharaoh", "throne"]):
-        return "crown"
-    if contains_any(t, ["ship", "sea", "voyage", "sail"]):
-        return "ship"
-    return None
-
-
-def draw_symbolic_hint(draw: ImageDraw.ImageDraw, hint: str, x: int, y: int, mood: str) -> None:
-    if hint == "?":
-        draw.ellipse([x - 48, y - 48, x + 48, y + 48], fill=WHITE, outline=INK, width=4)
-        draw.text((x - 17, y - 36), "?", font=FONT_64, fill=INK)
-    elif hint == "!":
-        draw.ellipse([x - 48, y - 48, x + 48, y + 48], fill=WHITE, outline=INK, width=4)
-        draw.text((x - 12, y - 38), "!", font=FONT_64, fill=INK)
-    else:
-        draw_prop(draw, x, y, hint, 0.9)
-
-
-def make_scene(
+def make_visual_prompt(
     scene: dict[str, Any],
     era: str,
-    output_path: Path,
-    beat_text: str = "",
-    beat_index: int = 0,
-    beat_count: int = 1,
-) -> None:
-    img = Image.new("RGB", (VIDEO_W, VIDEO_H), PAPER)
-    draw_gradient_sky(img, (174, 214, 238), (244, 243, 232))
-    draw = ImageDraw.Draw(img)
-    theme = era_theme(era, scene.get("setting", ""))
-    draw_background(
-        draw,
-        theme,
-        scene.get("setting", ""),
-        beat_text,
-        hash((scene.get("id", 0), beat_index, beat_text)) & 0xFFFFFFFF,
+    beat_text: str,
+    beat_index: int,
+    beat_count: int,
+    has_previous_reference: bool,
+) -> str:
+    shot_types = [
+        "wide cinematic establishing shot",
+        "medium character interaction shot",
+        "dynamic over-the-shoulder storytelling shot",
+        "closer emotional or important-object shot",
+    ]
+    shot = shot_types[beat_index % len(shot_types)]
+    chars = ", ".join(str(x) for x in (scene.get("characters") or [])[:4]) or "historical people"
+    props = ", ".join(str(x) for x in (scene.get("props") or [])[:4]) or "period-appropriate objects"
+
+    continuity = (
+        "A previous generated frame is supplied as a reference. Preserve recurring "
+        "character design, clothing colors, facial proportions, and overall illustration "
+        "style from that reference, but create a new shot and do not copy its background."
+        if has_previous_reference
+        else
+        "Establish the visual character designs now so later shots can remain consistent."
     )
 
-    chars = scene.get("characters") or ["historical figure"]
-    rng = random.Random(hash((scene.get("id", 0), beat_index, "layout")) & 0xFFFFFFFF)
-    if len(chars) == 1:
-        base = [390, 650, 910][beat_index % 3]
-        positions = [(base + rng.randint(-20, 20), 610)]
-    else:
-        spacing = 250 if len(chars) == 2 else 205
-        center = 620 + ((beat_index % 2) * 70 - 35)
-        start = center - spacing * (min(len(chars), 4) - 1) / 2
-        positions = [(int(start + i * spacing), 610 - (i % 2) * 5) for i in range(min(len(chars), 4))]
+    return f"""
+{POLISHED_VISUAL_STYLE}
 
-    action = str(scene.get("action", ""))
-    mood = str(scene.get("mood", "curious"))
-    for idx, label in enumerate(chars[:4]):
-        x, y = positions[idx]
-        local_scale = 1.0 if len(chars) <= 2 else 0.85
-        if beat_index % 2 == 1:
-            local_scale *= 1.03
-        draw_cartoon_person(draw, x, y, local_scale, str(label), era, action, mood, flip=(idx % 2 == 1), beat_index=beat_index)
+ERA / HISTORICAL CONTEXT:
+{era}
 
-    props = [str(x) for x in (scene.get("props") or [])[:3]]
-    prop_positions = [(1080, 520), (155, 535), (640, 420)]
-    for idx, prop in enumerate(props):
-        draw_prop(draw, *prop_positions[idx], prop, 1.0 if idx == 0 else 0.88)
+SETTING:
+{scene.get("setting", "historical location")}
 
-    extra = symbolic_hint(beat_text, mood)
-    if extra and not any(contains_any(p, [extra]) for p in props):
-        hint_pos = (1040, 245) if beat_index % 2 == 0 else (180, 240)
-        draw_symbolic_hint(draw, extra, *hint_pos, mood)
+CHARACTERS:
+{chars}
 
-    # Foreground framing shapes change across beats like an animated storyboard.
-    if beat_index % 3 == 1:
-        draw.rectangle([0, 570, 95, VIDEO_H], fill=(103, 84, 69))
-        draw.line([70, 570, 120, 470], fill=INK, width=18)
-    elif beat_index % 3 == 2:
-        draw.rectangle([1185, 570, VIDEO_W, VIDEO_H], fill=(103, 84, 69))
-        draw.line([1210, 570, 1165, 470], fill=INK, width=18)
+VISIBLE ACTION:
+{scene.get("action", "characters interacting naturally")}
 
-    draw.rectangle([16, 16, VIDEO_W - 16, VIDEO_H - 16], outline=INK, width=6)
-    img.save(output_path, quality=94)
+PROPS / SYMBOLS:
+{props}
+
+MOOD:
+{scene.get("mood", "curious")}
+
+NARRATION BEAT:
+{beat_text}
+
+SHOT DIRECTION:
+{shot}. Use clear staging and strong depth. Let the main action be easy to understand
+at a glance. Vary camera distance and composition from the previous beat while keeping
+the same visual world.
+
+CONTINUITY:
+{continuity}
+
+Create a finished, polished illustration. No text anywhere in the image.
+""".strip()
 
 
 def render_scenes(script: dict[str, Any]) -> None:
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
+    style_ref = _small_reference(_decode_style_reference(), "style")
+    total_beats = sum(
+        len(split_visual_beats(str(scene.get("narration", ""))))
+        for scene in script["scenes"]
+    )
+    if total_beats > MAX_VISUAL_BEATS_PER_VIDEO:
+        raise RuntimeError(
+            f"Planned {total_beats} visual beats, above the free-tier-safe cap of "
+            f"{MAX_VISUAL_BEATS_PER_VIDEO}. Reduce the script length or beat density."
+        )
+
+    previous_image: Path | None = None
+    previous_characters: set[str] = set()
+
     for idx, scene in enumerate(script["scenes"], 1):
         beats = split_visual_beats(str(scene.get("narration", "")))
+        current_characters = {
+            normalize_spaces(str(x)).lower()
+            for x in (scene.get("characters") or [])
+            if normalize_spaces(str(x))
+        }
         for beat_idx, beat_text in enumerate(beats, 1):
             out = SCENE_DIR / f"scene_{idx:03d}_beat_{beat_idx:02d}.jpg"
             if out.exists() and out.stat().st_size > 10000:
-                print(f"[SCENE] Reusing {out.name}")
+                print(f"[IMAGE] Reusing {out.name}")
+                previous_image = out
                 continue
-            print(f"[SCENE] Scene {idx}/{len(script['scenes'])} beat {beat_idx}/{len(beats)}")
-            make_scene(
-                scene,
-                script["era"],
-                out,
-                beat_text=beat_text,
-                beat_index=beat_idx - 1,
-                beat_count=len(beats),
+
+            refs = [style_ref]
+            use_previous = previous_image is not None and (
+                beat_idx > 1 or bool(current_characters & previous_characters)
             )
-    # Legacy one-image-per-scene files are no longer part of the video.
-    checkpoint("scenes_complete", visual_beats=sum(len(split_visual_beats(str(s.get("narration", "")))) for s in script["scenes"]))
+            if use_previous:
+                refs.append(_small_reference(previous_image, f"prev_{idx:03d}_{beat_idx:02d}"))
+
+            prompt = make_visual_prompt(
+                scene,
+                script.get("era", "History"),
+                beat_text,
+                beat_idx - 1,
+                len(beats),
+                has_previous_reference=use_previous,
+            )
+            print(f"[IMAGE] Scene {idx}/{len(script['scenes'])} beat {beat_idx}/{len(beats)}")
+            _cloudflare_image(
+                prompt,
+                out,
+                _image_seed(idx, beat_idx - 1),
+                refs,
+            )
+            previous_image = out
+
+        previous_characters = current_characters
+
+    checkpoint(
+        "scenes_complete",
+        visual_beats=total_beats,
+        image_provider=IMAGE_PROVIDER,
+        image_model=CLOUDFLARE_IMAGE_MODEL,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1979,6 +1782,15 @@ def main(mode: str = "full") -> None:
     require_secret("GROQ_API_KEY")
     require_secret("YOUTUBE_TOKEN_JSON")
     require_secret("YOUTUBE_CLIENT_SECRET_JSON")
+    if IMAGE_PROVIDER == "cloudflare":
+        require_secret("CLOUDFLARE_ACCOUNT_ID")
+        require_secret("CLOUDFLARE_API_TOKEN")
+    else:
+        raise RuntimeError(
+            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. Set IMAGE_PROVIDER=cloudflare."
+        )
+
+    validate_youtube_credentials()
 
     checkpoint("starting")
     history = load_history()
