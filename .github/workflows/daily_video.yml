@@ -159,5 +159,6 @@ jobs:
             state/current_run/*.json
             voice_test_onyx.wav
             run_work/visual_test/*.jpg
+            run_work/local_image_test/*.jpg
             run_work/scenes/*.jpg
             run_work/output/thumbnail.jpg
