@@ -2,7 +2,6 @@ name: Motive Unknown Daily Video
 
 on:
   schedule:
-    # 02:17 Africa/Lagos every day. GitHub supports timezone-aware schedules.
     - cron: '17 2 * * *'
       timezone: 'Africa/Lagos'
   workflow_dispatch:
@@ -59,7 +58,7 @@ jobs:
           cache: pip
 
       - name: Cache Hugging Face / Kokoro model
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/huggingface
@@ -76,33 +75,54 @@ jobs:
           ffmpeg -version | head -n 1
           espeak-ng --version
 
+      - name: Install CPU-only PyTorch
+        shell: bash
+        run: |
+          python -m pip install --upgrade --force-reinstall --no-deps \
+            "torch==2.14.0" \
+            --index-url https://download.pytorch.org/whl/cpu
+
       - name: Install Python dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Preflight checks
+        shell: bash
+        run: |
+          python -m py_compile pipeline.py
+          python - <<'PY'
+          import torch
+          import kokoro
+          print("torch:", torch.__version__)
+          print("cuda available:", torch.cuda.is_available())
+          assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
+          print("Kokoro import: OK")
+          PY
+
       - name: Run pipeline
         shell: bash
         run: |
-         python pipeline.py --mode "$PIPELINE_MODE"
-      - name: Commit topic history and checkpoints
-        if: success() && env.PIPELINE_MODE == 'full'
+          python pipeline.py --mode "$PIPELINE_MODE"
+
+      - name: Persist resumable state
+        if: always() && env.PIPELINE_MODE == 'full'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/content_history.json state/last_run.json
+          git add -A state
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
-            git commit -m "chore: update history after automated video"
+            git commit -m "chore: persist pipeline state"
             git push
           fi
 
       - name: Upload run diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: motive-unknown-run-${{ github.run_id }}
           if-no-files-found: warn
@@ -111,9 +131,8 @@ jobs:
             run_work/topic.json
             run_work/research.txt
             run_work/story.json
-            run_work/script.json
             run_work/seo.json
             run_work/manifest.json
-            run_work/output/thumbnail.jpg
-            voice_test_onyx.wav
             state/last_run.json
+            state/current_run/*.json
+            voice_test_onyx.wav
