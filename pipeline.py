@@ -244,10 +244,85 @@ def parse_wait_seconds(resp: requests.Response | Exception, default: float = 8.0
 # Groq
 # ---------------------------------------------------------------------------
 if not GROQ_API_KEY:
-    # Do not crash voice_test if someone simply imports this file in an IDE.
     client: Groq | None = None
 else:
     client = Groq(api_key=GROQ_API_KEY)
+
+
+def _exception_status(exc: Exception) -> int | None:
+    """Best-effort extraction of an HTTP status from Groq SDK exceptions."""
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    text = str(exc)
+    match = re.search(r"\b(400|401|403|404|409|429|500|502|503|504)\b", text)
+    return int(match.group(1)) if match else None
+
+
+def _is_non_retryable(exc: Exception) -> bool:
+    status = _exception_status(exc)
+    if status in {400, 401, 403, 404}:
+        return True
+    text = str(exc).lower()
+    return any(token in text for token in (
+        "does not support", "unsupported parameter", "invalid_request_error",
+        "invalid api key", "authentication", "permission denied",
+    ))
+
+
+def _retry_wait(exc: Exception, attempt: int, base: float = 8.0) -> float:
+    message = str(exc)
+    match = re.search(r"try again in ([\d.]+)s", message, flags=re.IGNORECASE)
+    if match:
+        return max(float(match.group(1)) + 1.0, base * attempt)
+    retry_after = getattr(exc, "headers", None)
+    if retry_after and hasattr(retry_after, "get"):
+        value = retry_after.get("retry-after")
+        if value:
+            try:
+                return max(float(value) + 1.0, base * attempt)
+            except (TypeError, ValueError):
+                pass
+    return base * attempt
+
+
+def _tool_results_text(response: Any) -> str:
+    """Extract server-side browser-search results when message.content is empty."""
+    try:
+        message = response.choices[0].message
+    except Exception:
+        return ""
+
+    executed = getattr(message, "executed_tools", None)
+    if not executed:
+        return ""
+
+    chunks: list[str] = []
+    for tool in executed:
+        try:
+            if hasattr(tool, "model_dump"):
+                data = tool.model_dump()
+            elif isinstance(tool, dict):
+                data = tool
+            else:
+                data = vars(tool)
+        except Exception:
+            data = {"tool": str(tool)}
+
+        results = data.get("search_results") if isinstance(data, dict) else None
+        if isinstance(results, dict):
+            results = results.get("results", [])
+        if isinstance(results, list):
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("title", "")).strip()
+                url = str(item.get("url", "")).strip()
+                content = str(item.get("content", "")).strip()
+                if title or content:
+                    chunks.append(f"TITLE: {title}\nURL: {url}\nSNIPPET: {content}")
+
+    return "\n\n".join(chunks).strip()
 
 
 def groq_call(
@@ -256,43 +331,89 @@ def groq_call(
     *,
     max_completion_tokens: int,
     temperature: float = 0.6,
-    browser_search: bool = False,
     attempts: int = 5,
 ) -> str:
+    """Normal Groq call with intelligent retry behavior."""
     if client is None:
         raise RuntimeError("GROQ_API_KEY is required for this step.")
 
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "max_completion_tokens": max_completion_tokens,
-                "temperature": temperature,
-                "include_reasoning": False,
-            }
-            if browser_search:
-                kwargs["tools"] = [{"type": "browser_search"}]
-                kwargs["tool_choice"] = "required"
-                kwargs["citation_options"] = "disabled"
-
-            response = client.chat.completions.create(**kwargs)
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=max_completion_tokens,
+                temperature=temperature,
+                reasoning_effort="low",
+            )
             content = response.choices[0].message.content or ""
-            if not content.strip():
-                raise RuntimeError("Groq returned an empty response.")
-            return content.strip()
-        except Exception as exc:  # SDK raises distinct subclasses depending on failure
+            if content.strip():
+                return content.strip()
+            raise RuntimeError(f"Groq returned an empty response for model {model}.")
+        except Exception as exc:
             last_error = exc
-            message = str(exc)
-            # Groq's SDK may surface 429 as a plain exception string.
-            wait = 10.0 * attempt
-            match = re.search(r"try again in ([\d.]+)s", message, flags=re.IGNORECASE)
-            if match:
-                wait = max(float(match.group(1)) + 1.0, wait)
+            if _is_non_retryable(exc):
+                raise RuntimeError(f"Groq rejected the request for {model}: {exc}") from exc
+            if attempt >= attempts:
+                break
+            wait = _retry_wait(exc, attempt)
             print(f"[GROQ RETRY] {model} attempt {attempt}/{attempts}: {exc}; sleeping {wait:.1f}s")
             time.sleep(wait)
+
     raise RuntimeError(f"Groq call failed after {attempts} attempts: {last_error}")
+
+
+def groq_browser_search(
+    model: str,
+    prompt: str,
+    *,
+    max_completion_tokens: int = 2800,
+    attempts: int = 3,
+) -> str:
+    """Run browser search WITHOUT structured output/citation_options.
+
+    Groq documents that Browser Search is not compatible with structured outputs.
+    We therefore keep browsing as a plain-text stage and structure the result in a
+    separate Groq call. If the SDK returns empty message.content but exposes the
+    executed search results, those results are used as the search payload.
+    """
+    if client is None:
+        raise RuntimeError("GROQ_API_KEY is required for this step.")
+
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=max_completion_tokens,
+                temperature=0.4,
+                reasoning_effort="low",
+                tool_choice="required",
+                tools=[{"type": "browser_search"}],
+            )
+            content = (response.choices[0].message.content or "").strip()
+            if content:
+                return content
+
+            tool_text = _tool_results_text(response)
+            if tool_text:
+                print("[GROQ SEARCH] message.content was empty; using executed browser-search results.")
+                return tool_text
+
+            raise RuntimeError("Groq browser-search call returned neither final text nor search-result payload.")
+        except Exception as exc:
+            last_error = exc
+            if _is_non_retryable(exc):
+                raise RuntimeError(f"Groq browser-search request was rejected: {exc}") from exc
+            if attempt >= attempts:
+                break
+            wait = _retry_wait(exc, attempt, base=10.0)
+            print(f"[GROQ SEARCH RETRY] {model} attempt {attempt}/{attempts}: {exc}; sleeping {wait:.1f}s")
+            time.sleep(wait)
+
+    raise RuntimeError(f"Groq browser-search failed after {attempts} attempts: {last_error}")
 
 
 def groq_json(
@@ -303,8 +424,10 @@ def groq_json(
     temperature: float,
     attempts: int = 3,
 ) -> dict[str, Any]:
+    """Structured JSON call. Never combine this with Browser Search."""
     if client is None:
         raise RuntimeError("GROQ_API_KEY is required for this step.")
+
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
@@ -313,20 +436,24 @@ def groq_json(
                 messages=messages,
                 max_completion_tokens=max_completion_tokens,
                 temperature=temperature,
-                include_reasoning=False,
+                reasoning_effort="low",
                 response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content or ""
+            if not raw.strip():
+                raise RuntimeError("Groq JSON call returned an empty response.")
             return extract_last_json_object(clean_json_text(raw))
         except Exception as exc:
             last_error = exc
-            wait = 8 * attempt
-            match = re.search(r"try again in ([\d.]+)s", str(exc), flags=re.IGNORECASE)
-            if match:
-                wait = max(wait, float(match.group(1)) + 1)
+            if _is_non_retryable(exc):
+                raise RuntimeError(f"Groq JSON request was rejected for {model}: {exc}") from exc
+            if attempt >= attempts:
+                break
+            wait = _retry_wait(exc, attempt)
             print(f"[GROQ JSON RETRY] {model} attempt {attempt}/{attempts}: {exc}; sleeping {wait:.1f}s")
             time.sleep(wait)
-    raise RuntimeError(f"Groq JSON call failed: {last_error}")
+
+    raise RuntimeError(f"Groq JSON call failed after {attempts} attempts: {last_error}")
 
 
 # ---------------------------------------------------------------------------
@@ -374,68 +501,126 @@ def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
             previous.append(q)
     history_text = "\n".join(f"- {x}" for x in previous) or "(no previous videos recorded)"
 
-    raw = groq_call(
+    search_prompt = f"""
+Search the web for genuinely curiosity-driven historical story ideas suitable for a
+YouTube channel. Focus on real history, museums, universities, archives, reputable
+history/reference sources, and questions that make a normal viewer think: 'Why did
+that happen?' or 'How was that possible?'
+
+Look across different eras and regions. Favor specific questions rather than broad
+subjects. Return useful findings with the names of the historical subject, the
+curiosity question it suggests, and enough factual context to judge whether the idea
+can support a 10-15 minute video.
+
+Avoid conspiracy claims, paranormal claims presented as fact, and questions already
+used in this channel's recent history list:
+{history_text}
+""".strip()
+
+    search_findings = groq_browser_search(
         GROQ_LIGHT_MODEL,
-        [
-            {
-                "role": "user",
-                "content": TOPIC_PROMPT
-                + "\n\nPreviously used topics/questions. Avoid these and close variations:\n"
-                + history_text,
-            }
-        ],
-        max_completion_tokens=1100,
-        temperature=0.8,
-        browser_search=True,
+        search_prompt,
+        max_completion_tokens=2600,
+        attempts=3,
     )
-    data = extract_last_json_object(clean_json_text(raw))
+
+    selection_prompt = f"""
+You are the final topic selector for a curiosity-first history YouTube channel.
+
+Use the web findings below to select ONE specific historical question.
+Do not invent a more exciting claim than the evidence supports.
+Do not repeat or closely imitate the channel's previous questions.
+The question should be naturally intriguing to a young teenager and an adult, while
+having enough real evidence for a 10-15 minute story.
+
+Previous channel questions:
+{history_text}
+
+WEB FINDINGS:
+{search_findings}
+
+Return exactly this JSON object:
+{{
+  "question": "one specific, irresistible historical question",
+  "topic": "short internal topic label",
+  "era": "short era/civilization label",
+  "why_curious": "2-4 sentences explaining the curiosity",
+  "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
+}}
+""".strip()
+
+    data = groq_json(
+        GROQ_LIGHT_MODEL,
+        [{"role": "user", "content": selection_prompt}],
+        max_completion_tokens=1100,
+        temperature=0.7,
+        attempts=3,
+    )
     for key in ("question", "topic", "era", "why_curious", "search_angles"):
         if not data.get(key):
-            raise RuntimeError(f"Topic scout missing field: {key}")
-    if count_words(data["question"]) < 4:
+            raise RuntimeError(f"Topic selector missing field: {key}")
+    if count_words(str(data["question"])) < 4:
         raise RuntimeError("Topic question is too short.")
+    if not isinstance(data["search_angles"], list):
+        raise RuntimeError("Topic search_angles must be a list.")
     return data
 
 
 def research_topic(topic: dict[str, Any]) -> str:
-    prompt = f"""
-You are the lead historical researcher for a documentary channel.
-
-Central question:
+    search_prompt = f"""
+Research this historical question deeply using browser search:
 {topic['question']}
 
-Topic:
-{topic['topic']}
+Topic: {topic['topic']}
+Era/civilization: {topic['era']}
+Search angles: {json.dumps(topic.get('search_angles', []), ensure_ascii=False)}
 
-Era/civilization:
-{topic['era']}
+Find reliable evidence from museums, universities, national archives, reputable
+reference works, academic/history institutions, and strong primary-source or
+reference pages where possible. Search for the central answer, important people,
+places, objects, chronology, competing interpretations, and any claim that is
+commonly exaggerated online.
 
-Research angles:
-{json.dumps(topic.get('search_angles', []), ensure_ascii=False)}
+Return detailed search findings. Include source titles and URLs when available.
+Clearly distinguish established facts from disputed, legendary, or uncertain claims.
+""".strip()
 
-Use browser search extensively. Prefer reliable sources such as museums,
-universities, national archives, reputable reference works, academic/history
-institutions, and well-maintained reference pages. Wikipedia is acceptable as a
-starting point but should not be the only authority for a surprising claim.
+    search_findings = groq_browser_search(
+        GROQ_RESEARCH_MODEL,
+        search_prompt,
+        max_completion_tokens=4200,
+        attempts=4,
+    )
 
-Return a compact research dossier in plain text with these headings:
+    synthesis_prompt = f"""
+You are the lead historical researcher for a documentary channel.
+
+Turn the browser-search findings below into a compact, accurate research dossier for
+another writer. Do not invent facts or sources. Preserve uncertainty and disagreement.
+
+CENTRAL QUESTION:
+{topic['question']}
+
+BROWSER-SEARCH FINDINGS:
+{search_findings}
+
+Return plain text with exactly these headings:
 1. CORE ANSWER
 2. STORY BEATS (10-16 numbered beats)
 3. IMPORTANT PEOPLE / PLACES / OBJECTS
 4. DISPUTES OR UNCERTAINTY
-5. SOURCES (at least 6 sources with title + URL)
+5. SOURCES (at least 6 source titles + URLs when available)
 
-Do not optimize for shock. Optimize for a fascinating question that can be
-answered honestly. Clearly flag claims that are uncertain, legendary, or disputed.
-The final script will be factual and non-graphic.
+The story writer will use this dossier as the factual backbone, so every surprising
+claim should be traceable to the supplied search findings.
 """.strip()
+
     return groq_call(
         GROQ_RESEARCH_MODEL,
-        [{"role": "user", "content": prompt}],
+        [{"role": "user", "content": synthesis_prompt}],
         max_completion_tokens=4200,
-        temperature=0.45,
-        browser_search=True,
-        attempts=5,
+        temperature=0.35,
+        attempts=4,
     )
 
 
