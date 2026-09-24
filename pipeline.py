@@ -849,7 +849,7 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
     total_words = _script_word_count(script)
     scene_count = len(script["scenes"])
     avg_target = max(50, min(105, round(2050 / scene_count)))
-    min_scene_words = max(45, avg_target - 10)
+    min_scene_words = max(40, avg_target - 20)
     max_scene_words = min(120, avg_target + 15)
     needs_repair = total_words < SCRIPT_MIN_WORDS or total_words > SCRIPT_MAX_WORDS
     needs_repair = needs_repair or any(
