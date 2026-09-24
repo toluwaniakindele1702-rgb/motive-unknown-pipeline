@@ -914,28 +914,43 @@ def _script_style_issues(script: dict[str, Any]) -> list[str]:
 
 
 def _repair_script_length(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
+    """
+    Expand narration in small batches instead of asking the model to rewrite the
+    entire JSON document at once. This makes it much harder for the model to
+    truncate the response while still preserving the original scene structure.
+    """
     current_words = _script_word_count(script)
     scene_count = len(script["scenes"])
     avg_target = max(50, min(105, round(2050 / scene_count)))
     min_scene_words = max(45, avg_target - 10)
     max_scene_words = min(120, avg_target + 15)
 
-    prompt = f"""
-The draft below is structurally useful, but its narration is too short or uneven ({current_words} words).
+    print(
+        f"[SCRIPT] batch repair: {current_words} words -> target ~2050 "
+        f"({min_scene_words}-{max_scene_words} words/scene)"
+    )
 
-Rewrite the SAME story. Preserve supported facts, scene order, characters, settings, actions, and props.
-Do not invent facts, dialogue, motives, or events.
+    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    batch_size = 6
 
-Targets:
-- Keep exactly {scene_count} scenes.
-- Make each narration about {min_scene_words}-{max_scene_words} words.
-- Aim for about 1900-2200 total words.
-- Add explanation, consequences, concrete actions, and useful context.
-- Never pad with scenery, repetition, generic suspense, or fake dialogue.
-- Keep the modern, conversational storyteller voice.
-- Make the opening immediately curious.
+    for start in range(0, scene_count, batch_size):
+        end = min(scene_count, start + batch_size)
+        batch = repaired["scenes"][start:end]
 
-Return JSON only in the same schema as the draft.
+        prompt = f"""
+You are repairing narration for scenes {start + 1}-{end} of a history video.
+
+Expand ONLY the narration text for these scenes. Do not change scene IDs, setting, characters,
+action, props, or mood. Preserve the factual meaning and all supported claims. Do not invent facts,
+dialogue, motives, or events.
+
+Each scene must be {min_scene_words}-{max_scene_words} words.
+Add useful historical explanation, consequences, decisions, evidence, and transitions.
+Do NOT add scenery filler, repetition, generic suspense, fake dialogue, or decorative prose.
+Keep the modern, conversational storyteller voice.
+
+Return JSON only:
+{{"narrations": ["narration for scene {start + 1}", "..."]}}
 
 TOPIC:
 {json.dumps(topic, ensure_ascii=False)}
@@ -943,23 +958,48 @@ TOPIC:
 STORY PLAN:
 {json.dumps(plan, ensure_ascii=False)}
 
-RESEARCH:
-{research}
-
-DRAFT:
-{json.dumps(script, ensure_ascii=False)}
+SCENES TO REPAIR:
+{json.dumps(
+    [{"id": scene["id"], "narration": scene["narration"], "setting": scene["setting"],
+      "characters": scene["characters"], "action": scene["action"], "props": scene["props"],
+      "mood": scene["mood"]} for scene in batch],
+    ensure_ascii=False,
+)}
 """.strip()
-    repaired = groq_json(
-        GROQ_WRITER_MODEL,
-        [{"role": "user", "content": prompt}],
-        max_completion_tokens=6500,
-        temperature=0.65,
-        attempts=2,
-    )
+
+        result = groq_json(
+            GROQ_WRITER_MODEL,
+            [{"role": "user", "content": prompt}],
+            max_completion_tokens=2200,
+            temperature=0.55,
+            attempts=3,
+        )
+        narrations = result.get("narrations")
+        if not isinstance(narrations, list) or len(narrations) != len(batch):
+            raise RuntimeError(
+                f"Script repair batch {start + 1}-{end} returned "
+                f"{len(narrations) if isinstance(narrations, list) else 0} narrations; "
+                f"expected {len(batch)}."
+            )
+
+        for scene, narration in zip(batch, narrations):
+            words = count_words(str(narration))
+            if not (min_scene_words <= words <= max_scene_words):
+                raise RuntimeError(
+                    f"Script repair produced {words} words for scene {scene['id']}; "
+                    f"expected {min_scene_words}-{max_scene_words}."
+                )
+            scene["narration"] = str(narration).strip()
+
+    final_words = _script_word_count(repaired)
+    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(
+            f"Script batch repair finished at {final_words} words; "
+            f"expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
+        )
     validate_script(repaired)
+    print(f"[SCRIPT] batch repair successful: ~{final_words} words")
     return repaired
-
-
 
 
 def _polish_script_style(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any], issues: list[str]) -> dict[str, Any]:
