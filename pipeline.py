@@ -23,6 +23,9 @@ YOUTUBE_TOKEN_JSON
 YOUTUBE_CLIENT_SECRET_JSON
 CLOUDFLARE_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN
+
+Optional GitHub Secrets
+-----------------------
 HUGGINGFACE_TOKEN
 REPLICATE_API_TOKEN
 
@@ -62,7 +65,7 @@ import numpy as np
 import requests
 import soundfile as sf
 from groq import Groq
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -1202,6 +1205,76 @@ def voice_test() -> Path:
     return out
 
 
+def local_image_test() -> None:
+    """Generate one CPU image with an open, quantized OpenVINO model.
+
+    This is deliberately a separate test mode so we can measure whether CPU
+    generation is practical on the GitHub-hosted runner before making it an
+    unattended production fallback.
+    """
+    test_dir = WORK_DIR / "local_image_test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+    out = test_dir / "sample_01.jpg"
+
+    model_id = os.environ.get(
+        "LOCAL_IMAGE_MODEL",
+        "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
+    ).strip()
+
+    prompt = f"""
+{POLISHED_VISUAL_STYLE}
+
+Create one polished 16:9 historical documentary illustration.
+
+SCENE:
+A bustling ancient African market beside a river at sunrise. A historically grounded
+merchant speaks with a traveler beside woven baskets and traded goods. Mud-brick buildings,
+wooden boats, fabrics, pottery, trees, and other period-appropriate details create a rich,
+layered environment. Faces and gestures are expressive and anatomically believable.
+The image should feel like a premium hand-illustrated history documentary frame.
+
+No readable text, captions, subtitles, logos, watermarks, letters, numbers, pseudo-writing,
+modern roads, asphalt, lane markings, cars, power lines, modern clothing, photorealism,
+3D CGI, anime, stick figures, doodles, or flat clip-art.
+""".strip()
+
+    started = time.time()
+    print(f"[LOCAL IMAGE TEST] Loading OpenVINO model: {model_id}")
+    try:
+        from optimum.intel.openvino import OVDiffusionPipeline
+    except Exception as exc:
+        raise RuntimeError(
+            "Local image test dependencies are missing. The workflow installs "
+            "optimum[openvino] only for local_image_test."
+        ) from exc
+
+    try:
+        pipeline = OVDiffusionPipeline.from_pretrained(model_id)
+        image = pipeline(
+            prompt,
+            num_inference_steps=4,
+            width=768,
+            height=512,
+        ).images[0]
+        image = image.convert("RGB")
+        image = ImageOps.fit(image, (1024, 576), method=Image.Resampling.LANCZOS)
+        image.save(out, format="JPEG", quality=92, optimize=True)
+    except Exception as exc:
+        raise RuntimeError(f"Local OpenVINO image generation failed: {exc}") from exc
+
+    elapsed = time.time() - started
+    if not out.exists() or out.stat().st_size < 10000:
+        raise RuntimeError("Local image test produced no valid image file.")
+
+    checkpoint(
+        "local_image_test_complete",
+        image_model=model_id,
+        output=str(out.relative_to(ROOT)),
+        seconds=round(elapsed, 2),
+    )
+    print(f"[LOCAL IMAGE TEST] Complete in {elapsed:.1f}s: {out}")
+
+
 def visual_test() -> None:
     """Generate a few polished sample frames without LLM, TTS, or YouTube."""
     if IMAGE_PROVIDER != "cloudflare":
@@ -1209,9 +1282,6 @@ def visual_test() -> None:
             f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
             "The visual test currently requires cloudflare."
         )
-    require_secret("CLOUDFLARE_ACCOUNT_ID")
-    require_secret("CLOUDFLARE_API_TOKEN")
-
     test_dir = WORK_DIR / "visual_test"
     test_dir.mkdir(parents=True, exist_ok=True)
     style_ref = _small_reference(_decode_style_reference(), "visual_test_style")
@@ -1500,6 +1570,57 @@ def _replicate_image(prompt: str, out_path: Path, seed: int) -> None:
     _save_provider_image_bytes(out_path, image_response.content, "replicate")
 
 
+def _local_image(prompt: str, out_path: Path, seed: int) -> None:
+    """CPU-only emergency provider using an OpenVINO INT8 LCM model."""
+    model_id = os.environ.get(
+        "LOCAL_IMAGE_MODEL",
+        "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
+    ).strip()
+    try:
+        from optimum.intel.openvino import OVDiffusionPipeline
+    except Exception as exc:
+        raise ImageProviderError(
+            "local",
+            f"Local OpenVINO dependencies are unavailable: {exc}",
+            disable_for_run=True,
+        ) from exc
+
+    print(f"[IMAGE] Local OpenVINO {model_id} seed={seed}")
+    try:
+        pipeline = getattr(_local_image, "_pipeline", None)
+        loaded_model = getattr(_local_image, "_model_id", None)
+        if pipeline is None or loaded_model != model_id:
+            pipeline = OVDiffusionPipeline.from_pretrained(model_id)
+            setattr(_local_image, "_pipeline", pipeline)
+            setattr(_local_image, "_model_id", model_id)
+
+        generator = None
+        try:
+            import torch
+            generator = torch.Generator(device="cpu").manual_seed(seed)
+        except Exception:
+            pass
+
+        result = pipeline(
+            prompt,
+            num_inference_steps=int(os.environ.get("LOCAL_IMAGE_STEPS", "4")),
+            width=int(os.environ.get("LOCAL_IMAGE_WIDTH", "768")),
+            height=int(os.environ.get("LOCAL_IMAGE_HEIGHT", "512")),
+            generator=generator,
+        )
+        image = result.images[0].convert("RGB")
+        image = ImageOps.fit(image, (IMAGE_W, IMAGE_H), method=Image.Resampling.LANCZOS)
+        image.save(out_path, format="JPEG", quality=92, optimize=True)
+    except Exception as exc:
+        raise ImageProviderError(
+            "local",
+            f"Local OpenVINO image generation failed: {str(exc)[:1800]}",
+        ) from exc
+
+    if not out_path.exists() or out_path.stat().st_size < 10000:
+        raise ImageProviderError("local", "Local provider produced no valid image file.")
+
+
 def _generate_image_with_fallback(prompt: str, out_path: Path, seed: int, references: list[Path]) -> str:
     disabled = getattr(_generate_image_with_fallback, "_disabled", set())
     attempted = []
@@ -1514,6 +1635,8 @@ def _generate_image_with_fallback(prompt: str, out_path: Path, seed: int, refere
                 _huggingface_image(prompt, out_path, seed)
             elif provider == "replicate":
                 _replicate_image(prompt, out_path, seed)
+            elif provider == "local":
+                _local_image(prompt, out_path, seed)
             else:
                 print(f"[IMAGE] Unknown provider {provider!r}, skipping.")
                 continue
@@ -2317,10 +2440,14 @@ def main(mode: str = "full") -> None:
         visual_test()
         return
 
+    if mode == "local_image_test":
+        local_image_test()
+        return
+
     require_secret("GROQ_API_KEY")
     require_secret("YOUTUBE_TOKEN_JSON")
     require_secret("YOUTUBE_CLIENT_SECRET_JSON")
-    supported = {"cloudflare", "huggingface", "replicate"}
+    supported = {"cloudflare", "huggingface", "replicate", "local"}
     unknown = [x for x in IMAGE_PROVIDER_ORDER if x not in supported]
     if unknown:
         raise RuntimeError(f"Unsupported image providers: {unknown}")
@@ -2424,6 +2551,10 @@ def main(mode: str = "full") -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["full", "voice_test", "visual_test"], default="full")
+    parser.add_argument(
+        "--mode",
+        choices=["full", "voice_test", "visual_test", "local_image_test"],
+        default="full",
+    )
     args = parser.parse_args()
     main(args.mode)
