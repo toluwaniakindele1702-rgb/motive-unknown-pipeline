@@ -21,6 +21,8 @@ Required GitHub Secrets
 GROQ_API_KEY
 YOUTUBE_TOKEN_JSON
 YOUTUBE_CLIENT_SECRET_JSON
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
 
 Optional GitHub Variables / Secrets
 -----------------------------------
@@ -29,9 +31,10 @@ KOKORO_VOICE               default: am_onyx
 KOKORO_SPEED               default: 0.96
 CHANNEL_NAME               optional, used in prompts/description
 
-Optional repo asset
--------------------
+Optional repo assets
+--------------------
 assets/music/background.mp3  royalty-free / licensed music only
+assets/visual_style_reference.jpg.b64  embedded JPEG style reference used as an image-model style anchor
 
 The workflow file supplied with this package runs daily and also supports a
 manual "voice_test" mode before committing to a full production run.
@@ -1292,11 +1295,11 @@ def _decode_style_reference() -> Path:
             "Missing embedded visual style reference at assets/visual_style_reference.jpg.b64"
         )
     try:
-        data = base64.b64decode(STYLE_REFERENCE_B64.read_text(encoding="ascii"))
+        data = STYLE_REFERENCE_B64.read_bytes()
     except Exception as exc:
-        raise RuntimeError("Embedded visual style reference could not be decoded.") from exc
-    if len(data) < 1000:
-        raise RuntimeError("Embedded visual style reference is unexpectedly small.")
+        raise RuntimeError("Embedded visual style reference could not be read.") from exc
+    if len(data) < 1000 or data[:2] != b"\xff\xd8":
+        raise RuntimeError("Embedded visual style reference is not a valid JPEG.")
     out.write_bytes(data)
     return out
 
