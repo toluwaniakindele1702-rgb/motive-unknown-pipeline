@@ -35,7 +35,8 @@ jobs:
       YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'private' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      IMAGE_PROVIDER: ${{ vars.IMAGE_PROVIDER || 'cloudflare' }}
+      PIXAZO_API_KEY: ${{ secrets.PIXAZO_API_KEY }}
+      IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,pollinations,pixazo' }}
       KOKORO_VOICE: ${{ vars.KOKORO_VOICE || 'am_onyx' }}
       KOKORO_SPEED: ${{ vars.KOKORO_SPEED || '0.96' }}
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Motive Unknown' }}
@@ -141,3 +142,5 @@ jobs:
             state/current_run/*.json
             voice_test_onyx.wav
             run_work/visual_test/*.jpg
+            run_work/scenes/*.jpg
+            run_work/output/thumbnail.jpg
