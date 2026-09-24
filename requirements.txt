@@ -2,7 +2,7 @@
 groq>=0.31.0,<1.0
 requests>=2.32,<3
 
-# TTS
+# TTS. CPU-only PyTorch is installed explicitly by the workflow.
 kokoro>=0.9.4,<1.0
 soundfile>=0.13,<1.0
 numpy>=2.0,<3
