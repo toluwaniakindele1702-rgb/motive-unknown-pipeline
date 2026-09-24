@@ -35,8 +35,9 @@ jobs:
       YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'private' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PIXAZO_API_KEY: ${{ secrets.PIXAZO_API_KEY }}
-      IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,pollinations,pixazo' }}
+      HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+      REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+      IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,huggingface,replicate' }}
       KOKORO_VOICE: ${{ vars.KOKORO_VOICE || 'am_onyx' }}
       KOKORO_SPEED: ${{ vars.KOKORO_SPEED || '0.96' }}
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Motive Unknown' }}
