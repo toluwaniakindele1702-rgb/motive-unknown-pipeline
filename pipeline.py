@@ -1282,6 +1282,8 @@ def visual_test() -> None:
             f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
             "The visual test currently requires cloudflare."
         )
+    require_secret("CLOUDFLARE_ACCOUNT_ID")
+    require_secret("CLOUDFLARE_API_TOKEN")
     test_dir = WORK_DIR / "visual_test"
     test_dir.mkdir(parents=True, exist_ok=True)
     style_ref = _small_reference(_decode_style_reference(), "visual_test_style")
