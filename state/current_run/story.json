@@ -1,0 +1,106 @@
+{
+  "central_question": "Why did the Greeks decide to build a massive wall around Troy, and how did it influence the Trojan War?",
+  "hook": "A Greek fleet lands on a plain, a wall rises from earth and timber, and a storm blows it down. The Greeks had built a wall—yet it was not for Troy. What drove them to erect it, and how did its collapse turn the tide of a war that would echo through history?",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Instant shock: the wall appears where none should be.",
+      "reveal": "The Greeks, not the Trojans, raise a towering wooden‑earth wall around their ships and camp.",
+      "required_facts": [
+        "Homer Iliad 12.1‑23 describes a wall built by the Achaeans around their fleet.",
+        "Schliemann’s excavations show no Greek-built stone wall at Troy VIIa."
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Introduce the mystery: why would the attackers build a defensive wall?",
+      "reveal": "The Greeks had just taken spoils from Troy; their ships and loot were vulnerable to a swift Trojan counter‑attack.",
+      "required_facts": [
+        "Iliad 12.2 mentions the Greeks unloading booty.",
+        "Archaeological evidence of a prolonged siege indicates the Greeks needed a secure perimeter."
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Show the decision-making: Agamemnon orders the wall.",
+      "reveal": "Agamemnon, wary of Trojan forces, commands a ditch and a high wall to protect the fleet.",
+      "required_facts": [
+        "Iliad 12.4 cites Agamemnon’s instruction.",
+        "Near‑Eastern siege camps of the Bronze Age routinely constructed field walls."
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Highlight divine ambivalence: the wall is built without the gods’ consent.",
+      "reveal": "Homer notes the wall’s existence is contrary to divine will, foreshadowing its fragility.",
+      "required_facts": [
+        "Iliad 12.12: the wall was built 'without the consent of the immortals'.",
+        "Scholarly interpretation: divine disfavor often signals impending disaster."
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Establish the wall’s role: it turns a raid into a siege.",
+      "reveal": "With the wall, the Greeks can hold their ground for years, turning the conflict into a decade‑long stalemate.",
+      "required_facts": [
+        "Iliad 12.15‑18 describe the Greeks’ secure position.",
+        "Archaeological layers at Troy VIIa show a destruction layer consistent with a long siege."
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Introduce the storm: the gods intervene.",
+      "reveal": "Poseidon, Apollo, and Zeus unleash a storm that collapses the wall.",
+      "required_facts": [
+        "Iliad 12.30‑38 recounts the divine storm.",
+        "Hittite tablets record divine interventions in warfare."
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Show the immediate fallout: the Greeks lose their protective perimeter.",
+      "reveal": "The wall’s collapse allows Trojans to breach the Greek camp, leading to Patroclus’s death.",
+      "required_facts": [
+        "Iliad 12.39‑45: Trojans attack the weakened camp.",
+        "Patroclus’s death is a turning point in the war’s narrative."
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Connect to the larger conflict: the Greeks must now assault Troy’s own walls.",
+      "reveal": "Without their field wall, the Greeks focus on Troy’s massive limestone citadel walls.",
+      "required_facts": [
+        "Iliad 13‑14 describe the Greeks’ preparations to attack Troy’s walls.",
+        "Archaeology confirms Troy VI‑VIIa had a 12‑mile limestone wall."
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Reveal the paradox: the Greeks built a wall to protect themselves, yet it indirectly leads to Troy’s fall.",
+      "reveal": "The temporary wall’s destruction forces the Greeks into a direct assault on Troy’s permanent walls, culminating in the city’s fall.",
+      "required_facts": [
+        "Iliad 21‑24 narrate the final assault.",
+        "Excavations show a final destruction layer at Troy VIIa."
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Deliver the payoff: answer the central question.",
+      "reveal": "The Greeks built the wall to secure their fleet and loot; its collapse, triggered by divine wrath, removed that safety net and shifted the war’s focus onto Troy’s own formidable walls, ultimately leading to the city’s destruction.",
+      "required_facts": [
+        "Homeric text explains the wall’s purpose and fate.",
+        "Archaeological evidence of the wall’s absence and the existence of Troy’s stone fortifications."
+      ]
+    },
+    {
+      "section": 11,
+      "purpose": "End with a memorable implication.",
+      "reveal": "The Greeks’ attempt to control the battlefield through engineering backfired, showing that even the most calculated military moves can be undone by forces beyond human control.",
+      "required_facts": [
+        "The divine storm as a narrative device.",
+        "Historical parallels where engineering failed due to unforeseen factors."
+      ]
+    }
+  ],
+  "ending_payoff": "The Greeks’ field wall was a tactical safeguard that, when destroyed by the gods, forced them to abandon their defensive posture and confront Troy’s own massive stone walls—an act that sealed the fate of both armies and cemented the Trojan War as a tale of hubris, divine intervention, and the limits of human ingenuity."
+}
