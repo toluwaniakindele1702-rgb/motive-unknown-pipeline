@@ -40,8 +40,11 @@ jobs:
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
       IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,huggingface,replicate,local' }}
       KOKORO_VOICE: ${{ vars.KOKORO_VOICE || 'am_onyx' }}
-      KOKORO_SPEED: ${{ vars.KOKORO_SPEED || '0.96' }}
+      KOKORO_SPEED: ${{ vars.KOKORO_SPEED || '1.04' }}
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Motive Unknown' }}
+      MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '64' }}
+      VISUAL_BEAT_TARGET_WORDS: ${{ vars.VISUAL_BEAT_TARGET_WORDS || '30' }}
+      BACKGROUND_MUSIC_VOLUME: ${{ vars.BACKGROUND_MUSIC_VOLUME || '0.055' }}
 
     steps:
       - name: Checkout
