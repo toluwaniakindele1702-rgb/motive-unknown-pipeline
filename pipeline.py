@@ -35,7 +35,7 @@ Optional GitHub Variables / Secrets
 -----------------------------------
 YOUTUBE_PRIVACY_STATUS     default: private
 KOKORO_VOICE               default: am_onyx
-KOKORO_SPEED               default: 0.96
+KOKORO_SPEED               default: 1.04
 CHANNEL_NAME               optional, used in prompts/description
 
 Optional repo assets
@@ -961,7 +961,7 @@ def _fit_narration_to_limit(text: str, max_words: int) -> str:
     if len(words) <= max_words:
         return text.strip()
     clipped = " ".join(words[:max_words]).strip()
-    sentences = re.split(r"(?<=[.!?])s+", clipped)
+    sentences = re.split(r"(?<=[.!?])\s+", clipped)
     if len(sentences) > 1 and count_words(sentences[-1]) <= 8:
         candidate = " ".join(sentences[:-1]).strip()
         if count_words(candidate) >= 45:
@@ -2325,7 +2325,7 @@ def _visual_beat_durations(
     raw = [total_audio_duration * w / total_weight for w in weights]
 
     # Keep very short flashes readable, then renormalize to the exact audio duration.
-    adjusted = [max(1.15, d) for d in raw]
+    adjusted = [max(VISUAL_BEAT_MIN_DURATION, d) for d in raw]
     scale = total_audio_duration / sum(adjusted)
     return [d * scale for d in adjusted]
 
