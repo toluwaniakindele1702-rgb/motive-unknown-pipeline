@@ -1,5 +1,5 @@
 """
-Motive Unknown v3 — curiosity-first automated history video factory.
+Motive Unknown v4 — curiosity-first automated history video factory.
 
 Design goals
 ------------
@@ -9,9 +9,11 @@ Design goals
   structuring/SEO tasks.
 - Local/open-weight Kokoro TTS (no paid voice API).
 - Polished AI-generated historical illustrations using a multi-provider fallback chain.
-- Each narration scene is split into 1-4 visual beats so the picture changes frequently.
+- Each narration scene is split into compact visual beats so the picture changes frequently.
+- Visual prompts prioritize the exact narrated fact, action, evidence, place, person, or object.
 - A persistent style-reference image plus prior-frame references improve visual continuity.
-- No Ken Burns zoom and no burned-in subtitles.
+- Motion-comic camera drift and animated film texture add movement without Ken Burns zoom.
+- No burned-in subtitles.
 - Dedicated thumbnail generation separate from video scenes.
 - Idempotent stage files so a rerun can skip already-completed stages.
 - Safe YouTube default: private uploads until the owner changes the setting.
@@ -88,7 +90,8 @@ GROQ_WRITER_MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
 
 KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_onyx").strip()
-KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "0.96"))
+KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "1.04"))
+BACKGROUND_MUSIC_VOLUME = float(os.environ.get("BACKGROUND_MUSIC_VOLUME", "0.055"))
 
 # Polished AI illustration generation.
 IMAGE_PROVIDER_ORDER = [
@@ -111,7 +114,9 @@ REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "").strip()
 REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-labs/flux-1.1-pro").strip()
 IMAGE_W = 1024
 IMAGE_H = 576
-MAX_VISUAL_BEATS_PER_VIDEO = 36
+MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "64"))
+VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "30"))
+VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
 LOCAL_IMAGE_WIDTH = int(os.environ.get("LOCAL_IMAGE_WIDTH", "768"))
@@ -826,6 +831,11 @@ DO NOT WRITE LIKE
 Avoid filler such as "the sun was shining," "the water was calm," "little did they know,"
 "in the annals of history," and long scenery descriptions unless the detail changes the story.
 Never add a fact simply to make the script longer.
+Every few sentences should introduce something the viewer can picture: a person, object, place,
+decision, movement, document, number, date, map location, or physical consequence. Prefer concrete
+language over abstract summaries so the visual editor can respond to the narration beat by beat.
+Write for energetic spoken delivery: short punchy sentences around important reveals, with varied
+sentence lengths and natural transitions. Do not make every sentence sound equally solemn.
 Never invent dialogue or inner thoughts and present them as historical facts.
 When evidence is uncertain or disputed, say so naturally.
 Do not use graphic descriptions.
@@ -945,6 +955,22 @@ def _script_word_count(script: dict[str, Any]) -> int:
     return sum(count_words(str(scene.get("narration", ""))) for scene in script.get("scenes", []))
 
 
+def _fit_narration_to_limit(text: str, max_words: int) -> str:
+    """Trim an overlong narration at a sentence boundary whenever possible."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text.strip()
+    clipped = " ".join(words[:max_words]).strip()
+    sentences = re.split(r"(?<=[.!?])s+", clipped)
+    if len(sentences) > 1 and count_words(sentences[-1]) <= 8:
+        candidate = " ".join(sentences[:-1]).strip()
+        if count_words(candidate) >= 45:
+            return candidate
+    if not re.search(r"[.!?]$", clipped):
+        clipped += "."
+    return clipped
+
+
 def _script_style_issues(script: dict[str, Any]) -> list[str]:
     full_text = " ".join(str(scene.get("narration", "")) for scene in script.get("scenes", []))
     lower = full_text.lower()
@@ -1041,7 +1067,18 @@ SCENES:
                 print(f"[SCRIPT] repair batch {start + 1}-{end}, attempt {attempt} failed: {exc}")
 
         if not success:
-            raise RuntimeError(f"Could not repair narration batch {start + 1}-{end} after 3 attempts.")
+            salvaged = True
+            for scene in batch:
+                words = count_words(str(scene.get("narration", "")))
+                if words > max_scene_words:
+                    scene["narration"] = _fit_narration_to_limit(
+                        str(scene["narration"]),
+                        max_scene_words,
+                    )
+                    salvaged = salvaged and count_words(scene["narration"]) >= 45
+            if not salvaged:
+                raise RuntimeError(f"Could not repair narration batch {start + 1}-{end} after 3 attempts.")
+            print(f"[SCRIPT] salvaged overlong narration in batch {start + 1}-{end} by trimming to safe limits.")
 
         # Persist progress so a fresh scheduled/manual run resumes here.
         atomic_write_json(SCRIPT_PATH, repaired)
@@ -1149,6 +1186,7 @@ DRAFT:
 # Kokoro TTS
 # ---------------------------------------------------------------------------
 _kokoro_pipeline = None
+_local_worker_process: subprocess.Popen[str] | None = None
 
 
 def get_kokoro_pipeline():
@@ -1345,7 +1383,7 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Turn narration into 1-4 natural visual beats, roughly one image every ~60 words, with at most two beats per scene."""
+    """Split narration into compact, contiguous visual beats for faster information changes."""
     text = normalize_spaces(narration)
     if not text:
         return [""]
@@ -1362,7 +1400,7 @@ def split_visual_beats(narration: str) -> list[str]:
                 bucket = ""
                 for part in parts:
                     candidate = f"{bucket} {part}".strip()
-                    if count_words(candidate) <= 22 or not bucket:
+                    if count_words(candidate) <= 24 or not bucket:
                         bucket = candidate
                     else:
                         expanded.append(bucket)
@@ -1375,29 +1413,39 @@ def split_visual_beats(narration: str) -> list[str]:
             expanded.append(sentence)
 
     word_total = count_words(text)
-    target_beats = max(1, min(2, int(np.ceil(word_total / 60))))
+    target_beats = max(
+        1,
+        min(3, int(np.ceil(word_total / max(1, VISUAL_BEAT_TARGET_WORDS)))),
+    )
     target_beats = min(target_beats, len(expanded))
 
     while len(expanded) > target_beats:
-        best_idx = min(
-            range(len(expanded) - 1),
-            key=lambda i: count_words(expanded[i]) + count_words(expanded[i + 1]),
-        )
+        def pair_score(i: int) -> tuple[float, int]:
+            pair = f"{expanded[i]} {expanded[i + 1]}"
+            info = (
+                3 * len(re.findall(r"\b\d{2,4}\b", pair))
+                + 2 * len(re.findall(
+                    r"\b(?:map|route|letter|document|report|record|evidence|ship|army|"
+                    r"king|queen|city|battle)\b",
+                    pair,
+                    re.I,
+                ))
+            )
+            return (count_words(pair) + info * 8, i)
+
+        best_idx = min(range(len(expanded) - 1), key=pair_score)
         expanded[best_idx] = f"{expanded[best_idx]} {expanded[best_idx + 1]}".strip()
         del expanded[best_idx + 1]
 
     while len(expanded) < target_beats:
         idx = max(range(len(expanded)), key=lambda i: count_words(expanded[i]))
         words = expanded[idx].split()
-        if len(words) < 14:
+        if len(words) < 18:
             break
-        cut = len(words) // 2
-        expanded[idx:idx + 1] = [
-            " ".join(words[:cut]),
-            " ".join(words[cut:]),
-        ]
+        cut = max(8, min(len(words) - 8, round(len(words) / 2)))
+        expanded[idx:idx + 1] = [" ".join(words[:cut]), " ".join(words[cut:])]
 
-    return expanded[:4] or [text]
+    return expanded[:3] or [text]
 
 
 POLISHED_VISUAL_STYLE = """
@@ -1420,34 +1468,39 @@ roads, materials, tools, clothing, architecture, and transport for the stated er
 
 
 def build_visual_plan(script: dict[str, Any]) -> list[list[str]]:
-    """Build one deterministic visual-beat plan for both rendering and video assembly.
-
-    Each scene starts with the normal 1-2 beat splitter. If the episode exceeds the
-    per-episode image cap, the least information-dense two-beat scenes are merged
-    until the plan fits. This keeps narration intact while preventing a hard failure.
-    """
+    """Build one deterministic visual-beat plan shared by render and assembly."""
     plans = [
         split_visual_beats(str(scene.get("narration", "")))
         for scene in script["scenes"]
     ]
     initial = sum(len(beats) for beats in plans)
 
+    def density(text: str) -> float:
+        words = max(1, count_words(text))
+        signals = len(re.findall(
+            r"\b\d{2,4}\b|\b(?:map|route|letter|document|report|record|evidence|"
+            r"battle|ship|city|king|queen|decision|discovered|found|arrived|left)\b",
+            text,
+            re.I,
+        ))
+        return signals / words
+
     while sum(len(beats) for beats in plans) > MAX_VISUAL_BEATS_PER_VIDEO:
-        candidates = [
-            idx for idx, beats in enumerate(plans)
-            if len(beats) > 1
-        ]
+        candidates = [idx for idx, beats in enumerate(plans) if len(beats) > 1]
         if not candidates:
             break
-        idx = min(
-            candidates,
-            key=lambda i: (
-                sum(count_words(part) for part in plans[i]),
-                i,
+        idx = min(candidates, key=lambda i: (density(" ".join(plans[i])), i))
+        beats = plans[idx]
+        pair_idx = min(
+            range(len(beats) - 1),
+            key=lambda j: (
+                density(f"{beats[j]} {beats[j + 1]}"),
+                count_words(beats[j]) + count_words(beats[j + 1]),
             ),
         )
-        merged = " ".join(part for part in plans[idx] if part).strip()
-        plans[idx] = [merged]
+        beats[pair_idx:pair_idx + 2] = [
+            f"{beats[pair_idx]} {beats[pair_idx + 1]}".strip()
+        ]
 
     final = sum(len(beats) for beats in plans)
     if initial != final:
@@ -1624,38 +1677,81 @@ def _ensure_local_image_environment() -> Path:
     return python_bin
 
 
+def _stop_local_worker() -> None:
+    global _local_worker_process
+    proc = _local_worker_process
+    _local_worker_process = None
+    if proc is None:
+        return
+    try:
+        if proc.stdin:
+            proc.stdin.write('{"cmd":"shutdown"}\n')
+            proc.stdin.flush()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=8)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+import atexit
+atexit.register(_stop_local_worker)
+
+
+def _get_local_worker_process(python_bin: Path) -> subprocess.Popen[str]:
+    global _local_worker_process
+    if _local_worker_process is not None and _local_worker_process.poll() is None:
+        return _local_worker_process
+
+    print("[LOCAL IMAGE] Starting persistent CPU worker (model loads once per run)...")
+    _local_worker_process = subprocess.Popen(
+        [str(python_bin), str(LOCAL_IMAGE_WORKER), "--server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    return _local_worker_process
+
+
 def _run_local_image(prompt: str, out_path: Path, seed: int) -> None:
     python_bin = _ensure_local_image_environment()
-    request_path = WORK_DIR / f"local_image_request_{seed}.json"
-    atomic_write_json(
-        request_path,
-        {
-            "model_id": LOCAL_IMAGE_MODEL,
-            "prompt": prompt,
-            "output_path": str(out_path.resolve()),
-            "seed": seed,
-            "steps": LOCAL_IMAGE_STEPS,
-            "width": LOCAL_IMAGE_WIDTH,
-            "height": LOCAL_IMAGE_HEIGHT,
-        },
-    )
+    request = {
+        "cmd": "generate",
+        "model_id": LOCAL_IMAGE_MODEL,
+        "prompt": prompt,
+        "output_path": str(out_path.resolve()),
+        "seed": seed,
+        "steps": LOCAL_IMAGE_STEPS,
+        "width": LOCAL_IMAGE_WIDTH,
+        "height": LOCAL_IMAGE_HEIGHT,
+    }
     print(f"[IMAGE] Local OpenVINO {LOCAL_IMAGE_MODEL} seed={seed}")
+    proc = _get_local_worker_process(python_bin)
     try:
-        subprocess.run(
-            [str(python_bin), str(LOCAL_IMAGE_WORKER), str(request_path)],
-            check=True,
-            timeout=900,
-        )
-    except subprocess.SubprocessError as exc:
-        raise ImageProviderError(
-            "local",
-            f"Local OpenVINO worker failed: {str(exc)[:1800]}",
-        ) from exc
-    finally:
-        try:
-            request_path.unlink()
-        except OSError:
-            pass
+        assert proc.stdin is not None and proc.stdout is not None
+        proc.stdin.write(json.dumps(request) + "\n")
+        proc.stdin.flush()
+
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                raise ImageProviderError("local", "Persistent local image worker exited unexpectedly.")
+            line = line.rstrip()
+            if line:
+                print(line)
+            if line.startswith("__LOCAL_OK__"):
+                break
+            if line.startswith("__LOCAL_ERROR__"):
+                raise ImageProviderError("local", line, disable_for_run=False)
+    except (BrokenPipeError, OSError, subprocess.SubprocessError) as exc:
+        _stop_local_worker()
+        raise ImageProviderError("local", f"Local OpenVINO worker communication failed: {str(exc)[:1800]}") from exc
 
     if not out_path.exists() or out_path.stat().st_size < 10000:
         raise ImageProviderError("local", "Local provider produced no valid image file.")
@@ -1768,6 +1864,21 @@ def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[P
         image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
 
 
+def visual_device_hint(beat_text: str) -> str:
+    lower = beat_text.lower()
+    if re.search(r"\b\d{2,4}\b|\bpercent\b|\b\d+%\b", lower):
+        return "Use a clear number/date-focused composition, such as a timeline, date marker, quantity comparison, or period document detail."
+    if re.search(r"\b(map|route|crossed|traveled|sailed|marched|arrived|departed|distance|border|river|coast|road)\b", lower):
+        return "Use a geographic or overhead storytelling composition with a visible route, landmark, terrain, or positional relationship."
+    if re.search(r"\b(letter|document|report|record|diary|decree|note|inscription|photograph|evidence|testimony)\b", lower):
+        return "Use a close evidence/document composition with the important physical object prominently staged."
+    if re.search(r"\b(decided|ordered|refused|agreed|claimed|argued|revealed|discovered|found)\b", lower):
+        return "Use an action or reaction shot that makes the decision, disagreement, discovery, or reveal immediately legible."
+    if re.search(r"\b(built|destroyed|opened|closed|entered|left|fled|attacked|defended|carried|gave|took)\b", lower):
+        return "Use a dynamic action-focused composition showing the physical change or consequence."
+    return "Use a concrete scene centered on the most specific person, object, place, or action in the narration beat."
+
+
 def make_visual_prompt(
     scene: dict[str, Any],
     era: str,
@@ -1780,19 +1891,23 @@ def make_visual_prompt(
         "wide cinematic establishing shot",
         "medium character interaction shot",
         "dynamic over-the-shoulder storytelling shot",
-        "closer emotional or important-object shot",
+        "close important-object or evidence shot",
+        "high-angle geographic or positional shot",
+        "low-angle consequence/reaction shot",
     ]
     shot = shot_types[beat_index % len(shot_types)]
     chars = ", ".join(str(x) for x in (scene.get("characters") or [])[:4]) or "historical people"
     props = ", ".join(str(x) for x in (scene.get("props") or [])[:4]) or "period-appropriate objects"
+    device = visual_device_hint(beat_text)
 
     continuity = (
         "A previous generated frame is supplied as a reference. Preserve recurring "
         "character design, clothing colors, facial proportions, and overall illustration "
-        "style from that reference, but create a new shot and do not copy its background."
+        "style from that reference, but create a genuinely new shot with a new composition "
+        "and new visual information; do not merely copy the previous background."
         if has_previous_reference
         else
-        "Establish the visual character designs now so later shots can remain consistent."
+        "Establish recurring character design and the visual world now so later shots can remain consistent."
     )
 
     return f"""
@@ -1819,18 +1934,21 @@ MOOD:
 NARRATION BEAT:
 {beat_text}
 
+VISUAL DEVICE:
+{device}
+
 SHOT DIRECTION:
-{shot}. Use clear staging and strong depth. Let the main action be easy to understand
-at a glance. Vary camera distance and composition from the previous beat while keeping
-the same visual world.
+{shot}. The frame must communicate the narration beat at a glance. Prefer specific physical
+details, historically plausible materials, clothing, tools, architecture, terrain, and transport.
+When the beat introduces a new fact, location, date, object, movement, or consequence, make that
+new information the focal point. Avoid generic "people standing around" compositions.
 
 CONTINUITY:
 {continuity}
 
-Create a finished, polished illustration. No readable text, lettering, numbers,
-inscriptions, pseudo-text, logos, or symbols resembling modern writing anywhere in the image.
-Flags, banners, walls, tablets, scrolls, signs, and books must have blank or non-readable
-surfaces unless the narration explicitly requires a specific historical inscription.
+Create a finished, polished illustration. No readable text, lettering, pseudo-writing, logos,
+watermarks, or accidental modern signage. Historical documents can be shown as visually detailed
+objects but should not contain readable invented text.
 """.strip()
 
 
@@ -2256,7 +2374,14 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
         [
             "ffmpeg", "-y",
             "-f", "concat", "-safe", "0", "-i", str(video_list),
-            "-vf", f"scale={VIDEO_W}:{VIDEO_H}:force_original_aspect_ratio=decrease,pad={VIDEO_W}:{VIDEO_H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+            "-vf",
+            (
+                "scale=1360:765:force_original_aspect_ratio=increase,"
+                f"crop={VIDEO_W}:{VIDEO_H}:x='40+16*sin(2*PI*t/18)':y='22+10*cos(2*PI*t/23)',"
+                "eq=contrast=1.02:saturation=1.04,"
+                "noise=alls=3:allf=t+u,"
+                "format=yuv420p"
+            ),
             "-r", str(VIDEO_FPS),
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-pix_fmt", "yuv420p",
@@ -2286,8 +2411,12 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
                 "-i", str(full_audio),
                 "-stream_loop", "-1", "-i", str(MUSIC_PATH),
                 "-filter_complex",
-                "[0:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[n];"
-                "[1:a]volume=0.06[m];[n][m]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                (
+                    "[0:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[n];"
+                    f"[1:a]volume={BACKGROUND_MUSIC_VOLUME:.3f},highpass=f=90,lowpass=f=9000[m];"
+                    "[m][n]sidechaincompress=threshold=0.03:ratio=6:attack=25:release=450:makeup=1[ducked];"
+                    "[n][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]"
+                ),
                 "-map", "[a]", "-c:a", "aac", "-b:a", "192k",
                 str(mixed_audio),
             ],
@@ -2476,7 +2605,7 @@ def save_manifests(topic: dict[str, Any], research: str, story: dict[str, Any], 
 
 
 def main(mode: str = "full") -> None:
-    print(f"=== {CHANNEL_NAME} / Motive Unknown v3 ===")
+    print(f"=== {CHANNEL_NAME} / Motive Unknown v4 ===")
     print(f"MODE={mode} | KOKORO_VOICE={KOKORO_VOICE} | SPEED={KOKORO_SPEED}")
 
     if mode == "voice_test":
