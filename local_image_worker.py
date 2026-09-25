@@ -189,9 +189,10 @@ def run_server() -> int:
 
 
 def main() -> int:
+    global PIPELINE
+
     if len(sys.argv) == 2 and sys.argv[1] == "--server":
         print("[LOCAL WORKER] Loading model once: {}".format(LOCAL_MODEL_ID), flush=True)
-        global PIPELINE
         PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
             LOCAL_MODEL_ID,
             safety_checker=None,
@@ -206,7 +207,6 @@ def main() -> int:
     request_path = Path(sys.argv[1])
     request = json.loads(request_path.read_text(encoding="utf-8"))
 
-    global PIPELINE
     PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
         str(request["model_id"]),
         safety_checker=None,
