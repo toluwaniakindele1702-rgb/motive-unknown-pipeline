@@ -1708,6 +1708,8 @@ def _get_local_worker_process(python_bin: Path) -> subprocess.Popen[str]:
         return _local_worker_process
 
     print("[LOCAL IMAGE] Starting persistent CPU worker (model loads once per run)...")
+    child_env = os.environ.copy()
+    child_env["MOTIVE_LOCAL_IMAGE_MODEL"] = LOCAL_IMAGE_MODEL
     _local_worker_process = subprocess.Popen(
         [str(python_bin), str(LOCAL_IMAGE_WORKER), "--server"],
         stdin=subprocess.PIPE,
@@ -1715,6 +1717,7 @@ def _get_local_worker_process(python_bin: Path) -> subprocess.Popen[str]:
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=child_env,
     )
     return _local_worker_process
 
