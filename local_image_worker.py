@@ -24,9 +24,14 @@ LABELS = [
     "PROPS / SYMBOLS",
     "MOOD",
     "NARRATION BEAT",
+    "VISUAL DEVICE",
     "SHOT DIRECTION",
     "CONTINUITY",
 ]
+
+
+PIPELINE = None
+LOCAL_MODEL_ID = "OpenVINO/LCM_Dreamshaper_v7-int8-ov"
 
 
 def extract_section(prompt: str, label: str) -> str:
@@ -50,92 +55,63 @@ def trim_words(value: str, count: int) -> str:
 
 
 def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
-    """Create a useful prompt that stays safely below CLIP's 77-token limit."""
+    """Preserve the exact narration beat while staying below CLIP's 77-token limit."""
     era = extract_section(prompt, "ERA / HISTORICAL CONTEXT")
     setting = extract_section(prompt, "SETTING")
     chars = extract_section(prompt, "CHARACTERS")
     action = extract_section(prompt, "VISIBLE ACTION")
     props = extract_section(prompt, "PROPS / SYMBOLS")
     mood = extract_section(prompt, "MOOD")
+    beat = extract_section(prompt, "NARRATION BEAT")
+    device = extract_section(prompt, "VISUAL DEVICE")
     shot = extract_section(prompt, "SHOT DIRECTION")
 
-    style = (
-        "Polished 2D historical cartoon, cinematic storybook, expressive believable "
-        "people, richly layered environment, crisp ink contours, painterly cel-shaded "
-        "color, warm natural light."
-    )
-    negative = (
-        "No readable text, logos, modern objects, photorealism, 3D CGI, anime, "
-        "stick figures, doodles, cars, asphalt or lane markings."
-    )
+    style = "Cinematic 2D historical illustration, premium storybook, believable people, painterly cel shading, crisp ink, warm natural light."
+    negative = "No readable text, logos, modern objects, photorealism, CGI, anime, cars, asphalt, lane markings."
 
-    candidates = [
-        " ".join(
-            part for part in [
-                style,
-                f"Era: {trim_words(era, 7)}." if era else "",
-                f"Setting: {trim_words(setting, 9)}." if setting else "",
-                f"People: {trim_words(chars, 8)}." if chars else "",
-                f"Action: {trim_words(action, 10)}." if action else "",
-                f"Props: {trim_words(props, 6)}." if props else "",
-                f"Mood: {trim_words(mood, 3)}." if mood else "",
-                f"Shot: {trim_words(shot, 7)}." if shot else "",
-                negative,
-            ] if part
-        ),
-        " ".join(
-            part for part in [
-                style,
-                f"Era: {trim_words(era, 7)}." if era else "",
-                f"Setting: {trim_words(setting, 10)}." if setting else "",
-                f"People: {trim_words(chars, 8)}." if chars else "",
-                f"Action: {trim_words(action, 12)}." if action else "",
-                f"Props: {trim_words(props, 6)}." if props else "",
-                negative,
-            ] if part
-        ),
-        " ".join(
-            part for part in [
-                style,
-                f"Era: {trim_words(era, 7)}." if era else "",
-                f"Setting: {trim_words(setting, 12)}." if setting else "",
-                f"People: {trim_words(chars, 8)}." if chars else "",
-                f"Action: {trim_words(action, 14)}." if action else "",
-                negative,
-            ] if part
-        ),
-        " ".join(
-            part for part in [
-                style,
-                f"Setting: {trim_words(setting, 14)}." if setting else "",
-                f"Action: {trim_words(action, 16)}." if action else "",
-                negative,
-            ] if part
-        ),
+    fields = [
+        style,
+        f"BEAT: {trim_words(beat, 18)}." if beat else "",
+        f"ACTION: {trim_words(action, 10)}." if action else "",
+        f"SETTING: {trim_words(setting, 8)}." if setting else "",
+        f"DEVICE: {trim_words(device, 9)}." if device else "",
+        f"PEOPLE: {trim_words(chars, 7)}." if chars else "",
+        f"PROPS: {trim_words(props, 5)}." if props else "",
+        f"ERA: {trim_words(era, 5)}." if era else "",
+        f"MOOD: {trim_words(mood, 3)}." if mood else "",
+        f"SHOT: {trim_words(shot, 6)}." if shot else "",
+        negative,
     ]
 
-    for candidate in candidates:
-        count = len(tokenizer(candidate, add_special_tokens=True)["input_ids"])
-        if count <= 75:
-            return candidate, count
+    candidate_parts = [fields[0]]
+    for field in fields[1:]:
+        if not field:
+            continue
+        trial = " ".join(candidate_parts + [field])
+        if len(tokenizer(trial, add_special_tokens=True)["input_ids"]) <= 75:
+            candidate_parts.append(field)
 
-    candidate = candidates[-1]
-    words = candidate.split()
-    while len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75 and len(words) > 24:
-        # Keep style and safety negatives; trim from the positive scene description.
-        del words[len(style.split()):len(style.split()) + 1]
-        candidate = " ".join(words)
+    candidate = " ".join(candidate_parts)
+
+    if len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75:
+        candidate = " ".join(
+            x for x in [
+                style,
+                f"BEAT: {trim_words(beat, 24)}." if beat else "",
+                f"ACTION: {trim_words(action, 12)}." if action else "",
+                negative,
+            ] if x
+        )
+        words = candidate.split()
+        while len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75 and len(words) > 20:
+            words.pop(max(1, len(words) // 2))
+            candidate = " ".join(words)
+
     count = len(tokenizer(candidate, add_special_tokens=True)["input_ids"])
     return candidate, count
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: local_image_worker.py REQUEST_JSON")
-
-    request_path = Path(sys.argv[1])
-    request = json.loads(request_path.read_text(encoding="utf-8"))
-
+def generate_from_request(request: dict) -> None:
     model_id = str(request["model_id"])
     prompt = str(request["prompt"])
     output_path = Path(request["output_path"])
@@ -144,18 +120,18 @@ def main() -> int:
     height = int(request.get("height", 512))
     steps = int(request.get("steps", 4))
 
-    print(f"[LOCAL WORKER] model={model_id} seed={seed} size={width}x{height} steps={steps}")
-    pipeline = OVLatentConsistencyModelPipeline.from_pretrained(
-        model_id,
-        safety_checker=None,
+    print(
+        "[LOCAL WORKER] generate seed={} size={}x{} steps={}".format(
+            seed, width, height, steps
+        ),
+        flush=True,
     )
-    pipeline.set_progress_bar_config(disable=True)
 
-    compact, token_count = compact_prompt(prompt, pipeline.tokenizer)
-    print(f"[LOCAL WORKER] prompt_tokens={token_count}")
+    compact, token_count = compact_prompt(prompt, PIPELINE.tokenizer)
+    print("[LOCAL WORKER] prompt_tokens={}".format(token_count), flush=True)
 
     generator = torch.Generator(device="cpu").manual_seed(seed)
-    image = pipeline(
+    image = PIPELINE(
         compact,
         num_inference_steps=steps,
         guidance_scale=8.0,
@@ -176,7 +152,63 @@ def main() -> int:
     if not output_path.exists() or output_path.stat().st_size < 10000:
         raise RuntimeError("Local worker produced no valid image.")
 
-    print(f"[LOCAL WORKER] wrote {output_path}")
+    print("[LOCAL WORKER] wrote {}".format(output_path), flush=True)
+
+
+def run_server() -> int:
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        request = json.loads(line)
+        if request.get("cmd") == "shutdown":
+            print("__LOCAL_SHUTDOWN__", flush=True)
+            return 0
+        if request.get("cmd") != "generate":
+            print(
+                "__LOCAL_ERROR__ unknown command: {}".format(request.get("cmd")),
+                flush=True,
+            )
+            continue
+        try:
+            generate_from_request(request)
+            print(
+                "__LOCAL_OK__ {}".format(request.get("output_path", "")),
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                "__LOCAL_ERROR__ {}: {}".format(type(exc).__name__, exc),
+                flush=True,
+            )
+    return 0
+
+
+def main() -> int:
+    if len(sys.argv) == 2 and sys.argv[1] == "--server":
+        print("[LOCAL WORKER] Loading model once: {}".format(LOCAL_MODEL_ID), flush=True)
+        global PIPELINE
+        PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
+            LOCAL_MODEL_ID,
+            safety_checker=None,
+        )
+        PIPELINE.set_progress_bar_config(disable=True)
+        print("[LOCAL WORKER] Model ready.", flush=True)
+        return run_server()
+
+    if len(sys.argv) != 2:
+        raise SystemExit("Usage: local_image_worker.py REQUEST_JSON | --server")
+
+    request_path = Path(sys.argv[1])
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+
+    global PIPELINE
+    PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
+        str(request["model_id"]),
+        safety_checker=None,
+    )
+    PIPELINE.set_progress_bar_config(disable=True)
+    generate_from_request(request)
     return 0
 
 
