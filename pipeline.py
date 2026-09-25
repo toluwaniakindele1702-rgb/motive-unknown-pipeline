@@ -1052,17 +1052,26 @@ SCENES:
                         f"{len(narrations) if isinstance(narrations, list) else 0}"
                     )
 
+                batch_valid = True
                 for scene, narration in zip(batch, narrations):
-                    words = count_words(str(narration))
-                    # Do not fail an otherwise healthy run over a few words on one scene.
-                    if not (45 <= words <= 120):
+                    narration_text = str(narration).strip()
+                    words = count_words(narration_text)
+                    if words < 45:
+                        batch_valid = False
                         raise RuntimeError(
-                            f"scene {scene['id']} returned {words} words; accepted range is 45-120"
+                            f"scene {scene['id']} returned {words} words; minimum is 45"
                         )
-                    scene["narration"] = str(narration).strip()
+                    if words > max_scene_words:
+                        narration_text = _fit_narration_to_limit(narration_text, max_scene_words)
+                        print(
+                            f"[SCRIPT] trimmed scene {scene['id']} from {words} to "
+                            f"{count_words(narration_text)} words"
+                        )
+                    scene["narration"] = narration_text
 
-                success = True
-                break
+                success = batch_valid
+                if success:
+                    break
             except Exception as exc:
                 print(f"[SCRIPT] repair batch {start + 1}-{end}, attempt {attempt} failed: {exc}")
 
@@ -1125,12 +1134,19 @@ SCENES:
             if not isinstance(narrations, list) or len(narrations) != len(batch):
                 raise RuntimeError("Top-up returned the wrong number of narrations.")
             for scene, narration in zip(batch, narrations):
-                words = count_words(str(narration))
-                if not (45 <= words <= 120):
+                narration_text = str(narration).strip()
+                words = count_words(narration_text)
+                if words < 45:
                     raise RuntimeError(
-                        f"Top-up produced {words} words for scene {scene['id']}; expected 45-120."
+                        f"Top-up produced {words} words for scene {scene['id']}; minimum is 45."
                     )
-                scene["narration"] = str(narration).strip()
+                if words > 120:
+                    narration_text = _fit_narration_to_limit(narration_text, 120)
+                    print(
+                        f"[SCRIPT] trimmed top-up scene {scene['id']} from {words} to "
+                        f"{count_words(narration_text)} words"
+                    )
+                scene["narration"] = narration_text
             atomic_write_json(SCRIPT_PATH, repaired)
             _save_current_json(CURRENT_SCRIPT_PATH, repaired)
 
