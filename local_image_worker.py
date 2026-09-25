@@ -8,6 +8,7 @@ the main Kokoro/LLM dependency set.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -31,7 +32,10 @@ LABELS = [
 
 
 PIPELINE = None
-LOCAL_MODEL_ID = "OpenVINO/LCM_Dreamshaper_v7-int8-ov"
+LOCAL_MODEL_ID = os.environ.get(
+    "MOTIVE_LOCAL_IMAGE_MODEL",
+    "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
+).strip()
 
 
 def extract_section(prompt: str, label: str) -> str:
