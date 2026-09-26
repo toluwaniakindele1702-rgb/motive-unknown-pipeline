@@ -918,7 +918,7 @@ def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> 
         GROQ_WRITER_MODEL,
         [{"role": "user", "content": prompt}],
         max_completion_tokens=7200,
-        temperature=0.78,
+        temperature=0.72,
         attempts=3,
     )
 
@@ -2502,7 +2502,7 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
                 "-stream_loop", "-1", "-i", str(MUSIC_PATH),
                 "-filter_complex",
                 (
-                    "[0:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[n];"
+                    "[0:a]highpass=f=70,acompressor=threshold=-18dB:ratio=2.6:attack=5:release=120:makeup=2,loudnorm=I=-15.5:TP=-1.5:LRA=8[n];"
                     f"[1:a]volume={BACKGROUND_MUSIC_VOLUME:.3f},highpass=f=90,lowpass=f=9000[m];"
                     "[m][n]sidechaincompress=threshold=0.03:ratio=6:attack=25:release=450:makeup=1[ducked];"
                     "[n][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]"
