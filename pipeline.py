@@ -746,16 +746,18 @@ Turn the research dossier into a suspenseful STORY PLAN, not a textbook outline.
 The video must have one central curiosity question and a satisfying answer.
 
 Structure:
-1. Cold open: start with the strangest or most important moment, without a long intro.
-2. Immediate question: make the viewer understand what they are trying to figure out.
-3. Minimal context: only the background needed to understand the mystery.
-4. Escalation: each section should reveal something that changes the viewer's picture.
-5. Midpoint turn: a fact, decision, discovery, or contradiction that surprises us.
-6. Deepening: show why the obvious explanation is not enough.
-7. Payoff: answer the central question using the strongest evidence.
-8. Ending: leave the viewer with one memorable implication or final twist grounded in fact.
+1. Cold open: begin inside a real, source-supported moment that immediately creates a question.
+2. Immediate question: make the viewer understand exactly what they are trying to figure out.
+3. Minimal context: give only the background needed to understand the problem.
+4. Escalation: each section introduces a new fact, obstacle, decision, clue, or consequence that
+   changes the viewer's picture.
+5. Midpoint reversal: use the strongest contradiction or discovery to break the obvious explanation.
+6. Evidence trail: connect clues through cause and effect instead of dumping chronology or facts.
+7. Payoff: answer the opening question directly and distinguish what is certain from what remains debated.
+8. Ending: leave one grounded implication that follows naturally from the answer.
 
-Avoid chronological padding. Avoid atmosphere-for-atmosphere's-sake.
+Every section should earn its place. Avoid chronological padding, fake suspense, repeated recaps,
+and atmosphere-for-atmosphere's-sake.
 
 Return JSON:
 {
@@ -835,16 +837,16 @@ Write a 10-15 minute narration that answers one irresistible historical question
 The target audience is a curious young teenager AND adults. The language is simple,
 but the thinking is not childish.
 
-VOICE OF THE WRITING
-- Modern, conversational, confident, vivid.
-- Sounds like a brilliant storyteller talking directly to the viewer.
-- Short and medium sentences mixed for rhythm.
-- Use concrete actions and decisions instead of decorative prose.
-- Reveal information in the order that creates curiosity.
-- Ask a question only when it genuinely advances the story.
-- Use humor lightly when it fits the facts.
-- Let characters make choices and let consequences matter.
-- Make the viewer feel like they are discovering the answer with you.
+VOICE / PERFORMANCE ON THE PAGE
+- Modern, conversational, confident, vivid, energetic.
+- Sounds like a sharp human documentary narrator talking directly to the viewer.
+- Most sentences should be 8-20 words, with occasional 3-7 word punch lines.
+- Use concrete actions, objects, decisions, and consequences instead of abstract summaries.
+- Put important facts near the end of a sentence when that creates a clean reveal.
+- Use commas, em dashes, and occasional question marks to help natural TTS rhythm.
+- Ask a question only when it advances the story, then answer or complicate it quickly.
+- Vary sentence openings and paragraph rhythm. Do not make every sentence sound solemn.
+- Let the narration sound curious, surprised, skeptical, amused, or urgent when the evidence calls for it.
 
 DO NOT WRITE LIKE
 - a school essay
@@ -865,8 +867,10 @@ Never invent dialogue or inner thoughts and present them as historical facts.
 When evidence is uncertain or disputed, say so naturally.
 Do not use graphic descriptions.
 
-VERY IMPORTANT: the first 20-30 seconds must make a viewer who has never heard of this
-story think: "Wait, why did that happen?"
+VERY IMPORTANT: the first 20-30 seconds must contain a concrete event or surprising fact,
+state the central question, and make a viewer who has never heard of this story think:
+"Wait, why did THAT happen?"
+Do not waste the opening on greetings, channel branding, generic background, or vague setup.
 
 Return JSON in exactly this shape:
 {
