@@ -1,5 +1,5 @@
 """
-Motive Unknown v4 — curiosity-first automated history video factory.
+Relic Loop v5 — curiosity-first automated history video factory.
 
 Design goals
 ------------
@@ -8,7 +8,8 @@ Design goals
 - GPT-OSS 120B for research/storytelling; GPT-OSS 20B for lightweight
   structuring/SEO tasks.
 - Local/open-weight Kokoro TTS (no paid voice API).
-- Polished AI-generated historical illustrations using a multi-provider fallback chain.
+- Modern animated-documentary illustrations using a multi-provider fallback chain.
+- Visual shots are designed around actions, reactions, maps, objects, evidence, and consequences.
 - Each narration scene is split into compact visual beats so the picture changes frequently.
 - Visual prompts prioritize the exact narrated fact, action, evidence, place, person, or object.
 - A persistent style-reference image plus prior-frame references improve visual continuity.
@@ -114,8 +115,8 @@ REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "").strip()
 REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-labs/flux-1.1-pro").strip()
 IMAGE_W = 1024
 IMAGE_H = 576
-MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "64"))
-VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "30"))
+MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "80"))
+VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "24"))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
@@ -126,7 +127,7 @@ LOCAL_IMAGE_WORKER = ROOT / "local_image_worker.py"
 LOCAL_IMAGE_DEPS = ROOT / "requirements-local-image.txt"
 STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 
-CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Motive Unknown").strip()
+CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Relic Loop").strip()
 YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
 if YOUTUBE_PRIVACY_STATUS not in {"private", "public", "unlisted"}:
     YOUTUBE_PRIVACY_STATUS = "private"
@@ -804,7 +805,7 @@ Do not repeat sections or pad with generic suspense.
 
 
 SCRIPTWRITER_PROMPT = """
-You are the head writer of an excellent history storytelling channel.
+You are the head writer of the YouTube history storytelling channel Relic Loop.
 
 Write a 10-15 minute narration that answers one irresistible historical question.
 The target audience is a curious young teenager AND adults. The language is simple,
@@ -859,7 +860,7 @@ Return JSON in exactly this shape:
     }
   ],
   "thumbnail": {
-    "headline": "2-5 words, not the full title",
+    "headline": "2-4 words, curiosity-first, not the full title",
     "subject": "main visual subject",
     "supporting_prop": "one strong prop or symbol",
     "emotion": "clear facial/body emotion",
@@ -1465,21 +1466,46 @@ def split_visual_beats(narration: str) -> list[str]:
 
 
 POLISHED_VISUAL_STYLE = """
-Polished 2D historical cartoon illustration for a premium educational YouTube
-documentary. Cinematic storybook composition, expressive human characters with
-believable anatomy, expressive faces and gestures, period-appropriate clothing
-and architecture, richly detailed environments, layered foreground/midground/
-background depth, crisp hand-drawn ink contours, clean painterly/cel-shaded
-color, warm natural lighting, subtle texture, strong focal subject, visual
-storytelling in every frame, appealing to teenagers and adults.
+Modern 2D animated-documentary illustration for Relic Loop.
+Crisp clean linework, sharp graphic shapes, polished cel shading, vivid but controlled
+colors, strong rim and key lighting, expressive stylized characters, believable anatomy,
+large readable facial expressions, clear silhouettes, simplified but richly designed
+backgrounds, strong foreground/midground/background separation, dynamic perspective,
+and a premium television-animation finish.
+
+The image must feel like a polished animation keyframe built to explain a story, not a
+1960s textbook illustration, faded archival art, oil painting, sepia poster, parchment art,
+or generic historical painting. Favor bold shapes, clean edges, modern color separation,
+and deliberate staging. Characters should visibly act, react, point, run, carry, inspect,
+argue, discover, flee, build, or otherwise do something specific whenever the narration
+contains an action.
 
 Do NOT make stick figures, doodles, primitive geometric drawings, flat clip-art,
 photorealism, 3D CGI, anime, modern objects, UI elements, captions, subtitles,
 logos, watermarks, readable text, letters, numbers, pseudo-writing, or written words
 inside the image. Avoid modern roads, asphalt, lane markings, traffic signs, power lines,
 streetlights, cars, modern furniture, modern tools, and other anachronistic infrastructure
-unless the narration explicitly requires a modern setting. Use historically plausible
-roads, materials, tools, clothing, architecture, and transport for the stated era.
+unless the narration explicitly requires a modern setting. Keep historical materials, clothing,
+architecture, tools, and transport plausible for the stated era.
+""".strip()
+
+THUMBNAIL_VISUAL_STYLE = """
+Modern high-energy YouTube history thumbnail illustration for Relic Loop.
+Crisp clean cartoon linework, polished cel shading, vivid contrast, cinematic rim light,
+big expressive faces, exaggerated but believable eyes/brows/mouths, dramatic gestures,
+strong silhouettes, sharp foreground subjects, simplified high-impact background, rich
+depth, and a premium modern animated-documentary finish.
+
+The thumbnail should instantly communicate ONE historical mystery. Build a curiosity gap:
+one dominant surprising event/object + one or two wildly expressive characters + a clear
+visual consequence. Make the characters feel like they are reacting to something shocking,
+impossible, confusing, dangerous, or unbelievable in the documented story. Use bold scale
+and dramatic perspective. Design for readability on a small mobile thumbnail.
+
+Do NOT make it look like a vintage textbook, 1960s educational illustration, archival photo,
+sepia painting, old poster, generic museum art, photorealistic render, 3D CGI, anime, clip-art,
+or a calm formal documentary cover. No readable text, letters, numbers, captions, subtitles,
+logos, watermarks, or invented writing inside the generated image.
 """.strip()
 
 
@@ -1906,15 +1932,27 @@ def make_visual_prompt(
     beat_count: int,
     has_previous_reference: bool,
 ) -> str:
-    shot_types = [
-        "wide cinematic establishing shot",
-        "medium character interaction shot",
-        "dynamic over-the-shoulder storytelling shot",
-        "close important-object or evidence shot",
-        "high-angle geographic or positional shot",
-        "low-angle consequence/reaction shot",
-    ]
-    shot = shot_types[beat_index % len(shot_types)]
+    def visual_shot_type(text: str, index: int) -> str:
+        lower = text.lower()
+        if re.search(r"\b(map|route|crossed|traveled|sailed|marched|arrived|departed|distance|border|river|coast|road)\b", lower):
+            return "high-angle geographic storytelling shot with a clearly readable route or positional relationship"
+        if re.search(r"\b(letter|document|report|record|diary|decree|note|inscription|photograph|evidence|testimony)\b", lower):
+            return "tight evidence close-up with the key object dominating the frame and a human hand or reaction anchoring it"
+        if re.search(r"\b(decided|ordered|refused|agreed|claimed|argued|revealed|discovered|found)\b", lower):
+            return "dynamic character reaction shot with strong gesture, eye-line, and a visible story-changing object or action"
+        if re.search(r"\b(built|destroyed|opened|closed|entered|left|fled|attacked|defended|carried|gave|took)\b", lower):
+            return "dynamic action shot with clear body motion, directional staging, and a strong foreground subject"
+        if re.search(r"\b\d{2,4}\b|\b(percent|million|thousand|half|third)\b", lower):
+            return "graphic history-information composition using physical objects, groups, scale, or a visual timeline cue without readable text"
+        fallbacks = [
+            "wide cinematic establishing shot with layered depth and a strong silhouette",
+            "medium character interaction shot with exaggerated readable expressions and gestures",
+            "over-the-shoulder storytelling shot focused on a specific object or consequence",
+            "low-angle reveal or reaction shot with a dramatic foreground subject",
+        ]
+        return fallbacks[index % len(fallbacks)]
+
+    shot = visual_shot_type(beat_text, beat_index)
     chars = ", ".join(str(x) for x in (scene.get("characters") or [])[:4]) or "historical people"
     props = ", ".join(str(x) for x in (scene.get("props") or [])[:4]) or "period-appropriate objects"
     device = visual_device_hint(beat_text)
@@ -1957,8 +1995,10 @@ VISUAL DEVICE:
 {device}
 
 SHOT DIRECTION:
-{shot}. The frame must communicate the narration beat at a glance. Prefer specific physical
-details, historically plausible materials, clothing, tools, architecture, terrain, and transport.
+{shot}. The frame must communicate the narration beat at a glance. Favor animation-keyframe staging:
+clear silhouette, one dominant focal action, one strong secondary story clue, exaggerated readable
+expressions, and visible cause-and-effect. Prefer specific physical details, historically plausible
+materials, clothing, tools, architecture, terrain, and transport.
 When the beat introduces a new fact, location, date, object, movement, or consequence, make that
 new information the focal point. Avoid generic "people standing around" compositions.
 
@@ -2206,9 +2246,9 @@ def make_thumbnail(script: dict[str, Any], title: str) -> Path:
     style_ref = _small_reference(_decode_style_reference(), "thumbnail_style")
 
     prompt = f"""
-{POLISHED_VISUAL_STYLE}
+{THUMBNAIL_VISUAL_STYLE}
 
-Create a polished 16:9 YouTube thumbnail illustration for a history mystery documentary.
+Create a polished 16:9 YouTube thumbnail illustration for a Relic Loop history mystery video.
 
 ERA:
 {era}
@@ -2225,9 +2265,10 @@ EXPRESSION / BODY LANGUAGE:
 COMPOSITION:
 {side_note}
 
-Make the main subject large enough to read clearly at thumbnail size. Use a dramatic but
-fact-grounded moment, strong silhouette separation, rich historical detail, expressive faces,
-and a clean focal hierarchy. Keep the image visually bold without becoming cluttered.
+Make the main subject and reaction faces LARGE. Push the facial expressions and body language:
+shock, disbelief, panic, confusion, amazement, or intense curiosity as appropriate to the facts.
+Use one dominant mystery and one obvious visual consequence. Keep the composition simple enough
+to read instantly at thumbnail size. Avoid generic portraits or passive people standing still.
 
 No readable text, letters, numbers, pseudo-writing, captions, subtitles, logos, watermarks,
 modern infrastructure, modern clothing, cars, asphalt lane markings, or other anachronisms.
@@ -2624,7 +2665,7 @@ def save_manifests(topic: dict[str, Any], research: str, story: dict[str, Any], 
 
 
 def main(mode: str = "full") -> None:
-    print(f"=== {CHANNEL_NAME} / Motive Unknown v4 ===")
+    print(f"=== {CHANNEL_NAME} / Relic Loop v5 ===")
     print(f"MODE={mode} | KOKORO_VOICE={KOKORO_VOICE} | SPEED={KOKORO_SPEED}")
 
     if mode == "voice_test":
