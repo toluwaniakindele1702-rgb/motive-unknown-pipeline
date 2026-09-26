@@ -128,6 +128,8 @@ LOCAL_IMAGE_DEPS = ROOT / "requirements-local-image.txt"
 STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Relic Loop").strip()
+if not CHANNEL_NAME or CHANNEL_NAME.lower() == "motive unknown":
+    CHANNEL_NAME = "Relic Loop"
 YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
 if YOUTUBE_PRIVACY_STATUS not in {"private", "public", "unlisted"}:
     YOUTUBE_PRIVACY_STATUS = "private"
@@ -1462,7 +1464,7 @@ def split_visual_beats(narration: str) -> list[str]:
         cut = max(8, min(len(words) - 8, round(len(words) / 2)))
         expanded[idx:idx + 1] = [" ".join(words[:cut]), " ".join(words[cut:])]
 
-    return expanded[:3] or [text]
+    return expanded[:4] or [text]
 
 
 POLISHED_VISUAL_STYLE = """
