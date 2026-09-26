@@ -615,13 +615,32 @@ used in this channel's recent history list:
     )
 
     selection_prompt = f"""
-You are the final topic selector for a curiosity-first history YouTube channel.
+You are the final topic selector for the history YouTube channel Relic Loop.
 
-Use the web findings below to select ONE specific historical question.
-Do not invent a more exciting claim than the evidence supports.
+Select ONE specific historical question with a strong natural curiosity gap.
+The viewer should immediately think: "Wait, why did THAT happen?" or "How was THAT possible?"
+
+Prefer questions built around:
+- a surprising decision with an unexpected consequence
+- an object, technology, custom, or system that worked differently than assumed
+- a strange survival, disappearance, escape, failure, reversal, or coincidence
+- a contradiction between the popular version of a story and what the evidence shows
+- a small overlooked event that produced a much larger consequence
+- an ordinary-looking detail that turns out to explain the bigger mystery
+
+Avoid broad "history of X", generic biographies, simple battle summaries, listicles,
+or topics whose only hook is that the event was famous. Avoid conspiracy framing,
+paranormal claims presented as fact, and sensational conclusions that the evidence cannot support.
+
+Silently reject any candidate that fails one or more of these checks:
+1. Curiosity without prior knowledge of the subject.
+2. Concrete tension, contradiction, or unanswered "how/why".
+3. Enough evidence for 8-12 meaningful reveals.
+4. Strong visual possibilities: acting characters, objects, places, maps, documents,
+   comparisons, and visible cause-and-effect.
+5. The question does not overpromise what the evidence can prove.
+
 Do not repeat or closely imitate the channel's previous questions.
-The question should be naturally intriguing to a young teenager and an adult, while
-having enough real evidence for a 10-15 minute story.
 
 Previous channel questions:
 {history_text}
@@ -699,10 +718,13 @@ Return plain text with exactly these headings:
 2. STORY BEATS (10-16 numbered beats)
 3. IMPORTANT PEOPLE / PLACES / OBJECTS
 4. DISPUTES OR UNCERTAINTY
-5. SOURCES (at least 6 source titles + URLs when available)
+5. VERIFIED SOURCES
 
-The story writer will use this dossier as the factual backbone, so every surprising
-claim should be traceable to the supplied search findings.
+Source-integrity rule: list only sources that actually appeared in the browser-search
+findings. Never invent a scholar, book, museum entry, excavation report, article,
+quotation, URL, or "current consensus". If fewer than six sources were actually found,
+list fewer. Every surprising claim used by the writer must be traceable to the supplied
+search findings.
 """.strip()
 
     return groq_call(
