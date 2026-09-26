@@ -28,6 +28,10 @@ LABELS = [
     "VISUAL DEVICE",
     "SHOT DIRECTION",
     "CONTINUITY",
+    "MAIN SUBJECT",
+    "IMPORTANT OBJECT / SYMBOL",
+    "EXPRESSION / BODY LANGUAGE",
+    "COMPOSITION",
 ]
 
 
@@ -69,23 +73,41 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
     beat = extract_section(prompt, "NARRATION BEAT")
     device = extract_section(prompt, "VISUAL DEVICE")
     shot = extract_section(prompt, "SHOT DIRECTION")
+    subject = extract_section(prompt, "MAIN SUBJECT")
+    important_object = extract_section(prompt, "IMPORTANT OBJECT / SYMBOL")
+    expression = extract_section(prompt, "EXPRESSION / BODY LANGUAGE")
+    composition = extract_section(prompt, "COMPOSITION")
 
-    style = "Modern 2D animated-documentary keyframe, crisp clean linework, sharp graphic shapes, polished cel shading, vivid controlled color, expressive stylized faces, believable anatomy, strong silhouette, cinematic lighting, premium television-animation finish."
-    negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, passive poses."
+    is_thumbnail = bool(subject or important_object or expression or composition)
 
-    fields = [
-        style,
-        f"BEAT: {trim_words(beat, 18)}." if beat else "",
-        f"ACTION: {trim_words(action, 10)}." if action else "",
-        f"SETTING: {trim_words(setting, 8)}." if setting else "",
-        f"DEVICE: {trim_words(device, 9)}." if device else "",
-        f"PEOPLE: {trim_words(chars, 7)}." if chars else "",
-        f"PROPS: {trim_words(props, 5)}." if props else "",
-        f"ERA: {trim_words(era, 5)}." if era else "",
-        f"MOOD: {trim_words(mood, 3)}." if mood else "",
-        f"SHOT: {trim_words(shot, 6)}." if shot else "",
-        negative,
-    ]
+    if is_thumbnail:
+        style = "Modern high-energy YouTube history thumbnail, crisp cartoon linework, sharp graphic shapes, polished cel shading, vivid contrast, dramatic cinematic lighting, huge expressive face, exaggerated readable emotion, strong silhouette, dynamic perspective, premium animated-documentary finish."
+        negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, calm portrait, passive pose."
+        fields = [
+            style,
+            f"SUBJECT: {trim_words(subject, 12)}." if subject else "",
+            f"OBJECT: {trim_words(important_object, 8)}." if important_object else "",
+            f"EXPRESSION: {trim_words(expression, 8)}." if expression else "",
+            f"COMPOSITION: {trim_words(composition, 8)}." if composition else "",
+            f"ERA: {trim_words(era, 5)}." if era else "",
+            negative,
+        ]
+    else:
+        style = "Modern 2D animated-documentary keyframe, crisp clean linework, sharp graphic shapes, polished cel shading, vivid controlled color, expressive stylized faces, believable anatomy, strong silhouette, cinematic lighting, premium television-animation finish."
+        negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, passive poses."
+        fields = [
+            style,
+            f"BEAT: {trim_words(beat, 18)}." if beat else "",
+            f"ACTION: {trim_words(action, 10)}." if action else "",
+            f"SETTING: {trim_words(setting, 8)}." if setting else "",
+            f"DEVICE: {trim_words(device, 9)}." if device else "",
+            f"PEOPLE: {trim_words(chars, 7)}." if chars else "",
+            f"PROPS: {trim_words(props, 5)}." if props else "",
+            f"ERA: {trim_words(era, 5)}." if era else "",
+            f"MOOD: {trim_words(mood, 3)}." if mood else "",
+            f"SHOT: {trim_words(shot, 6)}." if shot else "",
+            negative,
+        ]
 
     candidate_parts = [fields[0]]
     for field in fields[1:]:
