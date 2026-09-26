@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CPU-only local image worker for Motive Unknown.
+"""CPU-only local image worker for Relic Loop.
 
 Runs in an isolated virtual environment so the local image stack cannot change
 the main Kokoro/LLM dependency set.
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import torch
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from optimum.intel import OVLatentConsistencyModelPipeline
 
 
@@ -70,8 +70,8 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
     device = extract_section(prompt, "VISUAL DEVICE")
     shot = extract_section(prompt, "SHOT DIRECTION")
 
-    style = "Cinematic 2D historical illustration, premium storybook, believable people, painterly cel shading, crisp ink, warm natural light."
-    negative = "No readable text, logos, modern objects, photorealism, CGI, anime, cars, asphalt, lane markings."
+    style = "Modern 2D animated-documentary keyframe, crisp clean linework, sharp graphic shapes, polished cel shading, vivid controlled color, expressive stylized faces, believable anatomy, strong silhouette, cinematic lighting, premium television-animation finish."
+    negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, passive poses."
 
     fields = [
         style,
@@ -151,7 +151,13 @@ def generate_from_request(request: dict) -> None:
         (1024, 576),
         method=Image.Resampling.LANCZOS,
     )
-    image.save(output_path, format="JPEG", quality=92, optimize=True)
+    # CPU generation stays at a manageable size; this cheap post-process restores
+    # perceived edge/detail without materially increasing generation time.
+    image = ImageOps.autocontrast(image, cutoff=0.4)
+    image = ImageEnhance.Contrast(image).enhance(1.04)
+    image = ImageEnhance.Color(image).enhance(1.03)
+    image = image.filter(ImageFilter.UnsharpMask(radius=1.4, percent=165, threshold=3))
+    image.save(output_path, format="JPEG", quality=95, optimize=True)
 
     if not output_path.exists() or output_path.stat().st_size < 10000:
         raise RuntimeError("Local worker produced no valid image.")
