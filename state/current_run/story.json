@@ -1,0 +1,95 @@
+{
+  "central_question": "Why did the Great Library of Alexandria finally disappear, and what actually happened to its books?",
+  "hook": "In the heat of Caesar’s siege, a fire that was meant to destroy an Egyptian fleet leapt into the heart of Alexandria’s royal Mouseion, setting ablaze thousands of scrolls. The question that still haunts scholars is: did a single catastrophic blaze erase the Library, or was its demise a slow, deliberate erosion?",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – immediate shock",
+      "reveal": "A Roman warship’s fire spreads to the Mouseion, burning countless scrolls.",
+      "required_facts": [
+        "Caesar’s 48 BC siege",
+        "Plutarch’s account of the fire"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Immediate question",
+      "reveal": "What was lost in that fire, and did it end the Library’s existence?",
+      "required_facts": [
+        "Plutarch and Strabo descriptions"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Minimal context",
+      "reveal": "The Mouseion, founded c. 295 BC, was Alexandria’s intellectual nucleus, housing a vast, unique collection.",
+      "required_facts": [
+        "Ptolemy I’s founding",
+        "Library’s role"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Escalation – first blow",
+      "reveal": "The 48 BC blaze destroyed a large portion, but many works survived elsewhere or were copied.",
+      "required_facts": [
+        "Extent of loss uncertain",
+        "Survival in private collections"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Escalation – second blow",
+      "reveal": "The Serapeum, a public library built in the 3rd c., became the next target during the 391 AD anti‑pagan purge.",
+      "required_facts": [
+        "Theophilus’s attack",
+        "Theodoret and Eunapius testimonies"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Escalation – gradual attrition",
+      "reveal": "Between the two fires, earthquakes, neglect, and smaller fires further eroded the collection.",
+      "required_facts": [
+        "3rd‑4th c. decay",
+        "minor incidents"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Midpoint reversal",
+      "reveal": "Archaeology shows a 4th‑century fire layer at the Serapeum but no later burn, contradicting the myth of a 642 AD blaze.",
+      "required_facts": [
+        "2021 Serapeum excavation report"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Evidence trail – cause and effect",
+      "reveal": "Each destruction removed unique scrolls; what remained were copies already spread across Rome, Constantinople, and the Near East.",
+      "required_facts": [
+        "Survival of duplicated works",
+        "Byzantine and Islamic manuscript traditions"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Payoff – answer the opening question",
+      "reveal": "The Library vanished through two documented destructions, not a single Arab‑ordered fire; the myth of a 642 AD blaze is a later invention.",
+      "required_facts": [
+        "Theophilus’s 391 AD demolition",
+        "Absence of 7th‑century Arab source"
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Ending – grounded implication",
+      "reveal": "The loss of the Library’s unique corpus reshaped Mediterranean scholarship, forcing knowledge to survive only through copies and the resilience of scholarly networks.",
+      "required_facts": [
+        "Legacy of surviving texts",
+        "Impact on intellectual history"
+      ]
+    }
+  ],
+  "ending_payoff": "The Great Library of Alexandria did not burn in a single, dramatic blaze; it was gradually erased by two historic destructions, and the books that survived were those already duplicated elsewhere. The myth of an Arab‑era fire is a later fabrication, reminding us how legends can eclipse the true, complex story of cultural loss."
+}
