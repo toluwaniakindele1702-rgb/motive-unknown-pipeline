@@ -2086,7 +2086,8 @@ Rules:
 - Description: the first two lines should clearly explain the question and why the story matters.
   Then a concise spoiler-light summary, followed by a Sources section using the supplied sources.
 - Tags: 12-15 relevant terms. Tags are secondary; do not stuff unrelated keywords.
-- Thumbnail headline: 2-5 words that complement the title instead of repeating it.
+- Thumbnail headline: 2-4 punchy words that create a curiosity gap and complement the title instead of repeating it.
+- Make the thumbnail headline concrete, surprising, and easy to read at a glance. Avoid generic phrases like "HISTORY MYSTERY", "YOU WON'T BELIEVE", or empty clickbait.
 
 Return JSON only:
 {
@@ -2227,7 +2228,7 @@ IMPORTANT JSON RULES:
 # ---------------------------------------------------------------------------
 # AI thumbnail
 # ---------------------------------------------------------------------------
-def make_thumbnail(script: dict[str, Any], title: str) -> Path:
+def make_thumbnail(script: dict[str, Any], title: str, headline_override: str | None = None) -> Path:
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
     final = OUTPUT_DIR / "thumbnail.jpg"
     cached_ai = THUMB_DIR / "thumbnail_ai.jpg"
@@ -2284,7 +2285,7 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
 
     draw = ImageDraw.Draw(image)
     headline = normalize_spaces(
-        str(thumb.get("headline") or title or "HISTORY MYSTERY")
+        str(headline_override or thumb.get("headline") or title or "HISTORY MYSTERY")
     ).upper()
     headline = headline[:36]
 
@@ -2320,8 +2321,8 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
             (x, y),
             line,
             font=font,
-            fill=WHITE,
-            stroke_width=2,
+            fill=GOLD if not lines or line == lines[0] else WHITE,
+            stroke_width=3,
             stroke_fill=BLACK,
         )
         y += h + 24
@@ -2438,10 +2439,11 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
             "-f", "concat", "-safe", "0", "-i", str(video_list),
             "-vf",
             (
-                "scale=1360:765:force_original_aspect_ratio=increase,"
-                f"crop={VIDEO_W}:{VIDEO_H}:x='40+16*sin(2*PI*t/18)':y='22+10*cos(2*PI*t/23)',"
-                "eq=contrast=1.02:saturation=1.04,"
-                "noise=alls=3:allf=t+u,"
+                "scale=1500:844:force_original_aspect_ratio=increase,"
+                f"crop={VIDEO_W}:{VIDEO_H}:x='58+38*sin(2*PI*t/8.5)+14*sin(2*PI*t/2.8)':y='32+24*cos(2*PI*t/10.5)+8*sin(2*PI*t/3.6)',"
+                "eq=contrast=1.03:saturation=1.06,"
+                "unsharp=5:5:0.8:5:5:0.35,"
+                "noise=alls=2:allf=t+u,"
                 "format=yuv420p"
             ),
             "-r", str(VIDEO_FPS),
@@ -2764,7 +2766,7 @@ def main(mode: str = "full") -> None:
     atomic_write_json(SEO_PATH, seo)
     checkpoint("seo_complete", title=seo["title"], resumed=seo_resumed)
 
-    thumb = make_thumbnail(script, seo["title"])
+    thumb = make_thumbnail(script, seo["title"], seo.get("thumbnail_headline"))
     video_path = OUTPUT_DIR / "final_video.mp4"
     build_video(script, video_path)
 
