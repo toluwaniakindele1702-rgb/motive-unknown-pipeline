@@ -863,7 +863,7 @@ Return JSON in exactly this shape:
     "headline": "2-4 words, curiosity-first, not the full title",
     "subject": "main visual subject",
     "supporting_prop": "one strong prop or symbol",
-    "emotion": "clear facial/body emotion",
+    "emotion": "exaggerated, instantly readable facial/body emotion matched to the documented event",
     "composition": "left_subject_right_prop / right_subject_left_prop / central_subject",
     "preferred_variant": 1
   }
@@ -872,7 +872,7 @@ Return JSON in exactly this shape:
 Scene count: 18-38.
 Total narration: 1700-2600 words.
 Each scene must describe a distinct, useful visual moment. Do not create a new scene just
-because a sentence changed. Scenes can hold for several seconds.
+because a sentence changed. Scenes should be visually specific, and the beat renderer should be able to turn each narration section into multiple animated-documentary shots rather than one long hold.
 """.strip()
 
 
@@ -1432,7 +1432,7 @@ def split_visual_beats(narration: str) -> list[str]:
     word_total = count_words(text)
     target_beats = max(
         1,
-        min(3, int(np.ceil(word_total / max(1, VISUAL_BEAT_TARGET_WORDS)))),
+        min(4, int(np.ceil(word_total / max(1, VISUAL_BEAT_TARGET_WORDS)))),
     )
     target_beats = min(target_beats, len(expanded))
 
