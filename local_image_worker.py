@@ -82,7 +82,7 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
 
     if is_thumbnail:
         style = "Modern high-energy YouTube history thumbnail, crisp cartoon linework, sharp graphic shapes, polished cel shading, vivid contrast, dramatic cinematic lighting, huge expressive face, exaggerated readable emotion, strong silhouette, dynamic perspective, premium animated-documentary finish."
-        negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, calm portrait, passive pose."
+        negative = "No readable text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, glamour portrait, unrelated people, sexualized posing, revealing clothing."
         fields = [
             style,
             f"SUBJECT: {trim_words(subject, 12)}." if subject else "",
@@ -94,7 +94,7 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
         ]
     else:
         style = "Modern 2D animated-documentary keyframe, crisp clean linework, sharp graphic shapes, polished cel shading, vivid controlled color, expressive stylized faces, believable anatomy, strong silhouette, cinematic lighting, premium television-animation finish."
-        negative = "No readable text, logos, watermarks, captions, modern objects, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, passive poses."
+        negative = "No readable text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, unrelated people, glamour portraits, sexualized posing, revealing clothing."
         fields = [
             style,
             f"BEAT: {trim_words(beat, 18)}." if beat else "",
@@ -157,7 +157,7 @@ def generate_from_request(request: dict) -> None:
     print("[LOCAL WORKER] prompt_tokens={}".format(token_count), flush=True)
 
     generator = torch.Generator(device="cpu").manual_seed(seed)
-    image = PIPELINE(
+    result = PIPELINE(
         compact,
         num_inference_steps=steps,
         guidance_scale=8.0,
@@ -165,7 +165,11 @@ def generate_from_request(request: dict) -> None:
         width=width,
         height=height,
         generator=generator,
-    ).images[0]
+    )
+    flagged = getattr(result, "nsfw_content_detected", None)
+    if flagged and any(bool(x) for x in flagged):
+        raise RuntimeError("Local safety checker flagged the generated image; refusing to publish it.")
+    image = result.images[0]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image = ImageOps.fit(
@@ -223,7 +227,6 @@ def main() -> int:
         print("[LOCAL WORKER] Loading model once: {}".format(LOCAL_MODEL_ID), flush=True)
         PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
             LOCAL_MODEL_ID,
-            safety_checker=None,
         )
         PIPELINE.set_progress_bar_config(disable=True)
         print("[LOCAL WORKER] Model ready.", flush=True)
@@ -237,7 +240,6 @@ def main() -> int:
 
     PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
         str(request["model_id"]),
-        safety_checker=None,
     )
     PIPELINE.set_progress_bar_config(disable=True)
     generate_from_request(request)
