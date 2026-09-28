@@ -430,9 +430,13 @@ def groq_call(
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
+            # Groq's JSON response mode requires the prompt messages to explicitly
+            # mention JSON. Add that guard here so every structured call is safe,
+            # including future prompts that forget the literal word.
+            safe_messages = [{"role": "system", "content": "Return valid JSON."}, *messages]
             response = client.chat.completions.create(
                 model=model,
-                messages=messages,
+                messages=safe_messages,
                 max_completion_tokens=max_completion_tokens,
                 temperature=temperature,
                 reasoning_effort="low",
