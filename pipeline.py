@@ -1384,8 +1384,6 @@ def visual_test() -> None:
     require_secret("CLOUDFLARE_API_TOKEN")
     test_dir = WORK_DIR / "visual_test"
     test_dir.mkdir(parents=True, exist_ok=True)
-    style_ref = _small_reference(_decode_style_reference(), "visual_test_style")
-
     samples = [
         (
             "A powerful ancient African ruler stands before a thriving riverside city at sunrise, "
@@ -1408,7 +1406,7 @@ def visual_test() -> None:
     outputs: list[str] = []
     for idx, description in enumerate(samples, 1):
         out = test_dir / f"sample_{idx:02d}.jpg"
-        refs = [style_ref]
+        refs = []
         if previous is not None:
             refs.append(_small_reference(previous, f"visual_test_prev_{idx:02d}"))
 
@@ -1541,9 +1539,10 @@ def split_visual_beats(narration: str) -> list[str]:
 POLISHED_VISUAL_STYLE = """
 Modern 2D animated-explainer keyframe for Relic Loop.
 Crisp clean linework, sharp graphic shapes, polished cel shading, vivid but controlled
-colors, strong key/rim lighting, expressive believable characters or animals, readable
-silhouettes, clear foreground/midground/background separation, dynamic perspective,
-richly designed environments, and premium modern television-animation finish.
+colors, strong key/rim lighting, readable silhouettes, clear foreground/midground/background
+separation, dynamic perspective, richly designed environments, and premium modern
+television-animation finish. Characters or animals are used only when the narration needs them;
+otherwise objects, mechanisms, environments, diagrams, and processes are the visual subjects.
 
 This is an explanatory frame, not a generic illustration. Make the specific narrated idea
 easier to understand at a glance. Modern topics should use accurate modern objects and
@@ -2004,6 +2003,8 @@ def make_visual_prompt(
     beat_index: int,
     beat_count: int,
     has_previous_reference: bool,
+    topic_category: str = "general",
+    central_question: str = "",
 ) -> str:
     def visual_shot_type(text: str, index: int) -> str:
         lower = text.lower()
@@ -2030,34 +2031,70 @@ def make_visual_prompt(
         return fallbacks[index % len(fallbacks)]
 
     shot = visual_shot_type(beat_text, beat_index)
-    chars = ", ".join(str(x) for x in (scene.get("characters") or [])[:4]) or "historical people"
-    props = ", ".join(str(x) for x in (scene.get("props") or [])[:4]) or "period-appropriate objects"
+    raw_chars = [normalize_spaces(str(x)) for x in (scene.get("characters") or []) if normalize_spaces(str(x))]
+    raw_props = [normalize_spaces(str(x)) for x in (scene.get("props") or []) if normalize_spaces(str(x))]
+    chars = ", ".join(raw_chars[:4])
+    props = ", ".join(raw_props[:4])
+
+    # People are optional visual subjects, not a default. The old fallback of
+    # "historical people" was causing science/everyday-life beats to become
+    # unrelated character portraits.
+    people_words = (
+        "person", "people", "human", "cook", "chef", "scientist", "researcher",
+        "farmer", "worker", "doctor", "child", "man", "woman", "family", "crowd",
+        "customer", "driver", "engineer", "inventor", "author", "ruler", "soldier",
+        "king", "queen", "emperor", "empress"
+    )
+    beat_requires_people = contains_any(beat_text, people_words)
+    if raw_chars and beat_requires_people:
+        people_instruction = (
+            "PEOPLE ALLOWED: only the named people relevant to the narration. "
+            "Keep them secondary unless the narration is about their action or reaction."
+        )
+    else:
+        people_instruction = (
+            "OBJECT / PROCESS FIRST: do not add human figures or portraits. "
+            "Use the exact object, animal, environment, mechanism, evidence, or process "
+            "named by the narration as the dominant subject."
+        )
+
+    setting = normalize_spaces(str(scene.get("setting", ""))) or "a setting that directly matches the narration beat"
+    action = normalize_spaces(str(scene.get("action", ""))) or "the exact physical action described in the narration beat"
+    props = props or "only the specific physical objects required by the narration beat"
     device = visual_device_hint(beat_text)
 
     continuity = (
-        "A previous generated frame is supplied as a reference. Preserve recurring "
-        "character design, clothing colors, facial proportions, and overall illustration "
-        "style from that reference, but create a genuinely new shot with a new composition "
-        "and new visual information; do not merely copy the previous background."
+        "A previous generated frame is supplied as a reference. Preserve only relevant "
+        "visual continuity from it while creating a genuinely new shot with new visual "
+        "information. Never copy an unrelated subject into this frame."
         if has_previous_reference
         else
-        "Establish recurring character design and the visual world now so later shots can remain consistent."
+        "No unrelated reference subject is being carried into this frame."
     )
 
     return f"""
 {POLISHED_VISUAL_STYLE}
 
+TOPIC CATEGORY:
+{topic_category}
+
+CENTRAL QUESTION:
+{central_question or "(not supplied)"}
+
 SETTING / CONTEXT:
 {era}
 
 SETTING:
-{scene.get("setting", "historical location")}
+{setting}
 
 CHARACTERS:
-{chars}
+{chars or "none required"}
 
 VISIBLE ACTION:
-{scene.get("action", "characters interacting naturally")}
+{action}
+
+PEOPLE RULE:
+{people_instruction}
 
 PROPS / SYMBOLS:
 {props}
@@ -2081,6 +2118,20 @@ new information the focal point. Avoid generic "people standing around" composit
 CONTINUITY:
 {continuity}
 
+NON-NEGOTIABLE CONTENT RULE:
+The NARRATION BEAT is the source of truth for the image. The dominant visual must directly
+depict the exact thing being explained in that beat. Do not substitute generic attractive
+characters, portraits, fashion imagery, unrelated historical scenes, or decorative subjects.
+If the beat describes a scientific mechanism, prefer a clean object/cutaway/process view.
+If the beat describes an animal, show that animal and its behavior. If it describes an object,
+show that object clearly and at useful scale. If it describes a place or event, show that place
+or event. People appear only when the narration actually requires them.
+
+SAFETY / CLEAN VISUALS:
+No nudity, underwear-focused imagery, sexualized posing, glamour portraits, fetish styling,
+or body-focused compositions. Keep clothing ordinary and age-appropriate whenever people are
+actually needed.
+
 Create a finished, polished illustration. No readable text, lettering, pseudo-writing, logos,
 watermarks, or accidental modern signage. Documents, screens, labels, or diagrams may be shown as detailed objects, but do not invent readable text unless the narration explicitly requires documented text.
 """.strip()
@@ -2088,12 +2139,13 @@ watermarks, or accidental modern signage. Documents, screens, labels, or diagram
 
 def render_scenes(script: dict[str, Any]) -> None:
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
-    style_ref = _small_reference(_decode_style_reference(), "style")
     visual_plan = build_visual_plan(script)
     total_beats = sum(len(beats) for beats in visual_plan)
 
     previous_image: Path | None = None
     previous_characters: set[str] = set()
+    topic_category = str(script.get("topic_category", "general"))
+    central_question = str(script.get("central_question", ""))
 
     for idx, scene in enumerate(script["scenes"], 1):
         beats = visual_plan[idx - 1]
@@ -2109,9 +2161,9 @@ def render_scenes(script: dict[str, Any]) -> None:
                 previous_image = out
                 continue
 
-            refs = [style_ref]
+            refs = []
             use_previous = previous_image is not None and (
-                beat_idx > 1 or bool(current_characters & previous_characters)
+                beat_idx > 1 and bool(current_characters & previous_characters)
             )
             if use_previous:
                 refs.append(_small_reference(previous_image, f"prev_{idx:03d}_{beat_idx:02d}"))
@@ -2123,6 +2175,8 @@ def render_scenes(script: dict[str, Any]) -> None:
                 beat_idx - 1,
                 len(beats),
                 has_previous_reference=use_previous,
+                topic_category=topic_category,
+                central_question=central_question,
             )
             print(f"[IMAGE] Scene {idx}/{len(script['scenes'])} beat {beat_idx}/{len(beats)}")
             provider_used = _generate_image_with_fallback(
@@ -2846,6 +2900,11 @@ def main(mode: str = "full") -> None:
 
     atomic_write_json(SCRIPT_PATH, script)
     checkpoint("script_complete", scene_count=len(script["scenes"]), words=_script_word_count(script))
+
+    # Carry topic metadata into the visual director so modern/science/everyday
+    # episodes do not inherit historical defaults.
+    script["topic_category"] = str(topic.get("category", "general"))
+    script["central_question"] = str(topic.get("question", ""))
 
     # Audio/scenes are regenerated on fresh runners from the saved script.
     generate_voiceovers(script)
