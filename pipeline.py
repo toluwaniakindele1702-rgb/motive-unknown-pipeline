@@ -17,7 +17,7 @@ Design goals
 - No burned-in subtitles.
 - Dedicated curiosity-thumbnail generation paired with title packaging.
 - Idempotent stage files so a rerun can skip already-completed stages.
-- Safe YouTube default: private uploads until the owner changes the setting.
+- YouTube uploads default to public for unattended channel publishing.
 
 Required GitHub Secrets
 -----------------------
@@ -34,9 +34,9 @@ REPLICATE_API_TOKEN
 
 Optional GitHub Variables / Secrets
 -----------------------------------
-YOUTUBE_PRIVACY_STATUS     default: private
-KOKORO_VOICE               default: am_onyx
-KOKORO_SPEED               default: 1.04
+YOUTUBE_PRIVACY_STATUS     default: public
+KOKORO_VOICE               default: am_puck
+KOKORO_SPEED               default: 1.05
 CHANNEL_NAME               optional, used in prompts/description
 
 Optional repo assets
@@ -90,8 +90,8 @@ GROQ_RESEARCH_MODEL = os.environ.get("GROQ_RESEARCH_MODEL", "openai/gpt-oss-120b
 GROQ_WRITER_MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
 
-KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_onyx").strip()
-KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "1.04"))
+KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_puck").strip()
+KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "1.05"))
 BACKGROUND_MUSIC_VOLUME = float(os.environ.get("BACKGROUND_MUSIC_VOLUME", "0.055"))
 
 # Polished AI illustration generation.
@@ -130,9 +130,9 @@ STYLE_REFERENCE_B64 = ROOT / "assets" / "visual_style_reference.jpg.b64"
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Relic Loop").strip()
 if not CHANNEL_NAME or CHANNEL_NAME.lower() == "motive unknown":
     CHANNEL_NAME = "Relic Loop"
-YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
+YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "public").strip().lower()
 if YOUTUBE_PRIVACY_STATUS not in {"private", "public", "unlisted"}:
-    YOUTUBE_PRIVACY_STATUS = "private"
+    YOUTUBE_PRIVACY_STATUS = "public"
 
 VIDEO_W, VIDEO_H = 1280, 720
 VIDEO_FPS = 30
@@ -2764,7 +2764,7 @@ def save_manifests(topic: dict[str, Any], research: str, story: dict[str, Any], 
 
 
 def main(mode: str = "full") -> None:
-    print(f"=== {CHANNEL_NAME} / Relic Loop v5 ===")
+    print(f"=== {CHANNEL_NAME} / Relic Loop v6 ===")
     print(f"MODE={mode} | KOKORO_VOICE={KOKORO_VOICE} | SPEED={KOKORO_SPEED}")
 
     if mode == "voice_test":
