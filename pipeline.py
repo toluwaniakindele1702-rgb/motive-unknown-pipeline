@@ -525,9 +525,10 @@ def groq_json(
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
+            safe_messages = [{"role": "system", "content": "Return valid JSON."}, *messages]
             response = client.chat.completions.create(
                 model=model,
-                messages=messages,
+                messages=safe_messages,
                 max_completion_tokens=max_completion_tokens,
                 temperature=temperature,
                 reasoning_effort="low",
