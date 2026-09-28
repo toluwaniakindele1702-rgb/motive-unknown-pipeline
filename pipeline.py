@@ -1,21 +1,21 @@
 """
-Relic Loop v5 — curiosity-first automated history video factory.
+Relic Loop v6 — curiosity-first automated explainer video factory.
 
 Design goals
 ------------
 - Daily, unattended GitHub Actions execution.
-- Curiosity-driven historical questions instead of generic topics.
+- Curiosity-driven questions across everyday life, animals, science, technology, culture, society, and history.
 - GPT-OSS 120B for research/storytelling; GPT-OSS 20B for lightweight
   structuring/SEO tasks.
 - Local/open-weight Kokoro TTS (no paid voice API).
 - Modern animated-documentary illustrations using a multi-provider fallback chain.
-- Visual shots are designed around actions, reactions, maps, objects, evidence, and consequences.
+- Visual shots are chosen to explain mechanisms, comparisons, processes, evidence, maps, reactions, and consequences.
 - Each narration scene is split into compact visual beats so the picture changes frequently.
 - Visual prompts prioritize the exact narrated fact, action, evidence, place, person, or object.
 - A persistent style-reference image plus prior-frame references improve visual continuity.
 - Motion-comic camera drift and animated film texture add movement without Ken Burns zoom.
 - No burned-in subtitles.
-- Dedicated thumbnail generation separate from video scenes.
+- Dedicated curiosity-thumbnail generation paired with title packaging.
 - Idempotent stage files so a rerun can skip already-completed stages.
 - Safe YouTube default: private uploads until the owner changes the setting.
 
@@ -550,34 +550,38 @@ def groq_json(
 # Topic scouting / research
 # ---------------------------------------------------------------------------
 TOPIC_PROMPT = """
-You are a curiosity-first history channel producer.
+You are the topic producer for Relic Loop, a curiosity-first YouTube channel.
 
-Your job is NOT to pick a generic history topic. Generate one specific historical
-QUESTION that a normal person might genuinely wonder about after hearing it.
+Relic Loop is NOT locked to history. It can cover everyday life, animals, nature,
+science, the human mind and body, technology, culture, society, and history.
 
-Good patterns:
-- Why did ...?
-- How did ...?
-- What happened when ...?
-- Why were ... so important to ...?
-- How did an ordinary decision cause ...?
-- Why did people suddenly start/stop ...?
-- What was really happening behind ...?
+Start with something people already know, see, experience, or have heard of, then ask
+the hidden "why/how" question that makes them think, "Wait... why is that true?"
 
-Prefer stories involving a famous civilization, ruler, event, object, belief, or
-place when there is a genuinely strange or surprising question attached to it.
-Avoid fake mysteries, conspiracy framing, paranormal claims presented as fact,
-and "history of X" topics.
+Prefer familiar subjects with surprising explanations over obscure trivia.
 
-The eventual video should be understandable to an intelligent young teenager,
-while still being interesting to adults.
+Good shapes:
+- Why do sharks have to keep moving?
+- Why does your brain sometimes forget a familiar name?
+- Why do airplanes have tiny windows?
+- Do animals recognize when a human is helping them?
+- Why does the ocean look blue?
+- Why did people once believe disease came from bad air?
+- Why was a familiar historical group portrayed as dangerous in some societies?
 
-Return exactly this JSON object:
+Avoid broad history topics, generic biographies, simple summaries, fake mysteries,
+conspiracies/paranormal claims presented as fact, medical diagnosis/advice, and
+body-comparison or appearance-ideal content.
+
+Return exactly:
 {
-  "question": "one irresistible historical question",
-  "topic": "short internal topic label",
-  "era": "short era/civilization label",
-  "why_curious": "2-4 sentences explaining why the question creates curiosity",
+  "question": "one specific curiosity question",
+  "topic": "short topic label",
+  "category": "everyday / animals / science / human mind / technology / culture & society / history",
+  "era": "time/setting label, or modern day",
+  "why_curious": "2-4 sentences explaining the curiosity",
+  "curiosity_gap": "one sentence describing the viewer's assumption versus the hidden explanation",
+  "curiosity_score": 8,
   "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
 }
 """.strip()
@@ -592,123 +596,154 @@ def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
     history_text = "\n".join(f"- {x}" for x in previous) or "(no previous videos recorded)"
 
     search_prompt = f"""
-Search the web for genuinely curiosity-driven historical story ideas suitable for a
-YouTube channel. Focus on real history, museums, universities, archives, reputable
-history/reference sources, and questions that make a normal viewer think: 'Why did
-that happen?' or 'How was that possible?'
+Search the web for compelling curiosity-first YouTube topics for Relic Loop.
 
-Look across different eras and regions. Favor specific questions rather than broad
-subjects. Return useful findings with the names of the historical subject, the
-curiosity question it suggests, and enough factual context to judge whether the idea
-can support a 10-15 minute video.
+Do NOT restrict the search to history. Search across everyday life, animals/nature,
+science, human psychology, technology/design, culture/society, and relatable history.
 
-Avoid conspiracy claims, paranormal claims presented as fact, and questions already
-used in this channel's recent history list:
+Look for questions about familiar things that make a normal viewer think:
+"Wait, why does that happen?"
+"How is that possible?"
+"Why did people decide to do it that way?"
+
+Prefer specific questions with evidence-backed explanations, strong visual possibilities,
+and enough depth for an 8-15 minute video. Avoid conspiracies, paranormal claims,
+medical diagnosis/advice, appearance-ideal content, generic biographies, listicles,
+and broad topics with no natural question.
+
+Do not repeat these recent channel questions:
 {history_text}
+
+Return search findings with the subject, suggested question, evidence, and useful visual angles.
 """.strip()
 
     search_findings = groq_browser_search(
         GROQ_LIGHT_MODEL,
         search_prompt,
-        max_completion_tokens=2600,
+        max_completion_tokens=2800,
         attempts=3,
     )
 
-    selection_prompt = f"""
-You are the final topic selector for the history YouTube channel Relic Loop.
+    selection_base = f"""
+You are the final topic selector for Relic Loop, a curiosity-first explainer channel.
 
-Select ONE specific historical question with a strong natural curiosity gap.
-The viewer should immediately think: "Wait, why did THAT happen?" or "How was THAT possible?"
+Choose ONE topic from the findings below.
 
-Prefer questions built around:
-- a surprising decision with an unexpected consequence
-- an object, technology, custom, or system that worked differently than assumed
-- a strange survival, disappearance, escape, failure, reversal, or coincidence
-- a contradiction between the popular version of a story and what the evidence shows
-- a small overlooked event that produced a much larger consequence
-- an ordinary-looking detail that turns out to explain the bigger mystery
+History is only one category. Relic Loop also covers everyday life, animals, science,
+human mind/body, technology, culture, and society.
 
-Avoid broad "history of X", generic biographies, simple battle summaries, listicles,
-or topics whose only hook is that the event was famous. Avoid conspiracy framing,
-paranormal claims presented as fact, and sensational conclusions that the evidence cannot support.
+Select something familiar enough to recognize immediately, but with a non-obvious
+underlying explanation. The ideal topic has concrete tension, an answer worth discovering,
+and strong opportunities to explain the answer visually.
 
-Silently reject any candidate that fails one or more of these checks:
-1. Curiosity without prior knowledge of the subject.
-2. Concrete tension, contradiction, or unanswered "how/why".
-3. Enough evidence for 8-12 meaningful reveals.
-4. Strong visual possibilities: acting characters, objects, places, maps, documents,
-   comparisons, and visible cause-and-effect.
-5. The question does not overpromise what the evidence can prove.
+Strong patterns:
+- familiar thing + hidden mechanism
+- everyday behavior + surprising reason
+- animal behavior + natural "why"
+- common technology/design + overlooked reason
+- ordinary brain/behavior effect + surprising explanation
+- familiar cultural practice + unexpected function/origin
+- well-known historical subject + relatable question
 
-Do not repeat or closely imitate the channel's previous questions.
+Reject broad subjects, generic biographies, simple event summaries, fake mysteries,
+conspiracies/paranormal claims presented as fact, medical diagnosis/advice,
+body-comparison/appearance-ideal framing, and claims the sources cannot support.
 
-Previous channel questions:
+Quality checks:
+1. Familiar subject.
+2. Immediate curiosity gap.
+3. Satisfying evidence-backed answer.
+4. Strong visual explanation potential.
+5. At least 8 useful reveals/steps without filler.
+
+Do not repeat or closely imitate previous questions:
 {history_text}
 
 WEB FINDINGS:
 {search_findings}
 
-Return exactly this JSON object:
+Return exactly:
 {{
-  "question": "one specific, irresistible historical question",
-  "topic": "short internal topic label",
-  "era": "short era/civilization label",
+  "question": "one specific curiosity-first question",
+  "topic": "short topic label",
+  "category": "everyday / animals / science / human mind / technology / culture & society / history",
+  "era": "time/setting label, or modern day",
   "why_curious": "2-4 sentences explaining the curiosity",
+  "curiosity_gap": "one sentence describing the viewer's assumption versus the hidden explanation",
+  "curiosity_score": 8,
   "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
 }}
 """.strip()
 
-    data = groq_json(
-        GROQ_LIGHT_MODEL,
-        [{"role": "user", "content": selection_prompt}],
-        max_completion_tokens=1100,
-        temperature=0.7,
-        attempts=3,
+    last_data = None
+    for attempt in range(1, 4):
+        extra = (
+            "\n\nRETRY: reject anything generic. Pick a more familiar subject with a sharper "
+            "why/how question, stronger explanation, and better visual payoff."
+            if attempt > 1 else ""
+        )
+        data = groq_json(
+            GROQ_LIGHT_MODEL,
+            [{"role": "user", "content": selection_base + extra}],
+            max_completion_tokens=1400,
+            temperature=0.72,
+            attempts=2,
+        )
+        last_data = data
+        required = ("question","topic","category","era","why_curious","curiosity_gap","search_angles")
+        try:
+            score = int(data.get("curiosity_score",0))
+        except (TypeError,ValueError):
+            score = 0
+        if all(data.get(k) for k in required) and isinstance(data.get("search_angles"), list) and score >= 8:
+            return data
+        print(f"[TOPIC] rejected weak candidate on selector attempt {attempt}.")
+    raise RuntimeError(
+        "Topic selector could not produce a sufficiently curiosity-driven topic after 3 attempts. "
+        f"Last keys: {sorted(last_data.keys()) if isinstance(last_data, dict) else []}"
     )
-    for key in ("question", "topic", "era", "why_curious", "search_angles"):
-        if not data.get(key):
-            raise RuntimeError(f"Topic selector missing field: {key}")
-    if count_words(str(data["question"])) < 4:
-        raise RuntimeError("Topic question is too short.")
-    if not isinstance(data["search_angles"], list):
-        raise RuntimeError("Topic search_angles must be a list.")
-    return data
 
 
 def research_topic(topic: dict[str, Any]) -> str:
     search_prompt = f"""
-Research this historical question deeply using browser search:
+Research this curiosity question deeply using browser search:
 {topic['question']}
 
-Topic: {topic['topic']}
-Era/civilization: {topic['era']}
+Category: {topic.get('category', 'general curiosity')}
+Setting/era: {topic.get('era', 'modern day')}
 Search angles: {json.dumps(topic.get('search_angles', []), ensure_ascii=False)}
 
-Find reliable evidence from museums, universities, national archives, reputable
-reference works, academic/history institutions, and strong primary-source or
-reference pages where possible. Search for the central answer, important people,
-places, objects, chronology, competing interpretations, and any claim that is
-commonly exaggerated online.
+Use reliable sources appropriate to the topic: universities, museums, government or
+national institutions, scientific organizations, reputable reference works, strong
+reporting, primary sources, and recognized subject-matter institutions.
 
-Return detailed search findings. Include source titles and URLs when available.
-Clearly distinguish established facts from disputed, legendary, or uncertain claims.
+Find the clearest evidence-backed answer, the mechanism or cause, surprising but
+well-supported facts, useful examples/comparisons, common misconceptions, and genuine
+uncertainty. Also note things that can be shown visually: processes, anatomy/cutaways,
+objects, maps, before/after states, experiments, evidence, scale, or reactions.
+
+Return detailed search findings with source titles and URLs when available. Clearly
+distinguish established facts from disputed, uncertain, legendary, or preliminary claims.
 """.strip()
 
     search_findings = groq_browser_search(
         GROQ_RESEARCH_MODEL,
         search_prompt,
-        max_completion_tokens=4200,
+        max_completion_tokens=4600,
         attempts=4,
     )
 
     synthesis_prompt = f"""
-You are the lead historical researcher for a documentary channel.
+You are the lead researcher for Relic Loop.
 
-Turn the browser-search findings below into a compact, accurate research dossier for
-another writer. Do not invent facts or sources. Preserve uncertainty and disagreement.
+Turn the browser-search findings into a compact, accurate research dossier for another writer.
+Do not invent facts or sources. Preserve uncertainty and disagreement.
 
 CENTRAL QUESTION:
 {topic['question']}
+
+CATEGORY:
+{topic.get('category', 'general curiosity')}
 
 BROWSER-SEARCH FINDINGS:
 {search_findings}
@@ -716,21 +751,22 @@ BROWSER-SEARCH FINDINGS:
 Return plain text with exactly these headings:
 1. CORE ANSWER
 2. STORY BEATS (10-16 numbered beats)
-3. IMPORTANT PEOPLE / PLACES / OBJECTS
-4. DISPUTES OR UNCERTAINTY
-5. VERIFIED SOURCES
+3. MECHANISM / CAUSE AND EFFECT
+4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES
+5. MISCONCEPTIONS OR CONTRADICTIONS
+6. DISPUTES OR UNCERTAINTY
+7. VERIFIED SOURCES
 
 Source-integrity rule: list only sources that actually appeared in the browser-search
-findings. Never invent a scholar, book, museum entry, excavation report, article,
-quotation, URL, or "current consensus". If fewer than six sources were actually found,
-list fewer. Every surprising claim used by the writer must be traceable to the supplied
-search findings.
+findings. Never invent a scholar, book, institution, report, article, quotation, URL,
+or "current consensus". Every surprising claim used by the writer must be traceable
+to the supplied search findings.
 """.strip()
 
     return groq_call(
         GROQ_RESEARCH_MODEL,
         [{"role": "user", "content": synthesis_prompt}],
-        max_completion_tokens=4200,
+        max_completion_tokens=4600,
         temperature=0.35,
         attempts=4,
     )
@@ -740,29 +776,30 @@ search findings.
 # Story architecture + script
 # ---------------------------------------------------------------------------
 STORY_ARCHITECT_PROMPT = """
-You are a story architect for a premium history YouTube channel.
+You are the story architect for Relic Loop, a curiosity-first explainer channel.
 
-Turn the research dossier into a suspenseful STORY PLAN, not a textbook outline.
-The video must have one central curiosity question and a satisfying answer.
+Turn research into a suspenseful EXPLANATION, not a textbook outline.
+The video must have one central curiosity question and one satisfying "aha" moment.
 
 Structure:
-1. Cold open: begin inside a real, source-supported moment that immediately creates a question.
-2. Immediate question: make the viewer understand exactly what they are trying to figure out.
-3. Minimal context: give only the background needed to understand the problem.
-4. Escalation: each section introduces a new fact, obstacle, decision, clue, or consequence that
-   changes the viewer's picture.
-5. Midpoint reversal: use the strongest contradiction or discovery to break the obvious explanation.
-6. Evidence trail: connect clues through cause and effect instead of dumping chronology or facts.
-7. Payoff: answer the opening question directly and distinguish what is certain from what remains debated.
-8. Ending: leave one grounded implication that follows naturally from the answer.
+1. Cold open with a concrete familiar situation, surprising fact, or real moment.
+2. State the exact question quickly.
+3. Give only the context needed.
+4. Escalate with new facts, examples, mechanisms, contradictions, or consequences.
+5. Use a midpoint reversal when the evidence challenges the obvious explanation.
+6. Explain the mechanism through clear cause and effect.
+7. Identify the single core "aha" explanation the viewer has been waiting for.
+8. Pay off the opening question directly and distinguish certainty from debate.
+9. End with a grounded everyday connection or memorable implication.
 
-Every section should earn its place. Avoid chronological padding, fake suspense, repeated recaps,
-and atmosphere-for-atmosphere's-sake.
+Every section must earn its place. Avoid padding, repeated recaps, fake suspense, and
+decorative prose.
 
 Return JSON:
 {
   "central_question": "...",
   "hook": "1-3 sentence cold open concept",
+  "aha_moment": "the core explanation/reveal the viewer is waiting to understand",
   "story_arc": [
     {"section": 1, "purpose": "...", "reveal": "...", "required_facts": ["..."]}
   ],
@@ -804,7 +841,7 @@ Do not repeat sections or pad with generic suspense.
 
         last_plan = plan
         arc = plan.get("story_arc")
-        if isinstance(arc, list) and len(arc) >= 8:
+        if isinstance(arc, list) and len(arc) >= 8 and plan.get("aha_moment"):
             valid = all(
                 isinstance(item, dict)
                 and item.get("purpose")
@@ -831,9 +868,9 @@ Do not repeat sections or pad with generic suspense.
 
 
 SCRIPTWRITER_PROMPT = """
-You are the head writer of the YouTube history storytelling channel Relic Loop.
+You are the head writer of the curiosity-first YouTube channel Relic Loop.
 
-Write a 10-15 minute narration that answers one irresistible historical question.
+Write an 8-15 minute narration that answers one irresistible curiosity question. Topics may be everyday life, animals, science, human behavior, technology, culture/society, or history.
 The target audience is a curious young teenager AND adults. The language is simple,
 but the thinking is not childish.
 
@@ -858,9 +895,8 @@ DO NOT WRITE LIKE
 Avoid filler such as "the sun was shining," "the water was calm," "little did they know,"
 "in the annals of history," and long scenery descriptions unless the detail changes the story.
 Never add a fact simply to make the script longer.
-Every few sentences should introduce something the viewer can picture: a person, object, place,
-decision, movement, document, number, date, map location, or physical consequence. Prefer concrete
-language over abstract summaries so the visual editor can respond to the narration beat by beat.
+Every few sentences should introduce something the viewer can picture or understand visually: a person, animal, object, mechanism, place,
+decision, movement, process, document, number, comparison, map location, before/after state, or physical consequence. Prefer concrete language over abstract summaries so the visual editor can explain the narration beat by beat. When explaining a mechanism, state the cause and effect clearly; when comparing things, make the contrast explicit.
 Write for energetic spoken delivery: short punchy sentences around important reveals, with varied
 sentence lengths and natural transitions. Do not make every sentence sound equally solemn.
 Never invent dialogue or inner thoughts and present them as historical facts.
@@ -1006,7 +1042,16 @@ def _script_style_issues(script: dict[str, Any]) -> list[str]:
     issues = [f"Avoid stale phrase: {phrase}" for phrase in SCRIPT_STYLE_RED_FLAGS if phrase in lower]
     q_count = full_text.count("?")
     if q_count > max(8, len(script.get("scenes", [])) // 2):
-        issues.append("Too many rhetorical questions; keep only questions that genuinely advance the story.")
+        issues.append("Too many rhetorical questions; keep only questions that genuinely advance the explanation.")
+
+    opening = " ".join(str(scene.get("narration", "")) for scene in script.get("scenes", [])[:2]).strip()
+    opening_lower = opening.lower()
+    if re.match(r"^(hey|hello|hi everyone|welcome|today we're|in this video)", opening_lower):
+        issues.append("The opening starts with generic channel/video framing; start inside the interesting situation.")
+    if not re.search(r"\b(?:why|how|what|what makes|what causes|what happens|why does|why do|how does|how can)\b", opening_lower):
+        issues.append("The opening does not clearly establish the central curiosity question.")
+    if not re.search(r"\b(?:because|but|instead|surprisingly|actually|the catch|the strange part|turns out|however)\b", opening_lower):
+        issues.append("The opening lacks a clear curiosity turn or contradiction.")
     return issues
 
 
@@ -1428,112 +1473,101 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Split narration into compact, contiguous visual beats for faster information changes."""
+    """Split at meaningful phrases/sentences, not fixed time intervals."""
     text = normalize_spaces(narration)
     if not text:
         return [""]
-
     sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
-    if not sentences:
-        sentences = [text]
-
     expanded: list[str] = []
+    soft = re.compile(r"\s+(?=(?:but|because|so|then|instead|while|which|meaning|that means)\b)", re.I)
     for sentence in sentences:
-        if count_words(sentence) > 24:
-            parts = [p.strip() for p in re.split(r"(?<=[,;:])\s+", sentence) if p.strip()]
-            if len(parts) > 1:
-                bucket = ""
-                for part in parts:
-                    candidate = f"{bucket} {part}".strip()
-                    if count_words(candidate) <= 24 or not bucket:
-                        bucket = candidate
-                    else:
-                        expanded.append(bucket)
-                        bucket = part
-                if bucket:
-                    expanded.append(bucket)
-            else:
-                expanded.append(sentence)
-        else:
+        words = count_words(sentence)
+        if words <= 30:
             expanded.append(sentence)
-
-    word_total = count_words(text)
-    target_beats = max(
-        1,
-        min(4, int(np.ceil(word_total / max(1, VISUAL_BEAT_TARGET_WORDS)))),
+            continue
+        parts = [p.strip() for p in soft.split(sentence) if p.strip()]
+        if len(parts) <= 1:
+            parts = [p.strip() for p in re.split(r"(?<=[,;:])\s+", sentence) if p.strip()]
+        if len(parts) <= 1:
+            ws = sentence.split()
+            parts = [" ".join(ws[i:i+22]) for i in range(0,len(ws),22)]
+        bucket = ""
+        for part in parts:
+            candidate = f"{bucket} {part}".strip()
+            if not bucket or count_words(candidate) <= 28:
+                bucket = candidate
+            else:
+                expanded.append(bucket)
+                bucket = part
+        if bucket:
+            expanded.append(bucket)
+    i = 0
+    while i < len(expanded):
+        if count_words(expanded[i]) < 7 and len(expanded) > 1:
+            if i == 0:
+                expanded[1] = f"{expanded[i]} {expanded[1]}".strip()
+            else:
+                expanded[i-1] = f"{expanded[i-1]} {expanded[i]}".strip()
+            del expanded[i]
+            continue
+        i += 1
+    target = min(
+        max(1, int(np.ceil(count_words(text) / max(1, VISUAL_BEAT_TARGET_WORDS)))),
+        len(expanded),
     )
-    target_beats = min(target_beats, len(expanded))
-
-    while len(expanded) > target_beats:
-        def pair_score(i: int) -> tuple[float, int]:
-            pair = f"{expanded[i]} {expanded[i + 1]}"
-            info = (
-                3 * len(re.findall(r"\b\d{2,4}\b", pair))
-                + 2 * len(re.findall(
-                    r"\b(?:map|route|letter|document|report|record|evidence|ship|army|"
-                    r"king|queen|city|battle)\b",
-                    pair,
-                    re.I,
-                ))
-            )
-            return (count_words(pair) + info * 8, i)
-
-        best_idx = min(range(len(expanded) - 1), key=pair_score)
-        expanded[best_idx] = f"{expanded[best_idx]} {expanded[best_idx + 1]}".strip()
-        del expanded[best_idx + 1]
-
-    while len(expanded) < target_beats:
-        idx = max(range(len(expanded)), key=lambda i: count_words(expanded[i]))
-        words = expanded[idx].split()
-        if len(words) < 18:
-            break
-        cut = max(8, min(len(words) - 8, round(len(words) / 2)))
-        expanded[idx:idx + 1] = [" ".join(words[:cut]), " ".join(words[cut:])]
-
+    while len(expanded) > target:
+        best = min(range(len(expanded)-1), key=lambda j: (
+            0 if expanded[j].endswith((".", "?", "!")) else 1,
+            count_words(expanded[j]) + count_words(expanded[j+1]),
+        ))
+        expanded[best] = f"{expanded[best]} {expanded[best+1]}".strip()
+        del expanded[best+1]
+    while len(expanded) > 4:
+        best = min(range(len(expanded)-1), key=lambda j: (
+            count_words(f"{expanded[j]} {expanded[j+1]}"),
+            len(re.findall(r"\b(?:because|but|then|instead|evidence|example|process|before|after|why|how)\b",
+                           f"{expanded[j]} {expanded[j+1]}", re.I)),
+        ))
+        expanded[best] = f"{expanded[best]} {expanded[best+1]}".strip()
+        del expanded[best+1]
     return expanded[:4] or [text]
 
 
 POLISHED_VISUAL_STYLE = """
-Modern 2D animated-documentary illustration for Relic Loop.
+Modern 2D animated-explainer keyframe for Relic Loop.
 Crisp clean linework, sharp graphic shapes, polished cel shading, vivid but controlled
-colors, strong rim and key lighting, expressive stylized characters, believable anatomy,
-large readable facial expressions, clear silhouettes, simplified but richly designed
-backgrounds, strong foreground/midground/background separation, dynamic perspective,
-and a premium television-animation finish.
+colors, strong key/rim lighting, expressive believable characters or animals, readable
+silhouettes, clear foreground/midground/background separation, dynamic perspective,
+richly designed environments, and premium modern television-animation finish.
 
-The image must feel like a polished animation keyframe built to explain a story, not a
-1960s textbook illustration, faded archival art, oil painting, sepia poster, parchment art,
-or generic historical painting. Favor bold shapes, clean edges, modern color separation,
-and deliberate staging. Characters should visibly act, react, point, run, carry, inspect,
-argue, discover, flee, build, or otherwise do something specific whenever the narration
-contains an action.
+This is an explanatory frame, not a generic illustration. Make the specific narrated idea
+easier to understand at a glance. Modern topics should use accurate modern objects and
+environments; historical topics should use plausible period details.
 
-Do NOT make stick figures, doodles, primitive geometric drawings, flat clip-art,
-photorealism, 3D CGI, anime, modern objects, UI elements, captions, subtitles,
-logos, watermarks, readable text, letters, numbers, pseudo-writing, or written words
-inside the image. Avoid modern roads, asphalt, lane markings, traffic signs, power lines,
-streetlights, cars, modern furniture, modern tools, and other anachronistic infrastructure
-unless the narration explicitly requires a modern setting. Keep historical materials, clothing,
-architecture, tools, and transport plausible for the stated era.
+Use bold shapes, clear cause-and-effect, useful comparisons, cutaways, process views,
+before/after states, scale cues, maps, evidence objects, or reaction shots whenever they
+clarify the narration.
+
+Do NOT use stick figures, doodles, primitive clip-art, accidental text, captions, subtitles,
+logos, watermarks, fake UI screenshots, photorealistic stock-photo style, generic 1960s
+educational art, sepia/vintage textbook treatment, or decorative imagery that does not
+help explain the beat.
 """.strip()
 
 THUMBNAIL_VISUAL_STYLE = """
-Modern high-energy YouTube history thumbnail illustration for Relic Loop.
-Crisp clean cartoon linework, polished cel shading, vivid contrast, cinematic rim light,
-big expressive faces, exaggerated but believable eyes/brows/mouths, dramatic gestures,
-strong silhouettes, sharp foreground subjects, simplified high-impact background, rich
-depth, and a premium modern animated-documentary finish.
+Modern high-energy YouTube curiosity thumbnail for Relic Loop.
+Crisp clean cartoon linework, polished cel shading, vivid contrast, cinematic lighting,
+big expressive faces or animals when useful, strong silhouettes, sharp foreground subjects,
+simplified high-impact background, rich depth, dramatic perspective, and premium modern
+explainer polish.
 
-The thumbnail should instantly communicate ONE historical mystery. Build a curiosity gap:
-one dominant surprising event/object + one or two wildly expressive characters + a clear
-visual consequence. Make the characters feel like they are reacting to something shocking,
-impossible, confusing, dangerous, or unbelievable in the documented story. Use bold scale
-and dramatic perspective. Design for readability on a small mobile thumbnail.
+The thumbnail should instantly communicate ONE QUESTION or mystery: a dominant surprising
+thing + a clear contrast/consequence + expressive subjects when helpful. Build curiosity
+without generic clickbait.
 
-Do NOT make it look like a vintage textbook, 1960s educational illustration, archival photo,
-sepia painting, old poster, generic museum art, photorealistic render, 3D CGI, anime, clip-art,
-or a calm formal documentary cover. No readable text, letters, numbers, captions, subtitles,
-logos, watermarks, or invented writing inside the generated image.
+Do NOT use vintage textbook art, sepia painting, calm formal documentary covers,
+photorealistic stock art, 3D CGI, anime, clip-art, cluttered collage, readable text,
+letters, numbers, captions, subtitles, logos, watermarks, or invented writing inside the image.
 """.strip()
 
 
@@ -1939,17 +1973,23 @@ def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[P
 
 def visual_device_hint(beat_text: str) -> str:
     lower = beat_text.lower()
-    if re.search(r"\b\d{2,4}\b|\bpercent\b|\b\d+%\b", lower):
-        return "Use a clear number/date-focused composition, such as a timeline, date marker, quantity comparison, or period document detail."
-    if re.search(r"\b(map|route|crossed|traveled|sailed|marched|arrived|departed|distance|border|river|coast|road)\b", lower):
-        return "Use a geographic or overhead storytelling composition with a visible route, landmark, terrain, or positional relationship."
-    if re.search(r"\b(letter|document|report|record|diary|decree|note|inscription|photograph|evidence|testimony)\b", lower):
-        return "Use a close evidence/document composition with the important physical object prominently staged."
-    if re.search(r"\b(decided|ordered|refused|agreed|claimed|argued|revealed|discovered|found)\b", lower):
-        return "Use an action or reaction shot that makes the decision, disagreement, discovery, or reveal immediately legible."
-    if re.search(r"\b(built|destroyed|opened|closed|entered|left|fled|attacked|defended|carried|gave|took)\b", lower):
-        return "Use a dynamic action-focused composition showing the physical change or consequence."
-    return "Use a concrete scene centered on the most specific person, object, place, or action in the narration beat."
+    if re.search(r"\b(?:because|causes|works by|allows|prevents|helps|means|so that|leads to)\b", lower):
+        return "MECHANISM / CAUSE-EFFECT: show a visible process, cutaway, arrows, flow, or step-by-step explanation."
+    if re.search(r"\b(?:before|after|used to|now|instead|rather than|changed from|became)\b", lower):
+        return "BEFORE / AFTER: show a clear contrast between two states, designs, behaviors, or situations."
+    if re.search(r"\b(?:larger|smaller|twice|half|percent|million|thousand|only|tiny|huge)\b", lower):
+        return "SCALE / COMPARISON: use physical objects, groups, silhouettes, or side-by-side scale cues without readable labels."
+    if re.search(r"\b(?:map|route|crossed|traveled|sailed|marched|arrived|distance|border|river|coast|road|spread|moved)\b", lower):
+        return "GEOGRAPHY / MOVEMENT: use a map-like or overhead composition with clear positions and movement."
+    if re.search(r"\b(?:brain|nerve|cell|blood|lung|heart|gill|bone|muscle|inside|under the skin|anatom)\b", lower):
+        return "BIOLOGICAL CUTAWAY: show a clean explanatory cross-section of the relevant internal mechanism."
+    if re.search(r"\b(?:letter|document|report|record|diary|decree|note|inscription|photograph|evidence|testimony|study|experiment)\b", lower):
+        return "EVIDENCE CLOSE-UP: make the real object, data, or source visually prominent and explain why it matters."
+    if re.search(r"\b(?:decided|ordered|refused|agreed|claimed|argued|revealed|discovered|found|realized|learned)\b", lower):
+        return "REACTION / REVEAL: use a strong reaction or discovery moment with a visible clue or consequence."
+    if re.search(r"\b(?:how many|how long|steps|first|second|then|finally|process|build|made|formed)\b", lower):
+        return "PROCESS SEQUENCE: show a physical transformation or a distinct step in the process."
+    return "CINEMATIC EXPLANATION: choose the clearest concrete scene, object, person, animal, behavior, or action that makes the beat understandable.";
 
 
 def make_visual_prompt(
@@ -1962,21 +2002,25 @@ def make_visual_prompt(
 ) -> str:
     def visual_shot_type(text: str, index: int) -> str:
         lower = text.lower()
-        if re.search(r"\b(map|route|crossed|traveled|sailed|marched|arrived|departed|distance|border|river|coast|road)\b", lower):
-            return "high-angle geographic storytelling shot with a clearly readable route or positional relationship"
-        if re.search(r"\b(letter|document|report|record|diary|decree|note|inscription|photograph|evidence|testimony)\b", lower):
-            return "tight evidence close-up with the key object dominating the frame and a human hand or reaction anchoring it"
-        if re.search(r"\b(decided|ordered|refused|agreed|claimed|argued|revealed|discovered|found)\b", lower):
-            return "dynamic character reaction shot with strong gesture, eye-line, and a visible story-changing object or action"
-        if re.search(r"\b(built|destroyed|opened|closed|entered|left|fled|attacked|defended|carried|gave|took)\b", lower):
-            return "dynamic action shot with clear body motion, directional staging, and a strong foreground subject"
-        if re.search(r"\b\d{2,4}\b|\b(percent|million|thousand|half|third)\b", lower):
-            return "graphic history-information composition using physical objects, groups, scale, or a visual timeline cue without readable text"
+        if re.search(r"\b(?:because|causes|works by|allows|prevents|helps|means|leads to)\b", lower):
+            return "close explanatory mechanism shot or cutaway with the cause visibly leading to the effect"
+        if re.search(r"\b(?:before|after|instead|rather than|changed from|became)\b", lower):
+            return "clear before/after comparison with both states visually legible"
+        if re.search(r"\b(?:brain|nerve|cell|blood|lung|heart|gill|bone|muscle|inside|anatom)\b", lower):
+            return "clean biological or mechanical cutaway with the relevant internal part emphasized"
+        if re.search(r"\b(?:map|route|crossed|traveled|sailed|marched|arrived|distance|border|river|coast|road|spread|moved)\b", lower):
+            return "high-angle geographic or movement shot with a clear route or positional relationship"
+        if re.search(r"\b(?:document|record|letter|report|evidence|study|experiment|photograph)\b", lower):
+            return "tight evidence close-up with the key object/data and a human interaction anchoring why it matters"
+        if re.search(r"\b(?:decided|ordered|refused|agreed|revealed|discovered|found|realized|learned)\b", lower):
+            return "dynamic reaction/reveal shot with a strong gesture, eye-line, clue, or consequence"
+        if re.search(r"\b(?:first|second|then|finally|process|build|made|formed|steps)\b", lower):
+            return "process-focused explanatory composition showing a distinct stage or transformation"
         fallbacks = [
-            "wide cinematic establishing shot with layered depth and a strong silhouette",
-            "medium character interaction shot with exaggerated readable expressions and gestures",
-            "over-the-shoulder storytelling shot focused on a specific object or consequence",
-            "low-angle reveal or reaction shot with a dramatic foreground subject",
+            "wide cinematic establishing shot with layered depth and one dominant subject",
+            "medium interaction shot with readable expressions and specific gestures",
+            "over-the-shoulder shot focused on the exact object, behavior, or consequence being explained",
+            "low-angle reveal or close reaction shot with a strong foreground focal point",
         ]
         return fallbacks[index % len(fallbacks)]
 
@@ -1998,7 +2042,7 @@ def make_visual_prompt(
     return f"""
 {POLISHED_VISUAL_STYLE}
 
-ERA / HISTORICAL CONTEXT:
+SETTING / CONTEXT:
 {era}
 
 SETTING:
@@ -2025,8 +2069,7 @@ VISUAL DEVICE:
 SHOT DIRECTION:
 {shot}. The frame must communicate the narration beat at a glance. Favor animation-keyframe staging:
 clear silhouette, one dominant focal action, one strong secondary story clue, exaggerated readable
-expressions, and visible cause-and-effect. Prefer specific physical details, historically plausible
-materials, clothing, tools, architecture, terrain, and transport.
+expressions, and visible cause-and-effect. Prefer specific physical details, accurate materials, clothing, tools, architecture, terrain, technology, anatomy, and everyday objects for the setting.
 When the beat introduces a new fact, location, date, object, movement, or consequence, make that
 new information the focal point. Avoid generic "people standing around" compositions.
 
@@ -2034,8 +2077,7 @@ CONTINUITY:
 {continuity}
 
 Create a finished, polished illustration. No readable text, lettering, pseudo-writing, logos,
-watermarks, or accidental modern signage. Historical documents can be shown as visually detailed
-objects but should not contain readable invented text.
+watermarks, or accidental modern signage. Documents, screens, labels, or diagrams may be shown as detailed objects, but do not invent readable text unless the narration explicitly requires documented text.
 """.strip()
 
 
@@ -2101,19 +2143,21 @@ def render_scenes(script: dict[str, Any]) -> None:
 # SEO
 # ---------------------------------------------------------------------------
 SEO_PROMPT = """
-You are the YouTube packaging editor for a history storytelling channel.
+You are the YouTube packaging editor for Relic Loop, a curiosity-first explainer channel.
 
-The video answers a specific historical curiosity question.
-Create metadata that is discoverable without sounding like spam.
+Create metadata as a TITLE + THUMBNAIL pair for a video answering one specific question
+about something viewers can recognize, experience, or easily imagine.
 
 Rules:
-- One primary title under 70 characters. Natural curiosity, no fake claims.
+- Primary title under 70 characters; natural curiosity, no fake claims.
 - Two alternate titles.
-- Description: the first two lines should clearly explain the question and why the story matters.
-  Then a concise spoiler-light summary, followed by a Sources section using the supplied sources.
-- Tags: 12-15 relevant terms. Tags are secondary; do not stuff unrelated keywords.
-- Thumbnail headline: 2-4 punchy words that create a curiosity gap and complement the title instead of repeating it.
-- Make the thumbnail headline concrete, surprising, and easy to read at a glance. Avoid generic phrases like "HISTORY MYSTERY", "YOU WON'T BELIEVE", or empty clickbait.
+- Description: first two lines explain the question and why it matters; then a spoiler-light
+  explanation and a Sources section using only supplied sources.
+- Tags: 12-15 relevant terms.
+- Thumbnail headline: 2-4 punchy words that add a second curiosity cue rather than repeating the title.
+- Title and thumbnail must work together: the title asks or implies the question; the image makes
+  the unanswered part visually obvious.
+- Avoid generic clickbait such as "YOU WON'T BELIEVE" and empty listicle phrasing.
 
 Return JSON only:
 {
@@ -2251,6 +2295,26 @@ IMPORTANT JSON RULES:
 
 
 
+def package_quality_issues(topic: dict[str, Any], script: dict[str, Any], seo: dict[str, Any]) -> list[str]:
+    """Final low-cost packaging gate; warnings do not make the pipeline brittle."""
+    issues: list[str] = []
+    question = normalize_spaces(str(topic.get("question", "")))
+    title = normalize_spaces(str(seo.get("title", "")))
+    headline = normalize_spaces(str(seo.get("thumbnail_headline", "")))
+    if len(title) < 18:
+        issues.append("Title is unusually short.")
+    if not (re.search(r"\?", title) or re.search(r"\b(?:why|how|what|when|do|does|can|is|are)\b", title.lower())):
+        issues.append("Title does not clearly imply a curiosity question.")
+    if len(headline.split()) > 4:
+        issues.append("Thumbnail headline exceeds four words.")
+    if title.lower() == question.lower():
+        issues.append("Title copies the internal question too literally.")
+    overlap = set(re.findall(r"[a-z]{4,}", title.lower())) & set(re.findall(r"[a-z]{4,}", headline.lower()))
+    if len(overlap) >= 3:
+        issues.append("Title and thumbnail headline repeat too many words.")
+    return issues
+
+
 # ---------------------------------------------------------------------------
 # AI thumbnail
 # ---------------------------------------------------------------------------
@@ -2264,7 +2328,7 @@ def make_thumbnail(script: dict[str, Any], title: str, headline_override: str | 
     prop = str(thumb.get("supporting_prop", "important historical object")).strip()
     emotion = str(thumb.get("emotion", "surprised and curious")).strip()
     composition = str(thumb.get("composition", "left_subject_right_prop")).strip()
-    era = str(script.get("era", "History")).strip()
+    era = str(script.get("era", "Modern day")).strip()
 
     side_note = {
         "left_subject_right_prop": "Place the main subject prominently on the left and the important object or symbol on the right.",
@@ -2277,7 +2341,7 @@ def make_thumbnail(script: dict[str, Any], title: str, headline_override: str | 
     prompt = f"""
 {THUMBNAIL_VISUAL_STYLE}
 
-Create a polished 16:9 YouTube thumbnail illustration for a Relic Loop history mystery video.
+Create a polished 16:9 YouTube thumbnail illustration for a Relic Loop curiosity video.
 
 ERA:
 {era}
@@ -2791,6 +2855,11 @@ def main(mode: str = "full") -> None:
         _save_current_json(CURRENT_SEO_PATH, seo)
     atomic_write_json(SEO_PATH, seo)
     checkpoint("seo_complete", title=seo["title"], resumed=seo_resumed)
+
+    package_issues = package_quality_issues(topic, script, seo)
+    if package_issues:
+        print(f"[PACKAGE] quality warnings: {package_issues}")
+        checkpoint("package_quality_warning", issues=package_issues)
 
     thumb = make_thumbnail(script, seo["title"], seo.get("thumbnail_headline"))
     video_path = OUTPUT_DIR / "final_video.mp4"
