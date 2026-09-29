@@ -18,8 +18,9 @@ on:
           - local_image_test
 
 concurrency:
-  group: relic-loop-production
+  group: ${{ github.workflow }}-production
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: write
