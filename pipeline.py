@@ -115,7 +115,7 @@ REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "").strip()
 REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-labs/flux-1.1-pro").strip()
 IMAGE_W = 1024
 IMAGE_H = 576
-MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "80"))
+MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "60"))
 VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "24"))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
@@ -1909,6 +1909,50 @@ def _generate_image_with_fallback(prompt: str, out_path: Path, seed: int, refere
             print(f"[IMAGE FALLBACK] {provider} unexpected failure: {exc}")
     raise RuntimeError("All configured image providers failed. Attempted: " + (", ".join(attempted) or "(none)"))
 
+def _cloudflare_safe_retry_prompt(prompt: str) -> str:
+    """Build a conservative retry prompt for Cloudflare's aggressive 3030 filter."""
+    def section(label: str) -> str:
+        match = re.search(
+            rf"{re.escape(label)}:\\s*(.*?)(?=\\n[A-Z][A-Z /_-]+:|$)",
+            prompt,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        return normalize_spaces(match.group(1)) if match else ""
+
+    beat = section("NARRATION BEAT")
+    setting = section("SETTING")
+    action = section("VISIBLE ACTION")
+    props = section("PROPS / SYMBOLS")
+    device = section("VISUAL DEVICE")
+
+    return f"""
+Modern 2D animated educational explainer frame.
+Crisp clean linework, sharp graphic shapes, polished cel shading, clear lighting,
+strong silhouettes, detailed environment, premium television-animation finish.
+Create a safe, factual, object/process-first illustration.
+
+NARRATED IDEA:
+{beat}
+
+SETTING:
+{setting}
+
+VISIBLE ACTION:
+{action}
+
+IMPORTANT OBJECTS:
+{props}
+
+EXPLANATORY DEVICE:
+{device}
+
+Show only the concrete subject and process required by the narrated idea.
+No portraits, no glamour, no body-focused framing, no suggestive content, no nudity,
+no revealing clothing, no sexualized posing, no unrelated people, no readable text,
+logos, watermarks, captions, subtitles, or decorative subjects.
+""".strip()
+
+
 def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[Path]) -> None:
     if "cloudflare" not in IMAGE_PROVIDER_ORDER:
         raise ImageProviderError("cloudflare", "Cloudflare is not enabled in IMAGE_PROVIDERS.", disable_for_run=True)
@@ -1951,6 +1995,60 @@ def _cloudflare_image(prompt: str, out_path: Path, seed: int, references: list[P
 
     if response.status_code != 200:
         message = response.text[:2500]
+
+        # FLUX.2 Klein can return 3030 for benign prompts because its hosted
+        # content filter is intentionally conservative. Retry once with a
+        # stripped, object/process-first prompt before abandoning the provider.
+        # This retry never calls Groq.
+        if response.status_code == 400 and (
+            "3030" in message or "output has been flagged" in message.lower()
+            or "contains NSFW content" in message.lower()
+        ):
+            safe_prompt = _cloudflare_safe_retry_prompt(prompt)
+            print("[IMAGE] Cloudflare 3030 filter hit; retrying with sanitized visual prompt.")
+            retry_data = {
+                "prompt": safe_prompt,
+                "width": str(IMAGE_W),
+                "height": str(IMAGE_H),
+                "seed": str((seed + 1) & 0x7FFFFFFF),
+            }
+            try:
+                retry_response = requests.post(
+                    url,
+                    headers={"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"},
+                    data=retry_data,
+                    files=None,
+                    timeout=180,
+                )
+            except requests.RequestException as exc:
+                raise ImageProviderError("cloudflare", f"Cloudflare safe-prompt retry failed: {exc}") from exc
+
+            if retry_response.status_code == 200:
+                try:
+                    retry_payload = retry_response.json()
+                    retry_result = retry_payload.get("result")
+                    retry_b64 = retry_result.get("image") if isinstance(retry_result, dict) else None
+                    if isinstance(retry_b64, str) and retry_b64.strip():
+                        out_path.write_bytes(base64.b64decode(retry_b64))
+                        with Image.open(out_path) as image:
+                            image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
+                        return
+                except Exception as exc:
+                    print(f"[IMAGE] Cloudflare safe-prompt retry returned unusable image: {exc}")
+
+            retry_message = retry_response.text[:1800]
+            if retry_response.status_code == 429:
+                raise ImageProviderError(
+                    "cloudflare",
+                    f"Cloudflare safe-prompt retry hit HTTP 429: {retry_message}",
+                    disable_for_run=True,
+                )
+            raise ImageProviderError(
+                "cloudflare",
+                f"Cloudflare original 3030 filter rejection and sanitized retry failed with HTTP "
+                f"{retry_response.status_code}: {retry_message}",
+            )
+
         disable = response.status_code in {401, 403, 429}
         raise ImageProviderError(
             "cloudflare",
@@ -2184,12 +2282,29 @@ def render_scenes(script: dict[str, Any]) -> None:
                 central_question=central_question,
             )
             print(f"[IMAGE] Scene {idx}/{len(script['scenes'])} beat {beat_idx}/{len(beats)}")
-            provider_used = _generate_image_with_fallback(
-                prompt,
-                out,
-                _image_seed(idx, beat_idx - 1),
-                refs,
-            )
+            try:
+                provider_used = _generate_image_with_fallback(
+                    prompt,
+                    out,
+                    _image_seed(idx, beat_idx - 1),
+                    refs,
+                )
+            except RuntimeError as exc:
+                # Never throw away an otherwise complete episode because one
+                # visual beat cannot be generated. Reuse the most recent valid
+                # frame as a deterministic last-resort visual; this consumes no
+                # API tokens and lets the pipeline finish/upload.
+                if previous_image is not None and previous_image.exists():
+                    with Image.open(previous_image) as fallback:
+                        ImageOps.fit(
+                            fallback.convert("RGB"),
+                            (IMAGE_W, IMAGE_H),
+                            method=Image.Resampling.LANCZOS,
+                        ).save(out, format="JPEG", quality=92, optimize=True)
+                    provider_used = "reused_previous_frame"
+                    print(f"[IMAGE FALLBACK] all providers failed for {out.name}; reused previous frame: {exc}")
+                else:
+                    raise
             previous_image = out
 
         previous_characters = current_characters
@@ -2432,7 +2547,28 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
 """.strip()
 
     if not cached_ai.exists() or cached_ai.stat().st_size < 10000:
-        _generate_image_with_fallback(prompt, cached_ai, 71003, [style_ref])
+        try:
+            _generate_image_with_fallback(prompt, cached_ai, 71003, [style_ref])
+        except RuntimeError as exc:
+            # Thumbnail failure must not kill a finished video. Prefer a real
+            # generated scene frame over a synthetic placeholder.
+            scene_candidates = sorted(
+                SCENE_DIR.glob("scene_*.jpg"),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                reverse=True,
+            )
+            if scene_candidates:
+                cached_ai.write_bytes(scene_candidates[0].read_bytes())
+                print(f"[THUMBNAIL] AI thumbnail failed; using generated scene frame: {exc}")
+            else:
+                image = Image.new("RGB", (IMAGE_W, IMAGE_H), PAPER)
+                draw_fallback = ImageDraw.Draw(image)
+                draw_fallback.rectangle([0, 0, IMAGE_W, IMAGE_H], fill=INK)
+                draw_fallback.ellipse([120, 100, 560, 540], fill=BLUE)
+                draw_fallback.ellipse([650, 160, 1080, 590], fill=GOLD)
+                cached_ai.parent.mkdir(parents=True, exist_ok=True)
+                image.save(cached_ai, format="JPEG", quality=92, optimize=True)
+                print(f"[THUMBNAIL] AI thumbnail failed; using safe graphic fallback: {exc}")
 
     with Image.open(cached_ai) as base:
         image = base.convert("RGB").resize((1280, 720))
