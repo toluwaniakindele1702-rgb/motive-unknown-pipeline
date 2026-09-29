@@ -13,9 +13,9 @@ Design goals
 - Each narration scene is split into compact visual beats so the picture changes frequently.
 - Visual prompts prioritize the exact narrated fact, action, evidence, place, person, or object.
 - A persistent style-reference image plus prior-frame references improve visual continuity.
-- Motion-comic camera drift and animated film texture add movement without Ken Burns zoom.
+- Motion-comic camera drift, reveal emphasis cards, and subtle original sound design add movement without relying on subtitles.
 - No burned-in subtitles.
-- Dedicated curiosity-thumbnail generation paired with title packaging.
+- Dedicated curiosity-thumbnail generation paired with title packaging and sparse reveal graphics.
 - Idempotent stage files so a rerun can skip already-completed stages.
 - YouTube uploads default to public for unattended channel publishing.
 
@@ -35,7 +35,7 @@ REPLICATE_API_TOKEN
 Optional GitHub Variables / Secrets
 -----------------------------------
 YOUTUBE_PRIVACY_STATUS     default: public
-KOKORO_VOICE               default: am_puck
+KOKORO_VOICE               default: af_bella
 KOKORO_SPEED               default: 1.05
 CHANNEL_NAME               optional, used in prompts/description
 
@@ -93,6 +93,10 @@ GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
 KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_puck").strip()
 KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "1.05"))
 BACKGROUND_MUSIC_VOLUME = float(os.environ.get("BACKGROUND_MUSIC_VOLUME", "0.055"))
+ENABLE_SOUND_DESIGN = os.environ.get("ENABLE_SOUND_DESIGN", "1").strip().lower() not in {"0", "false", "no"}
+ENABLE_EMPHASIS_CARDS = os.environ.get("ENABLE_EMPHASIS_CARDS", "1").strip().lower() not in {"0", "false", "no"}
+MOTION_INTENSITY = os.environ.get("MOTION_INTENSITY", "1.0").strip()
+PREMIUM_EMPHASIS_PHRASES = ["WHY?", "BUT WHY?", "THE TWIST", "THE REAL REASON", "SO THAT'S WHY"]
 
 # Polished AI illustration generation.
 IMAGE_PROVIDER_ORDER = [
@@ -697,6 +701,8 @@ conspiracies/paranormal claims presented as fact, medical diagnosis/advice,
 body-comparison/appearance-ideal framing, and claims the sources cannot support.
 
 Quality checks:
+0. The topic can support a strong title + thumbnail pairing and at least one visually obvious mystery.
+0b. The explanation can be demonstrated visually, not just described verbally.
 1. Familiar subject.
 2. Immediate curiosity gap.
 3. Satisfying evidence-backed answer.
@@ -882,7 +888,18 @@ def build_story_plan(topic: dict[str, Any], research: str) -> dict[str, Any]:
 
     last_plan: dict[str, Any] | None = None
     for attempt in range(1, 4):
-        prompt = base_prompt
+        prompt = base_prompt + """
+
+PREMIUM CHANNEL RETENTION LAYER:
+- Treat the episode as a visual investigation, not a lecture.
+- The opening 15 seconds must contain a concrete mystery and a specific payoff promise.
+- Build 3-5 major reveals, with a meaningful turn or new question every 20-45 seconds.
+- Use "because X, but that creates Y" logic to keep answers opening new questions.
+- Include at least one memorable comparison, one concrete example, and one consequence viewers can picture.
+- Around the midpoint, introduce a reversal, misconception, hidden tradeoff, or unexpected connection.
+- The final section must resolve the opening question and explain why the ordinary thing viewers know is actually surprising.
+- Avoid fake suspense, repetitive "but there's more" phrasing, and fact dumping.
+""".strip()
         if attempt > 1:
             prompt += """
 REPAIR PASS: The previous story plan was too thin.
@@ -1021,6 +1038,15 @@ Each scene must describe a distinct, useful visual moment. The renderer will spl
 def write_script(topic: dict[str, Any], research: str, plan: dict[str, Any]) -> dict[str, Any]:
     prompt = (
         SCRIPTWRITER_PROMPT
+        + """
+
+PREMIUM PRODUCTION RULES:
+- Write for fast visual storytelling: each scene should contain concrete objects, actions, comparisons, mechanisms, or consequences that can become distinct shots.
+- Include a clear midpoint reversal and a final loopback to the opening question.
+- Mark natural moments for visual emphasis by using short punchy sentences around important reveals.
+- Avoid long stretches where the only visual would be a person talking.
+- Make the narration sound energetic and conversational, with deliberate sentence-length variation and occasional short reveal lines.
+"""
         + "\n\nTOPIC:\n"
         + json.dumps(topic, ensure_ascii=False)
         + "\n\nSTORY PLAN:\n"
@@ -2478,6 +2504,14 @@ SEO_JSON_SCHEMA = {
 def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> dict[str, Any]:
     prompt = (
         SEO_PROMPT
+        + """
+
+PREMIUM PACKAGING RULES:
+- Title and thumbnail must create complementary curiosity rather than repeat each other.
+- Prefer a specific familiar mystery over a generic topic title.
+- Thumbnail headline should be 2-4 words and add curiosity, not restate the title.
+- Description should open with the central mystery and naturally include the key search phrase.
+"""
         + "\n\nCENTRAL QUESTION:\n"
         + topic["question"]
         + "\n\nSCRIPT:\n"
@@ -2705,22 +2739,82 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
         )
         y += h + 24
 
-    draw.rounded_rectangle(
-        [35, 650, 370, 705],
-        radius=14,
-        fill=BLACK,
-    )
-    draw.text(
-        (52, 660),
-        era[:28],
-        font=FONT_28,
-        fill=WHITE,
-    )
-
-    image.save(final, format="JPEG", quality=94, optimize=True)
+    # Keep the thumbnail focused on one mystery; the title supplies context.\n\n    image.save(final, format="JPEG", quality=94, optimize=True)
     print(f"[THUMBNAIL] AI thumbnail ready: {final}")
     return final
 
+
+
+def _make_emphasis_filter(scene_durations: list[float]) -> str:
+    """Create sparse reveal cards without turning the video into subtitles."""
+    if not ENABLE_EMPHASIS_CARDS or not scene_durations:
+        return ""
+    total = sum(scene_durations)
+    anchors = [
+        (min(5.5, max(2.0, total * 0.015)), "WHY?"),
+        (total * 0.25, "BUT WHY?"),
+        (total * 0.50, "THE TWIST"),
+        (total * 0.73, "THE REAL REASON"),
+        (max(0.0, total - min(8.0, total * 0.08)), "SO THAT'S WHY"),
+    ]
+    filters: list[str] = []
+    for start, phrase in anchors:
+        end = min(total, start + 1.35)
+        escaped = phrase.replace("'", "\\'")
+        filters.append(
+            "drawtext="
+            f"fontfile={FONT_BOLD}:text='{escaped}':"
+            "fontcolor=white:fontsize=54:"
+            "box=1:boxcolor=black@0.72:boxborderw=18:"
+            "x=(w-text_w)/2:y=h-150:"
+            f"enable='between(t,{start:.2f},{end:.2f})'"
+        )
+    return ",".join(filters)
+
+
+def _make_sound_design_track(total_duration: float, scene_durations: list[float], beat_durations: list[float]) -> Path | None:
+    """Generate subtle original transition/reveal SFX so no extra asset is required."""
+    if not ENABLE_SOUND_DESIGN or total_duration <= 0:
+        return None
+
+    sample_count = int(total_duration * AUDIO_SR) + 1
+    track = np.zeros(sample_count, dtype=np.float32)
+
+    def add_whoosh(t0: float, length: float = 0.18) -> None:
+        start = int(max(0.0, t0) * AUDIO_SR)
+        n = min(int(length * AUDIO_SR), sample_count - start)
+        if n <= 0:
+            return
+        tt = np.arange(n, dtype=np.float32) / AUDIO_SR
+        freq = 180.0 + 1100.0 * (tt / max(length, 0.001))
+        phase = 2.0 * np.pi * np.cumsum(freq) / AUDIO_SR
+        env = np.sin(np.pi * np.clip(tt / max(length, 0.001), 0, 1)) ** 2
+        track[start:start+n] += 0.055 * np.sin(phase) * env
+
+    def add_impact(t0: float, length: float = 0.16) -> None:
+        start = int(max(0.0, t0) * AUDIO_SR)
+        n = min(int(length * AUDIO_SR), sample_count - start)
+        if n <= 0:
+            return
+        tt = np.arange(n, dtype=np.float32) / AUDIO_SR
+        env = np.exp(-18.0 * tt)
+        track[start:start+n] += 0.045 * np.sin(2.0 * np.pi * 115.0 * tt) * env
+
+    elapsed = 0.0
+    for i, dur in enumerate(scene_durations):
+        if i > 0:
+            add_whoosh(elapsed)
+        elapsed += dur
+
+    elapsed = 0.0
+    for i, dur in enumerate(beat_durations):
+        if i > 0 and i % 7 == 0:
+            add_impact(elapsed)
+        elapsed += dur
+
+    path = WORK_DIR / "sound_design.wav"
+    sf.write(path, np.clip(track, -0.18, 0.18), AUDIO_SR)
+    return path
 
 # ---------------------------------------------------------------------------
 # FFmpeg / video assembly
@@ -2781,7 +2875,6 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
     all_images: list[Path] = []
     all_durations: list[float] = []
     scene_audio_durations: list[float] = []
-
     visual_plan = build_visual_plan(script)
 
     for idx, scene in enumerate(scenes, 1):
@@ -2796,11 +2889,7 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
         for path in beat_paths:
             if not path.exists():
                 raise RuntimeError(f"Missing visual beat asset: {path}")
-        beat_durations = _visual_beat_durations(
-            str(scene.get("narration", "")),
-            duration,
-            beats,
-        )
+        beat_durations = _visual_beat_durations(str(scene.get("narration", "")), duration, beats)
         all_images.extend(beat_paths)
         all_durations.extend(beat_durations)
 
@@ -2811,25 +2900,29 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
     video_list = WORK_DIR / "video_concat.txt"
     build_concat_file(all_images, video_list, all_durations)
     video_silent = OUTPUT_DIR / "video_silent.mp4"
+
+    motion_x = 42 if MOTION_INTENSITY == "1.0" else 30
+    motion_y = 28 if MOTION_INTENSITY == "1.0" else 20
+    emphasis_filter = _make_emphasis_filter(scene_audio_durations)
+    vf_parts = [
+        "scale=1500:844:force_original_aspect_ratio=increase",
+        f"crop={VIDEO_W}:{VIDEO_H}:x='58+{motion_x}*sin(2*PI*t/8.5)+14*sin(2*PI*t/2.8)':y='32+{motion_y}*cos(2*PI*t/10.5)+8*sin(2*PI*t/3.6)'",
+        "eq=contrast=1.03:saturation=1.06",
+        "unsharp=5:5:0.8:5:5:0.35",
+        "noise=alls=2:allf=t+u",
+    ]
+    if emphasis_filter:
+        vf_parts.append(emphasis_filter)
+    vf_parts.append("format=yuv420p")
+
     run_cmd(
         [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", str(video_list),
-            "-vf",
-            (
-                "scale=1500:844:force_original_aspect_ratio=increase,"
-                f"crop={VIDEO_W}:{VIDEO_H}:x='58+38*sin(2*PI*t/8.5)+14*sin(2*PI*t/2.8)':y='32+24*cos(2*PI*t/10.5)+8*sin(2*PI*t/3.6)',"
-                "eq=contrast=1.03:saturation=1.06,"
-                "unsharp=5:5:0.8:5:5:0.35,"
-                "noise=alls=2:allf=t+u,"
-                "format=yuv420p"
-            ),
-            "-r", str(VIDEO_FPS),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-            "-pix_fmt", "yuv420p",
-            str(video_silent),
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(video_list),
+            "-vf", ",".join(vf_parts),
+            "-r", str(VIDEO_FPS), "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "20", "-pix_fmt", "yuv420p", str(video_silent),
         ],
-        "render motion-comic visual sequence",
+        "render motion-comic sequence with reveal graphics",
     )
 
     audio_list = WORK_DIR / "audio_concat.txt"
@@ -2837,61 +2930,71 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
     full_audio = OUTPUT_DIR / "full_audio.wav"
     run_cmd(
         [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", str(audio_list),
-            "-ar", str(AUDIO_SR), "-ac", "1", "-c:a", "pcm_s16le",
-            str(full_audio),
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(audio_list),
+            "-ar", str(AUDIO_SR), "-ac", "1", "-c:a", "pcm_s16le", str(full_audio),
         ],
         "concatenate narration",
     )
 
     mixed_audio = OUTPUT_DIR / "full_audio_mixed.m4a"
+    sound_design = _make_sound_design_track(total, scene_audio_durations, all_durations)
+
     if MUSIC_PATH.exists():
+        inputs = ["-i", str(full_audio), "-stream_loop", "-1", "-i", str(MUSIC_PATH)]
+        if sound_design:
+            inputs += ["-i", str(sound_design)]
+        if sound_design:
+            filter_complex = (
+                "[0:a]highpass=f=70,acompressor=threshold=-18dB:ratio=2.6:attack=5:release=120:makeup=2,loudnorm=I=-15.5:TP=-1.5:LRA=8[n];"
+                f"[1:a]volume={BACKGROUND_MUSIC_VOLUME:.3f},highpass=f=90,lowpass=f=9000[m];"
+                "[m][n]sidechaincompress=threshold=0.03:ratio=6:attack=25:release=450:makeup=1[ducked];"
+                "[n][ducked]amix=inputs=2:duration=first:dropout_transition=2[nm];"
+                "[2:a]volume=0.9[sfx];"
+                "[nm][sfx]amix=inputs=2:duration=first:dropout_transition=1[a]"
+            )
+        else:
+            filter_complex = (
+                "[0:a]highpass=f=70,acompressor=threshold=-18dB:ratio=2.6:attack=5:release=120:makeup=2,loudnorm=I=-15.5:TP=-1.5:LRA=8[n];"
+                f"[1:a]volume={BACKGROUND_MUSIC_VOLUME:.3f},highpass=f=90,lowpass=f=9000[m];"
+                "[m][n]sidechaincompress=threshold=0.03:ratio=6:attack=25:release=450:makeup=1[ducked];"
+                "[n][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]"
+            )
         run_cmd(
-            [
-                "ffmpeg", "-y",
-                "-i", str(full_audio),
-                "-stream_loop", "-1", "-i", str(MUSIC_PATH),
-                "-filter_complex",
-                (
-                    "[0:a]highpass=f=70,acompressor=threshold=-18dB:ratio=2.6:attack=5:release=120:makeup=2,loudnorm=I=-15.5:TP=-1.5:LRA=8[n];"
-                    f"[1:a]volume={BACKGROUND_MUSIC_VOLUME:.3f},highpass=f=90,lowpass=f=9000[m];"
-                    "[m][n]sidechaincompress=threshold=0.03:ratio=6:attack=25:release=450:makeup=1[ducked];"
-                    "[n][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]"
-                ),
-                "-map", "[a]", "-c:a", "aac", "-b:a", "192k",
-                str(mixed_audio),
-            ],
-            "mix background music",
+            ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex, "-map", "[a]",
+             "-c:a", "aac", "-b:a", "192k", str(mixed_audio)],
+            "mix narration, music, and sound design",
         )
     else:
-        run_cmd(
-            [
-                "ffmpeg", "-y", "-i", str(full_audio),
-                "-af", "highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11",
-                "-c:a", "aac", "-b:a", "192k",
-                str(mixed_audio),
-            ],
-            "normalize narration",
-        )
+        if sound_design:
+            run_cmd(
+                [
+                    "ffmpeg", "-y", "-i", str(full_audio), "-i", str(sound_design),
+                    "-filter_complex",
+                    "[0:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[n];[1:a]volume=0.9[sfx];[n][sfx]amix=inputs=2:duration=first:dropout_transition=1[a]",
+                    "-map", "[a]", "-c:a", "aac", "-b:a", "192k", str(mixed_audio),
+                ],
+                "normalize narration with sound design",
+            )
+        else:
+            run_cmd(
+                [
+                    "ffmpeg", "-y", "-i", str(full_audio),
+                    "-af", "highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11",
+                    "-c:a", "aac", "-b:a", "192k", str(mixed_audio),
+                ],
+                "normalize narration",
+            )
 
     run_cmd(
         [
-            "ffmpeg", "-y",
-            "-i", str(video_silent),
-            "-i", str(mixed_audio),
-            "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "192k",
-            "-shortest",
-            str(out_path),
+            "ffmpeg", "-y", "-i", str(video_silent), "-i", str(mixed_audio),
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", str(out_path),
         ],
         "mux final video",
     )
-    print(
-        f"[VIDEO] ready: {out_path} (~{total / 60:.1f} min, "
-        f"{len(all_images)} visual beats)"
-    )
-    checkpoint("video_complete", duration_seconds=round(total, 2), visual_beats=len(all_images))
+    print(f"[VIDEO] ready: {out_path} (~{total / 60:.1f} min, {len(all_images)} visual beats, premium motion/audio enabled)")
+    checkpoint("video_complete", duration_seconds=round(total, 2), visual_beats=len(all_images),
+               sound_design=bool(sound_design), emphasis_cards=ENABLE_EMPHASIS_CARDS)
     return total
 
 
