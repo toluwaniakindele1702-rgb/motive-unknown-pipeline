@@ -1409,19 +1409,34 @@ def generate_voiceovers(script: dict[str, Any]) -> None:
     checkpoint("voiceovers_complete")
 
 
-def voice_test() -> Path:
+def voice_test() -> list[Path]:
+    """Generate the same hook with several voices for a fair A/B/C comparison."""
     sample = (
-        "For years, historians thought they knew the answer. Then one tiny detail "
-        "started causing problems. The people involved had left clues behind. The clues "
-        "looked ordinary. But put them together, and the story suddenly changes. Why? "
-        "Because the obvious explanation leaves one very strange question unanswered."
+        "You see this all the time, but have you ever wondered why it works this way? "
+        "At first, the obvious answer seems simple. Then one tiny detail makes that answer fall apart. "
+        "And once you see what is really happening, an ordinary part of everyday life suddenly looks very different."
     )
-    out = ROOT / "voice_test_onyx.wav"
-    audio = synthesize_kokoro(sample)
-    sf.write(out, audio, AUDIO_SR)
-    print(f"[VOICE TEST] wrote {out} ({len(audio) / AUDIO_SR:.1f}s) using {KOKORO_VOICE}")
-    return out
-
+    test_voices = [
+        ("current_male", "am_puck"),
+        ("female_bella", "af_bella"),
+        ("female_nicole", "af_nicole"),
+    ]
+    outputs: list[Path] = []
+    for label, voice in test_voices:
+        old_voice = os.environ.get("KOKORO_VOICE")
+        os.environ["KOKORO_VOICE"] = voice
+        try:
+            audio = synthesize_kokoro(sample)
+        finally:
+            if old_voice is None:
+                os.environ.pop("KOKORO_VOICE", None)
+            else:
+                os.environ["KOKORO_VOICE"] = old_voice
+        out = ROOT / f"voice_test_{label}.wav"
+        sf.write(out, audio, AUDIO_SR)
+        outputs.append(out)
+        print(f"[VOICE TEST] wrote {out} ({len(audio) / AUDIO_SR:.1f}s) using {voice}")
+    return outputs
 
 def local_image_test() -> None:
     """Generate one CPU image with the isolated OpenVINO worker."""
