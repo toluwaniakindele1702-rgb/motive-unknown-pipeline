@@ -90,7 +90,7 @@ GROQ_RESEARCH_MODEL = os.environ.get("GROQ_RESEARCH_MODEL", "openai/gpt-oss-120b
 GROQ_WRITER_MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 GROQ_LIGHT_MODEL = os.environ.get("GROQ_LIGHT_MODEL", "openai/gpt-oss-20b")
 
-KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "am_puck").strip()
+KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "af_bella").strip()
 KOKORO_SPEED = float(os.environ.get("KOKORO_SPEED", "1.05"))
 BACKGROUND_MUSIC_VOLUME = float(os.environ.get("BACKGROUND_MUSIC_VOLUME", "0.055"))
 ENABLE_SOUND_DESIGN = os.environ.get("ENABLE_SOUND_DESIGN", "1").strip().lower() not in {"0", "false", "no"}
@@ -1735,6 +1735,16 @@ def build_visual_plan(script: dict[str, Any]) -> list[list[str]]:
             f"[IMAGE PLAN] Reduced visual beats from {initial} to {final} "
             f"to respect the {MAX_VISUAL_BEATS_PER_VIDEO}-image episode cap."
         )
+    # Quality guard: remove accidental consecutive duplicate beats after merging.
+    for plan_idx, beats in enumerate(plans):
+        if len(beats) > 1:
+            cleaned = [beats[0]]
+            for beat in beats[1:]:
+                if normalize_spaces(beat).lower() != normalize_spaces(cleaned[-1]).lower():
+                    cleaned.append(beat)
+            plans[plan_idx] = cleaned
+
+    final = sum(len(beats) for beats in plans)
     if final > MAX_VISUAL_BEATS_PER_VIDEO:
         raise RuntimeError(
             f"Could not reduce visual plan below {MAX_VISUAL_BEATS_PER_VIDEO} images."
