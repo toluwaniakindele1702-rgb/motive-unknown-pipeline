@@ -1,0 +1,82 @@
+{
+  "central_question": "Why do leaves turn red, orange, and yellow before falling?",
+  "hook": "Picture a maple in a city park: one moment it’s a bright, unblemished green, the next it’s a blazing red that seems to glow against a gray winter sky.",
+  "aha_moment": "The color shift isn’t just the disappearance of green; it’s a coordinated release of stored pigments and the creation of new red pigments triggered by short days, cool nights, and bright light.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Set the scene with a familiar, striking image",
+      "reveal": "A maple leaf changes from green to red in a single evening",
+      "required_facts": [
+        "Leaf is green because of chlorophyll"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "State the mystery",
+      "reveal": "Why does the leaf change color before it falls?",
+      "required_facts": []
+    },
+    {
+      "section": 3,
+      "purpose": "Give minimal context",
+      "reveal": "Leaves contain chlorophyll, carotenoids, and can produce anthocyanins",
+      "required_facts": [
+        "Chlorophyll masks other pigments"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Escalate with facts",
+      "reveal": "Shortening day length signals winter; hormones shut down chlorophyll synthesis; chlorophyll breaks down, revealing yellow‑orange carotenoids",
+      "required_facts": [
+        "Photoperiod ↓ → hormonal shift → chlorophyll degradation",
+        "Carotenoids are always present"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Midpoint reversal",
+      "reveal": "If nights stay cool and light stays bright, sugars accumulate and trigger a new pigment—anthocyanin—making the leaf red",
+      "required_facts": [
+        "Cool nights ≈10 °C, bright light, sugar buildup → anthocyanin synthesis",
+        "Red pigment is newly made, not pre‑existing"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Explain mechanism",
+      "reveal": "Hormonal signals stop chlorophyll production; enzymes break it down; nitrogen and other nutrients are recycled; carotenoids shine through; sugar‑induced enzymes create anthocyanins that protect the leaf",
+      "required_facts": [
+        "Abscisic acid ↑, auxin ↓",
+        "Enzymatic chlorophyll breakdown",
+        "Anthocyanin biosynthetic pathway activated by sugars"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Deliver aha explanation",
+      "reveal": "The leaf’s color change is a survival strategy: it recycles nutrients and shields itself from light damage while preparing to drop",
+      "required_facts": [
+        "Nutrient re‑absorption, photoprotection, abscission layer formation"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Answer the question directly",
+      "reveal": "Leaves turn red, orange, and yellow because chlorophyll disappears, carotenoids become visible, and new anthocyanins are made under specific temperature and light cues",
+      "required_facts": [
+        "Chlorophyll breakdown, carotenoid exposure, anthocyanin synthesis"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Ground the takeaway",
+      "reveal": "The next time you see a leaf blaze, remember it’s a plant’s last act of careful recycling and protection before winter",
+      "required_facts": [
+        "Leaves drop after nutrient re‑absorption"
+      ]
+    }
+  ],
+  "ending_payoff": "So when the next maple turns crimson, you’ll know it’s not just a seasonal makeover—it’s a finely tuned chemical countdown that lets the tree survive the cold and keep its leaves from spoiling the forest floor."
+}

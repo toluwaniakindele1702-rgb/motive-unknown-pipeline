@@ -1,0 +1,15 @@
+{
+  "question": "Why do leaves turn red, orange, and yellow before falling?",
+  "topic": "Leaf Color Change",
+  "category": "science",
+  "era": "modern day",
+  "why_curious": "Leaves are a familiar part of our landscape, and their dramatic color shift in autumn is a striking visual cue for the changing season. Yet most people take the shift for granted, assuming it’s simply a response to fewer days of sunlight. Understanding the chemistry and environmental triggers behind the pigment change reveals how plants prepare for winter and how climate signals influence ecosystems.",
+  "curiosity_gap": "Viewers think leaves change color only because of less light, but the real cause is the breakdown of chlorophyll and the activation of other pigments triggered by temperature and daylight cues.",
+  "curiosity_score": 8,
+  "search_angles": [
+    "1. The role of chlorophyll breakdown and pigment exposure",
+    "2. Temperature and daylight cues that trigger anthocyanin synthesis",
+    "3. Laboratory extraction of leaf pigments and visual comparison",
+    "4. Climate change impacts on timing and intensity of autumn colors"
+  ]
+}
