@@ -787,15 +787,21 @@ Turn research into a suspenseful EXPLANATION, not a textbook outline.
 The video must have one central curiosity question and one satisfying "aha" moment.
 
 Structure:
-1. Cold open with a concrete familiar situation, surprising fact, or real moment.
-2. State the exact question quickly.
-3. Give only the context needed.
-4. Escalate with new facts, examples, mechanisms, contradictions, or consequences.
+1. COLD OPEN (0-3 seconds): start inside the curiosity with a direct question, surprising fact, contradiction, or strange consequence. Never begin with weather, scenery, a character walking, a boy looking up, or generic historical setup.
+2. OPENING PROMISE (3-15 seconds): deepen the mystery and promise a concrete answer or reveal without giving everything away.
+3. Give only the context needed to understand why the question matters.
+4. ESCALATE: each section must add a new fact, mechanism, comparison, contradiction, consequence, or question.
 5. Use a midpoint reversal when the evidence challenges the obvious explanation.
-6. Explain the mechanism through clear cause and effect.
+6. Explain the mechanism through clear cause and effect, with concrete examples that can be shown visually.
 7. Identify the single core "aha" explanation the viewer has been waiting for.
 8. Pay off the opening question directly and distinguish certainty from debate.
 9. End with a grounded everyday connection or memorable implication.
+
+RETENTION RULES:
+- The viewer should receive a new meaningful reveal or visual idea roughly every 15-30 seconds.
+- Do not spend long stretches on chronology unless chronology itself explains the mystery.
+- Prefer "answer -> new question -> answer -> deeper question -> aha" over a flat list of facts.
+- The first 30 seconds must already contain the central question, a surprising detail, and a reason to keep watching.
 
 Every section must earn its place. Avoid padding, repeated recaps, fake suspense, and
 decorative prose.
