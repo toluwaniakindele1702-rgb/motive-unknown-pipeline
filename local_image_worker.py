@@ -227,6 +227,11 @@ def main() -> int:
         print("[LOCAL WORKER] Loading model once: {}".format(LOCAL_MODEL_ID), flush=True)
         PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
             LOCAL_MODEL_ID,
+            # This checkpoint contains a stale safety_checker entry without the
+            # corresponding model files. Explicitly disable that missing optional
+            # component so the OpenVINO fallback can actually load.
+            safety_checker=None,
+            requires_safety_checker=False,
         )
         PIPELINE.set_progress_bar_config(disable=True)
         print("[LOCAL WORKER] Model ready.", flush=True)
@@ -240,6 +245,8 @@ def main() -> int:
 
     PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
         str(request["model_id"]),
+        safety_checker=None,
+        requires_safety_checker=False,
     )
     PIPELINE.set_progress_bar_config(disable=True)
     generate_from_request(request)
