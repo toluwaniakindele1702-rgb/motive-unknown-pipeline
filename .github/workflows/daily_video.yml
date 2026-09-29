@@ -42,8 +42,7 @@ jobs:
       KOKORO_VOICE: am_puck
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
-      MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '90' }}
-      VISUAL_BEAT_TARGET_WORDS: ${{ vars.VISUAL_BEAT_TARGET_WORDS || '17' }}
+      MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '110' }}
       BACKGROUND_MUSIC_VOLUME: ${{ vars.BACKGROUND_MUSIC_VOLUME || '0.055' }}
 
     steps:
