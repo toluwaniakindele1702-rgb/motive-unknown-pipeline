@@ -115,8 +115,8 @@ REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "").strip()
 REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-labs/flux-1.1-pro").strip()
 IMAGE_W = 1024
 IMAGE_H = 576
-MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "60"))
-VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "24"))
+MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "90"))
+VISUAL_BEAT_TARGET_WORDS = int(os.environ.get("VISUAL_BEAT_TARGET_WORDS", "17"))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
@@ -876,19 +876,39 @@ SCRIPTWRITER_PROMPT = """
 You are the head writer of the curiosity-first YouTube channel Relic Loop.
 
 Write an 8-15 minute narration that answers one irresistible curiosity question. Topics may be everyday life, animals, science, human behavior, technology, culture/society, or history.
-The target audience is a curious young teenager AND adults. The language is simple,
-but the thinking is not childish.
+The audience is curious teenagers and adults. The language is simple, but the ideas are not childish.
 
-VOICE / PERFORMANCE ON THE PAGE
+RETENTION-FIRST STORY ARCHITECTURE
+1. COLD OPEN — FIRST 0-3 SECONDS
+Start immediately with the curiosity. No weather, sunrise, walking, a boy looking up, generic historical scenery, channel greeting, or background setup.
+The first sentence must be a direct question, surprising contradiction, striking fact, or impossible-sounding observation clearly connected to the title.
+Good pattern: "Have you ever wondered why [ordinary thing] does [strange thing]?"
+Other valid patterns: "You see this every day, but here's the strange part..." or "It looks harmless, but [unexpected consequence]."
+The opening must be understandable with sound only.
+
+2. OPENING PAYOFF PROMISE — 3-15 SECONDS
+Immediately deepen the mystery and promise a concrete answer. Give the viewer a reason to keep watching: a surprising mechanism, hidden reason, counterintuitive explanation, or final reveal. Do not explain everything immediately.
+
+3. RAPID EXPLANATION — 15-60 SECONDS
+Establish the simplest piece of the answer, then introduce a second question or surprising consequence. Every answer should create another interesting question.
+
+4. ESCALATING REVEALS
+Build from familiar to surprising to deeper mechanism to consequence to final aha. Use specific examples, comparisons, experiments, evidence, and visualizable processes.
+
+5. PAYOFF / LOOPBACK
+Return to the original question and make the opening make more sense after the explanation. End cleanly without generic filler.
+
+IMPORTANT RETENTION RULE:
+Every 15-30 seconds, introduce a new piece of information, contrast, question, consequence, or visual surprise. Never let the narration sit on the same idea for a long time. The story should feel like a chain of discoveries rather than a list of facts.
+
+VOICE / PERFORMANCE
 - Modern, conversational, confident, vivid, energetic.
 - Sounds like a sharp human documentary narrator talking directly to the viewer.
-- Most sentences should be 8-20 words, with occasional 3-7 word punch lines.
-- Use concrete actions, objects, decisions, and consequences instead of abstract summaries.
-- Put important facts near the end of a sentence when that creates a clean reveal.
-- Use commas, em dashes, and occasional question marks to help natural TTS rhythm.
-- Ask a question only when it advances the story, then answer or complicate it quickly.
-- Vary sentence openings and paragraph rhythm. Do not make every sentence sound solemn.
-- Let the narration sound curious, surprised, skeptical, amused, or urgent when the evidence calls for it.
+- Most sentences should be 8-18 words, with occasional 3-7 word punch lines.
+- Use concrete actions, objects, decisions, mechanisms, comparisons, and consequences.
+- Use commas, em dashes, and occasional questions for natural TTS rhythm.
+- Ask questions when they create forward momentum, then answer or complicate them quickly.
+- Vary sentence openings and paragraph rhythm.
 
 DO NOT WRITE LIKE
 - a school essay
@@ -896,22 +916,18 @@ DO NOT WRITE LIKE
 - an encyclopedia
 - a travel brochure
 - a movie trailer full of fake suspense
+- a chronological list of facts with no curiosity thread
 
-Avoid filler such as "the sun was shining," "the water was calm," "little did they know,"
-"in the annals of history," and long scenery descriptions unless the detail changes the story.
-Never add a fact simply to make the script longer.
-Every few sentences should introduce something the viewer can picture or understand visually: a person, animal, object, mechanism, place,
-decision, movement, process, document, number, comparison, map location, before/after state, or physical consequence. Prefer concrete language over abstract summaries so the visual editor can explain the narration beat by beat. When explaining a mechanism, state the cause and effect clearly; when comparing things, make the contrast explicit.
-Write for energetic spoken delivery: short punchy sentences around important reveals, with varied
-sentence lengths and natural transitions. Do not make every sentence sound equally solemn.
+Avoid filler such as "the sun was shining," "the water was calm," "little did they know," "in the annals of history," and long scenery descriptions unless the detail changes the story.
 Never invent dialogue or inner thoughts and present them as historical facts.
 When evidence is uncertain or disputed, say so naturally.
 Do not use graphic descriptions.
 
-VERY IMPORTANT: the first 20-30 seconds must contain a concrete event or surprising fact,
-state the central question, and make a viewer who has never heard of this story think:
-"Wait, why did THAT happen?"
-Do not waste the opening on greetings, channel branding, generic background, or vague setup.
+VISUAL-FIRST WRITING
+Write every scene so an animator can understand exactly what should appear on screen.
+Whenever the narration introduces a new fact, object, movement, mechanism, comparison, place, reaction, or consequence, make that concrete thing explicit.
+If one sentence contains two distinct visual ideas, make the ideas easy to separate into short visual beats.
+Do not hide important information inside abstract language.
 
 Return JSON in exactly this shape:
 {
@@ -940,8 +956,7 @@ Return JSON in exactly this shape:
 
 Scene count: 18-38.
 Total narration: 1700-2600 words.
-Each scene must describe a distinct, useful visual moment. Do not create a new scene just
-because a sentence changed. Scenes should be visually specific, and the beat renderer should be able to turn each narration section into multiple animated-documentary shots rather than one long hold.
+Each scene must describe a distinct, useful visual moment. The renderer will split narration into multiple short visual shots, so narration must contain concrete visual information rather than long abstract paragraphs.
 """.strip()
 
 
@@ -1481,64 +1496,68 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Split at meaningful phrases/sentences, not fixed time intervals."""
+    """Split narration into short, meaning-complete visual shots."""
     text = normalize_spaces(narration)
     if not text:
         return [""]
+
     sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
     expanded: list[str] = []
-    soft = re.compile(r"\s+(?=(?:but|because|so|then|instead|while|which|meaning|that means)\b)", re.I)
+    soft = re.compile(
+        r"\s+(?=(?:but|because|so|then|instead|while|which|meaning|that means|yet|however|although|when|after|before|once)\b)",
+        re.I,
+    )
+
     for sentence in sentences:
-        words = count_words(sentence)
-        if words <= 30:
+        if count_words(sentence) <= 18:
             expanded.append(sentence)
             continue
+
         parts = [p.strip() for p in soft.split(sentence) if p.strip()]
         if len(parts) <= 1:
             parts = [p.strip() for p in re.split(r"(?<=[,;:])\s+", sentence) if p.strip()]
         if len(parts) <= 1:
-            ws = sentence.split()
-            parts = [" ".join(ws[i:i+22]) for i in range(0,len(ws),22)]
+            words = sentence.split()
+            parts = [" ".join(words[i:i + 17]) for i in range(0, len(words), 17)]
+
         bucket = ""
         for part in parts:
             candidate = f"{bucket} {part}".strip()
-            if not bucket or count_words(candidate) <= 28:
+            if not bucket or count_words(candidate) <= 20:
                 bucket = candidate
             else:
                 expanded.append(bucket)
                 bucket = part
         if bucket:
             expanded.append(bucket)
+
     i = 0
     while i < len(expanded):
-        if count_words(expanded[i]) < 7 and len(expanded) > 1:
+        if count_words(expanded[i]) < 8 and len(expanded) > 1:
             if i == 0:
                 expanded[1] = f"{expanded[i]} {expanded[1]}".strip()
             else:
-                expanded[i-1] = f"{expanded[i-1]} {expanded[i]}".strip()
+                expanded[i - 1] = f"{expanded[i - 1]} {expanded[i]}".strip()
             del expanded[i]
             continue
         i += 1
+
     target = min(
         max(1, int(np.ceil(count_words(text) / max(1, VISUAL_BEAT_TARGET_WORDS)))),
         len(expanded),
     )
     while len(expanded) > target:
-        best = min(range(len(expanded)-1), key=lambda j: (
-            0 if expanded[j].endswith((".", "?", "!")) else 1,
-            count_words(expanded[j]) + count_words(expanded[j+1]),
-        ))
-        expanded[best] = f"{expanded[best]} {expanded[best+1]}".strip()
-        del expanded[best+1]
-    while len(expanded) > 4:
-        best = min(range(len(expanded)-1), key=lambda j: (
-            count_words(f"{expanded[j]} {expanded[j+1]}"),
-            len(re.findall(r"\b(?:because|but|then|instead|evidence|example|process|before|after|why|how)\b",
-                           f"{expanded[j]} {expanded[j+1]}", re.I)),
-        ))
-        expanded[best] = f"{expanded[best]} {expanded[best+1]}".strip()
-        del expanded[best+1]
-    return expanded[:4] or [text]
+        best = min(
+            range(len(expanded) - 1),
+            key=lambda j: (
+                0 if expanded[j].endswith((".", "?", "!")) else 1,
+                count_words(expanded[j]) + count_words(expanded[j + 1]),
+            ),
+        )
+        expanded[best] = f"{expanded[best]} {expanded[best + 1]}".strip()
+        del expanded[best + 1]
+
+    return expanded or [text]
 
 
 POLISHED_VISUAL_STYLE = """
