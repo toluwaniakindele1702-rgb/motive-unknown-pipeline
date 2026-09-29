@@ -1100,11 +1100,12 @@ def validate_script(script: dict[str, Any], allow_short: bool = False) -> None:
             raise RuntimeError(f"Scene {i} is missing narration.")
         words = count_words(scene["narration"])
         # Initial LLM output may be slightly short; write_script() intentionally
-        # runs a repair pass before strict final validation. Do not fail the
-        # preliminary pass for a near-miss like 24 words.
-        minimum_words = 20 if allow_short else 25
+        # runs a repair pass before strict final validation. Allow short,
+        # punchy scene narration to reach the repair pass instead of failing
+        # before it can rebalance the script.
+        minimum_words = 15 if allow_short else 25
         if words < minimum_words or words > 120:
-            expected = "20-120 during preliminary validation" if allow_short else "25-120"
+            expected = "15-120 during preliminary validation" if allow_short else "25-120"
             raise RuntimeError(f"Scene {i} narration is {words} words; expected {expected}.")
         for key in ("setting", "characters", "action", "props", "mood"):
             if key not in scene:
