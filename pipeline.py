@@ -1913,7 +1913,7 @@ def _cloudflare_safe_retry_prompt(prompt: str) -> str:
     """Build a conservative retry prompt for Cloudflare's aggressive 3030 filter."""
     def section(label: str) -> str:
         match = re.search(
-            rf"{re.escape(label)}:\\s*(.*?)(?=\\n[A-Z][A-Z /_-]+:|$)",
+            rf"{re.escape(label)}:\s*(.*?)(?=\n[A-Z][A-Z /_-]+:|$)",
             prompt,
             flags=re.IGNORECASE | re.DOTALL,
         )
