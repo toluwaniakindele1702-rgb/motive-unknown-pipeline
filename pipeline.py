@@ -362,6 +362,19 @@ def _is_non_retryable(exc: Exception) -> bool:
         "invalid api key", "authentication", "permission denied",
     ))
 
+def _is_rate_limited(exc: Exception) -> bool:
+    """Detect Groq rate limits, including daily token (TPD) exhaustion."""
+    status = _exception_status(exc)
+    text = str(exc).lower()
+    return status == 429 or "rate limit" in text or "rate_limit_exceeded" in text or "tokens per day" in text
+
+
+def _fallback_model(model: str) -> str | None:
+    """Use the lighter model when a larger model is temporarily rate-limited."""
+    if model == GROQ_LIGHT_MODEL:
+        return None
+    return GROQ_LIGHT_MODEL.strip() or None
+
 
 def _retry_wait(exc: Exception, attempt: int, base: float = 8.0) -> float:
     message = str(exc)
@@ -452,6 +465,15 @@ def groq_call(
             last_error = exc
             if _is_non_retryable(exc):
                 raise RuntimeError(f"Groq rejected the request for {model}: {exc}") from exc
+            fallback = _fallback_model(model) if _is_rate_limited(exc) else None
+            if fallback:
+                print(f"[GROQ FALLBACK] {model} is rate-limited; switching to {fallback} instead of burning the run.")
+                return groq_call(
+                    fallback, messages,
+                    max_completion_tokens=max_completion_tokens,
+                    temperature=temperature,
+                    attempts=2,
+                )
             if attempt >= attempts:
                 break
             wait = _retry_wait(exc, attempt)
@@ -504,6 +526,14 @@ def groq_browser_search(
             last_error = exc
             if _is_non_retryable(exc):
                 raise RuntimeError(f"Groq browser-search request was rejected: {exc}") from exc
+            fallback = _fallback_model(model) if _is_rate_limited(exc) else None
+            if fallback:
+                print(f"[GROQ SEARCH FALLBACK] {model} is rate-limited; switching to {fallback}.")
+                return groq_browser_search(
+                    fallback, prompt,
+                    max_completion_tokens=max_completion_tokens,
+                    attempts=2,
+                )
             if attempt >= attempts:
                 break
             wait = _retry_wait(exc, attempt, base=10.0)
@@ -545,6 +575,15 @@ def groq_json(
             last_error = exc
             if _is_non_retryable(exc):
                 raise RuntimeError(f"Groq JSON request was rejected for {model}: {exc}") from exc
+            fallback = _fallback_model(model) if _is_rate_limited(exc) else None
+            if fallback:
+                print(f"[GROQ JSON FALLBACK] {model} is rate-limited; switching to {fallback}.")
+                return groq_json(
+                    fallback, messages,
+                    max_completion_tokens=max_completion_tokens,
+                    temperature=temperature,
+                    attempts=2,
+                )
             if attempt >= attempts:
                 break
             wait = _retry_wait(exc, attempt)
