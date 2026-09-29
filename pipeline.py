@@ -555,42 +555,86 @@ def groq_json(
 # Topic scouting / research
 # ---------------------------------------------------------------------------
 TOPIC_PROMPT = """
-You are the topic producer for Relic Loop, a curiosity-first YouTube channel.
+You are the topic producer for Relic Loop, a curiosity-first YouTube channel built around
+things people actually notice, do, use, hear about, or wonder about.
 
-Relic Loop is NOT locked to history. It can cover everyday life, animals, nature,
-science, the human mind and body, technology, culture, society, and history.
+CONTENT MIX:
+Relic Loop must NOT become a plant/animal/science-only channel and must NOT become a history-only
+channel. Keep the center of gravity on everyday life and familiar human experiences. As a rough
+creative mix across many uploads, favor:
+- everyday objects, routines, places, habits, designs, rules, foods, transport, technology and
+  ordinary situations: about 55-65%
+- human behavior, psychology, culture and society: about 15-20%
+- relatable history and famous historical questions: about 10-15%
+- animals/nature and science: about 10-15% combined
 
-Start with something people already know, see, experience, or have heard of, then ask
-the hidden "why/how" question that makes them think, "Wait... why is that true?"
+These are guidance for variety, not rigid quotas.
 
-Prefer familiar subjects with surprising explanations over obscure trivia.
+The best Relic Loop topic starts with something the viewer already recognizes and then exposes a
+hidden reason, surprising consequence, strange design choice, forgotten origin, social behavior,
+unexpected chain of events, or counterintuitive explanation.
 
-Good shapes:
-- Why do sharks have to keep moving?
-- Why does your brain sometimes forget a familiar name?
-- Why do airplanes have tiny windows?
-- Do animals recognize when a human is helping them?
-- Why does the ocean look blue?
-- Why did people once believe disease came from bad air?
-- Why was a familiar historical group portrayed as dangerous in some societies?
+Think like a great curiosity channel: "You see this all the time. But why is it like that?"
+The topic should make the viewer want the answer BEFORE they know the answer.
 
-Avoid broad history topics, generic biographies, simple summaries, fake mysteries,
-conspiracies/paranormal claims presented as fact, medical diagnosis/advice, and
-body-comparison or appearance-ideal content.
+HIGH-VALUE TOPIC SHAPES:
+- ordinary thing + strange design choice
+- common habit + hidden reason
+- familiar situation + unexpected chain of events
+- everyday object + surprising origin
+- common technology + overlooked reason it works that way
+- social behavior + "why do people do this?"
+- food/place/transport/custom + strange explanation
+- famous historical event/person + one relatable unanswered question
+- animal behavior + a genuinely surprising consequence
+- science only when it explains something people actually notice in everyday life
+
+Examples of the KIND of question to seek:
+- Why do supermarkets put the things you need at the back?
+- Why do elevators have mirrors?
+- Why do we say "bless you" after someone sneezes?
+- Why are keyboards arranged in that weird order?
+- Why do traffic lights use red, yellow, and green?
+- Why does popcorn suddenly explode?
+- Why do we sometimes feel like our phone vibrated when it didn't?
+- Why do some countries drive on the left?
+- Why do hotel rooms skip certain floor numbers?
+- Why did people start putting pockets in clothes?
+- Why do airplanes dim the cabin lights before landing?
+- Why do people suddenly copy each other's accents?
+- Why did a familiar everyday rule or custom become normal?
+- Why did a famous historical decision make sense at the time?
+
+Do NOT simply turn these examples into future videos. Generate fresh questions in the same
+curiosity territory.
+
+AVOID:
+- obscure trivia that needs a long history lesson before it becomes interesting
+- generic biographies
+- broad "the history of X" topics
+- textbook science lectures
+- topics whose only hook is "here are 10 facts"
+- fake mysteries, conspiracies, paranormal claims presented as fact
+- medical diagnosis/advice
+- body-comparison or appearance-ideal content
+- repetitive plant/animal episodes
+- topics with no concrete visual story
+
+A strong topic should support a real story: hook -> mystery -> first answer -> complication ->
+new question -> deeper explanation -> surprising consequence -> satisfying payoff.
 
 Return exactly:
 {
   "question": "one specific curiosity question",
   "topic": "short topic label",
-  "category": "everyday / animals / science / human mind / technology / culture & society / history",
+  "category": "everyday / human behavior / technology / culture & society / history / animals / science",
   "era": "time/setting label, or modern day",
-  "why_curious": "2-4 sentences explaining the curiosity",
-  "curiosity_gap": "one sentence describing the viewer's assumption versus the hidden explanation",
+  "why_curious": "2-4 sentences explaining why an ordinary viewer would care",
+  "curiosity_gap": "one sentence describing the obvious assumption versus the hidden explanation",
   "curiosity_score": 8,
   "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
 }
 """.strip()
-
 
 def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
     previous = []
@@ -601,20 +645,19 @@ def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
     history_text = "\n".join(f"- {x}" for x in previous) or "(no previous videos recorded)"
 
     search_prompt = f"""
-Search the web for compelling curiosity-first YouTube topics for Relic Loop.
+Search the web for fresh curiosity-first YouTube topic ideas for Relic Loop.
 
-Do NOT restrict the search to history. Search across everyday life, animals/nature,
-science, human psychology, technology/design, culture/society, and relatable history.
+Prioritize everyday life, familiar objects, routines, places, habits, technology, food,
+transport, social behavior, customs, and things people encounter without thinking about them.
+Also collect some relatable history, animals/nature, and science ideas for variety.
 
-Look for questions about familiar things that make a normal viewer think:
-"Wait, why does that happen?"
-"How is that possible?"
-"Why did people decide to do it that way?"
+Use the kinds of curiosity patterns common to large explainer channels:
+a familiar thing -> a weird detail -> a "why/how?" -> an evidence-backed explanation -> a
+surprising consequence or deeper reveal.
 
-Prefer specific questions with evidence-backed explanations, strong visual possibilities,
-and enough depth for an 8-15 minute video. Avoid conspiracies, paranormal claims,
-medical diagnosis/advice, appearance-ideal content, generic biographies, listicles,
-and broad topics with no natural question.
+Do NOT return a list of generic science questions. We want topics that feel like things happening
+around the viewer's life. Avoid conspiracies, paranormal claims, medical diagnosis/advice,
+appearance-ideal content, generic biographies, listicles, and broad topics with no natural question.
 
 Do not repeat these recent channel questions:
 {history_text}
@@ -634,21 +677,21 @@ You are the final topic selector for Relic Loop, a curiosity-first explainer cha
 
 Choose ONE topic from the findings below.
 
-History is only one category. Relic Loop also covers everyday life, animals, science,
-human mind/body, technology, culture, and society.
+Everyday life and familiar human experiences should be the default center of gravity.
+History, animals, and science are supporting categories, not the channel's identity.
 
-Select something familiar enough to recognize immediately, but with a non-obvious
-underlying explanation. The ideal topic has concrete tension, an answer worth discovering,
-and strong opportunities to explain the answer visually.
+Select something familiar enough to recognize in the first few seconds, but with a non-obvious
+reason, consequence, origin, design choice, behavior, or chain of events.
 
 Strong patterns:
-- familiar thing + hidden mechanism
-- everyday behavior + surprising reason
-- animal behavior + natural "why"
+- ordinary object/place/routine + hidden reason
+- everyday behavior + surprising explanation
 - common technology/design + overlooked reason
-- ordinary brain/behavior effect + surprising explanation
-- familiar cultural practice + unexpected function/origin
-- well-known historical subject + relatable question
+- familiar food/transport/custom + unexpected origin or function
+- ordinary situation + surprising chain of events
+- human behavior + contradiction between what people assume and what happens
+- famous historical subject + relatable question
+- animal/nature/science + a real-world curiosity people can picture
 
 Reject broad subjects, generic biographies, simple event summaries, fake mysteries,
 conspiracies/paranormal claims presented as fact, medical diagnosis/advice,
@@ -783,8 +826,10 @@ to the supplied search findings.
 STORY_ARCHITECT_PROMPT = """
 You are the story architect for Relic Loop, a curiosity-first explainer channel.
 
-Turn research into a suspenseful EXPLANATION, not a textbook outline.
-The video must have one central curiosity question and one satisfying "aha" moment.
+Turn research into a story of discovery, not a textbook outline or a list of facts.
+The video must have one central curiosity question, escalating reveals, and a satisfying "aha"
+that makes the opening question feel obvious in hindsight. The viewer should constantly feel
+that one answer has opened the door to a more interesting question.
 
 Structure:
 1. COLD OPEN (0-3 seconds): start inside the curiosity with a direct question, surprising fact, contradiction, or strange consequence. Never begin with weather, scenery, a character walking, a boy looking up, or generic historical setup.
@@ -798,10 +843,18 @@ Structure:
 9. End with a grounded everyday connection or memorable implication.
 
 RETENTION RULES:
-- The viewer should receive a new meaningful reveal or visual idea roughly every 15-30 seconds.
+- The first 3 seconds must make the viewer understand the exact curiosity immediately.
+- By 15 seconds, introduce the hidden complication or promise of the answer.
+- Keep the story moving through "question -> partial answer -> new question -> deeper reveal".
+- Every section must change what the viewer thinks they know.
+- Use concrete events, decisions, objects, comparisons, consequences, or discoveries instead of
+  abstract explanation whenever possible.
+- If the topic has a surprising reversal, put it near the middle instead of saving all interest
+  for the ending.
 - Do not spend long stretches on chronology unless chronology itself explains the mystery.
-- Prefer "answer -> new question -> answer -> deeper question -> aha" over a flat list of facts.
-- The first 30 seconds must already contain the central question, a surprising detail, and a reason to keep watching.
+- Avoid stacking five facts that all prove the same point. Each beat should add a new piece of
+  understanding or change the question.
+- End by answering the opening question in a way that makes the ordinary thing feel different.
 
 Every section must earn its place. Avoid padding, repeated recaps, fake suspense, and
 decorative prose.
@@ -1120,7 +1173,7 @@ Expand ONLY the narration text. Do not change scene IDs, setting, characters, ac
 Preserve factual meaning and supported claims. Do not invent facts, dialogue, motives, or events.
 
 Each narration should be roughly {min_scene_words}-{max_scene_words} words.
-Add useful historical explanation, consequences, decisions, evidence, and transitions.
+Add useful explanation, consequences, decisions, evidence, examples, and transitions that deepen the central curiosity.
 Do NOT add scenery filler, repetition, generic suspense, fake dialogue, or decorative prose.
 Keep the modern, conversational storyteller voice.
 
@@ -1502,44 +1555,63 @@ def contains_any(text: str, words: Iterable[str]) -> bool:
 
 
 def split_visual_beats(narration: str) -> list[str]:
-    """Split narration into short, meaning-complete visual shots."""
+    """
+    Split narration by MEANING, not by a word-count target.
+
+    The visual should normally last for one complete sentence or one short phrase/idea.
+    A long sentence may be split at a real clause transition, but we never chop narration
+    into arbitrary 17-word chunks just to hit a number. This keeps each image synchronized
+    with what the narrator is actually saying.
+    """
     text = normalize_spaces(narration)
     if not text:
         return [""]
 
     sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
     expanded: list[str] = []
-    soft = re.compile(
-        r"\s+(?=(?:but|because|so|then|instead|while|which|meaning|that means|yet|however|although|when|after|before|once)\b)",
+
+    # Split only when a sentence contains multiple independently visualizable ideas.
+    clause_break = re.compile(
+        r"\s+(?=(?:but|because|so|then|instead|while|which|meaning|that means|"
+        r"yet|however|although|when|after|before|once|until|unless|rather than|"
+        r"as a result|which is why|this means)\b)",
         re.I,
     )
+    punctuation_break = re.compile(r"(?<=[,;:—])\s+")
 
     for sentence in sentences:
-        if count_words(sentence) <= 18:
+        if count_words(sentence) <= 32:
             expanded.append(sentence)
             continue
 
-        parts = [p.strip() for p in soft.split(sentence) if p.strip()]
-        if len(parts) <= 1:
-            parts = [p.strip() for p in re.split(r"(?<=[,;:])\s+", sentence) if p.strip()]
-        if len(parts) <= 1:
-            words = sentence.split()
-            parts = [" ".join(words[i:i + 17]) for i in range(0, len(words), 17)]
+        parts = [p.strip() for p in clause_break.split(sentence) if p.strip()]
+        if len(parts) == 1:
+            # Only use punctuation when it creates a genuine phrase boundary.
+            parts = [p.strip() for p in punctuation_break.split(sentence) if p.strip()]
 
-        bucket = ""
-        for part in parts:
-            candidate = f"{bucket} {part}".strip()
-            if not bucket or count_words(candidate) <= 20:
-                bucket = candidate
-            else:
+        # If a very long sentence still has no semantic boundary, keep it intact.
+        # One image for one sentence is preferable to arbitrary word chopping.
+        if len(parts) == 1:
+            expanded.append(sentence)
+        else:
+            bucket = ""
+            for part in parts:
+                candidate = f"{bucket} {part}".strip()
+                if not bucket:
+                    bucket = part
+                elif count_words(candidate) <= 34:
+                    bucket = candidate
+                else:
+                    expanded.append(bucket)
+                    bucket = part
+            if bucket:
                 expanded.append(bucket)
-                bucket = part
-        if bucket:
-            expanded.append(bucket)
 
+    # Tiny fragments are visually weak on their own, so attach them to the nearest
+    # meaningful phrase. This is the only merging done before the episode cap.
     i = 0
     while i < len(expanded):
-        if count_words(expanded[i]) < 8 and len(expanded) > 1:
+        if count_words(expanded[i]) < 5 and len(expanded) > 1:
             if i == 0:
                 expanded[1] = f"{expanded[i]} {expanded[1]}".strip()
             else:
@@ -1548,23 +1620,7 @@ def split_visual_beats(narration: str) -> list[str]:
             continue
         i += 1
 
-    target = min(
-        max(1, int(np.ceil(count_words(text) / max(1, VISUAL_BEAT_TARGET_WORDS)))),
-        len(expanded),
-    )
-    while len(expanded) > target:
-        best = min(
-            range(len(expanded) - 1),
-            key=lambda j: (
-                0 if expanded[j].endswith((".", "?", "!")) else 1,
-                count_words(expanded[j]) + count_words(expanded[j + 1]),
-            ),
-        )
-        expanded[best] = f"{expanded[best]} {expanded[best + 1]}".strip()
-        del expanded[best + 1]
-
     return expanded or [text]
-
 
 POLISHED_VISUAL_STYLE = """
 Modern 2D animated-explainer keyframe for Relic Loop.
