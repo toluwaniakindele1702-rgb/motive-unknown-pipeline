@@ -150,6 +150,9 @@ jobs:
             run_work/manifest.json
             state/last_run.json
             state/current_run/*.json
+            voice_test_current_male.wav
+            voice_test_female_bella.wav
+            voice_test_female_nicole.wav
             voice_test_onyx.wav
             run_work/visual_test/*.jpg
             run_work/local_image_test/*.jpg
