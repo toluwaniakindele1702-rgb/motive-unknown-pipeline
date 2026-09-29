@@ -1377,10 +1377,11 @@ def get_kokoro_pipeline():
     return _kokoro_pipeline
 
 
-def synthesize_kokoro(text: str) -> np.ndarray:
+def synthesize_kokoro(text: str, voice: str | None = None) -> np.ndarray:
     pipeline = get_kokoro_pipeline()
     chunks: list[np.ndarray] = []
-    generator = pipeline(text, voice=KOKORO_VOICE, speed=KOKORO_SPEED)
+    selected_voice = voice or KOKORO_VOICE
+    generator = pipeline(text, voice=selected_voice, speed=KOKORO_SPEED)
     for _, _, audio in generator:
         if audio is None:
             continue
@@ -1423,15 +1424,7 @@ def voice_test() -> list[Path]:
     ]
     outputs: list[Path] = []
     for label, voice in test_voices:
-        old_voice = os.environ.get("KOKORO_VOICE")
-        os.environ["KOKORO_VOICE"] = voice
-        try:
-            audio = synthesize_kokoro(sample)
-        finally:
-            if old_voice is None:
-                os.environ.pop("KOKORO_VOICE", None)
-            else:
-                os.environ["KOKORO_VOICE"] = old_voice
+        audio = synthesize_kokoro(sample, voice=voice)
         out = ROOT / f"voice_test_{label}.wav"
         sf.write(out, audio, AUDIO_SR)
         outputs.append(out)
