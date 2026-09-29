@@ -2817,7 +2817,7 @@ def _make_emphasis_filter(scene_durations: list[float]) -> str:
             "fontcolor=white:fontsize=54:"
             "box=1:boxcolor=black@0.72:boxborderw=18:"
             "x=(w-text_w)/2:y=h-150:"
-            f"enable='between(t,{start:.2f},{end:.2f})'"
+            f"enable='between(t\\,{start:.2f}\\,{end:.2f})'"
         )
     return ",".join(filters)
 
