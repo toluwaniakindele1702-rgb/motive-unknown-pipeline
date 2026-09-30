@@ -116,6 +116,25 @@ jobs:
               print("Kokoro import: skipped for local image test")
           PY
 
+      - name: FFmpeg filter smoke test
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pipeline import _make_emphasis_filter
+          vf = _make_emphasis_filter([40.0, 45.0, 50.0])
+          if not vf or "," in vf.split("enable=", 1)[1].split("'", 2)[1]:
+              raise SystemExit("Emphasis filter still contains unsafe commas in its enable expression")
+          print("Emphasis filter:", vf)
+          cmd = [
+              "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+              "-i", "color=c=black:s=1280x720:r=30:d=2", "-vf", vf + ",format=yuv420p",
+              "-frames:v", "1", "-f", "null", "-"
+          ]
+          subprocess.run(cmd, check=True)
+          print("FFmpeg emphasis filter smoke test: OK")
+          PY
+
       - name: Run pipeline
         shell: bash
         run: |
