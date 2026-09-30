@@ -2965,15 +2965,25 @@ def build_video(script: dict[str, Any], out_path: Path) -> float:
         vf_parts.append(emphasis_filter)
     vf_parts.append("format=yuv420p")
 
-    run_cmd(
-        [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(video_list),
-            "-vf", ",".join(vf_parts),
-            "-r", str(VIDEO_FPS), "-c:v", "libx264", "-preset", "veryfast",
-            "-crf", "20", "-pix_fmt", "yuv420p", str(video_silent),
-        ],
-        "render motion-comic sequence with reveal graphics",
-    )
+    render_args = [
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(video_list),
+        "-vf", ",".join(vf_parts),
+        "-r", str(VIDEO_FPS), "-c:v", "libx264", "-preset", "veryfast",
+        "-crf", "20", "-pix_fmt", "yuv420p", str(video_silent),
+    ]
+    try:
+        run_cmd(render_args, "render motion-comic sequence with reveal graphics")
+    except RuntimeError as exc:
+        # The emphasis cards are optional packaging. Never let a cosmetic filter
+        # failure destroy an otherwise complete episode. Retry the same render
+        # without the cards, preserving motion, sharpening, color, and noise.
+        if not emphasis_filter:
+            raise
+        print(f"[FFMPEG FALLBACK] Emphasis-card render failed; retrying without reveal cards: {exc}")
+        checkpoint("video_render_fallback", reason="emphasis_filter_failed")
+        safe_vf_parts = [part for part in vf_parts if part != emphasis_filter]
+        render_args[render_args.index(",".join(vf_parts))] = ",".join(safe_vf_parts)
+        run_cmd(render_args, "render motion-comic sequence without reveal cards")
 
     audio_list = WORK_DIR / "audio_concat.txt"
     build_concat_file(audio_paths, audio_list)
