@@ -2810,10 +2810,12 @@ def _make_emphasis_filter(scene_durations: list[float]) -> str:
     filters: list[str] = []
     for start, phrase in anchors:
         end = min(total, start + 1.35)
-        escaped = phrase.replace("'", "\\'")
+        # Use double quotes for the drawtext text value so apostrophes in
+        # phrases like "SO THAT'S WHY" cannot terminate the filter string.
+        escaped = phrase.replace("\\", "\\\\").replace('"', '\\\"')
         filters.append(
             "drawtext="
-            f"fontfile={FONT_BOLD}:text='{escaped}':"
+            f"fontfile={FONT_BOLD}:text=\"{escaped}\":"
             "fontcolor=white:fontsize=54:"
             "box=1:boxcolor=black@0.72:boxborderw=18:"
             "x=(w-text_w)/2:y=h-150:"
