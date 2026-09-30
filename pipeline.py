@@ -3098,11 +3098,14 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
         video_id = str(existing_upload["video_id"])
         print(f"[YOUTUBE] Reusing previously uploaded video {video_id}")
         try:
-            youtube.thumbnails().set(
-                videoId=video_id,
-                media_body=MediaFileUpload(thumbnail_path),
-            ).execute()
-            print("[YOUTUBE] thumbnail set on reused upload")
+            if thumbnail_path.exists() and thumbnail_path.stat().st_size >= 10000:
+                youtube.thumbnails().set(
+                    videoId=video_id,
+                    media_body=MediaFileUpload(thumbnail_path),
+                ).execute()
+                print("[YOUTUBE] thumbnail set on reused upload")
+            else:
+                print("[YOUTUBE] reused upload has no valid thumbnail; leaving YouTube-generated thumbnail")
         except Exception as exc:
             print(f"[YOUTUBE] thumbnail upload warning: {exc}")
         return video_id
@@ -3122,15 +3125,11 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
     media = MediaFileUpload(str(video_path), mimetype="video/mp4", chunksize=-1, resumable=True)
     response = youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
     video_id = response["id"]
-    if not thumbnail_path.exists() or thumbnail_path.stat().st_size < 10000:
-        cached_thumb = THUMB_DIR / "thumbnail_ai.jpg"
-        if cached_thumb.exists() and cached_thumb.stat().st_size >= 10000:
-            ImageOps.fit(Image.open(cached_thumb).convert("RGB"), (1280, 720), method=Image.Resampling.LANCZOS).save(
-                thumbnail_path, format="JPEG", quality=94, optimize=True
-            )
-            print("[YOUTUBE] Rebuilt missing thumbnail from cached AI thumbnail before upload.")
-        else:
-            raise RuntimeError(f"Thumbnail file is missing or invalid before YouTube upload: {thumbnail_path}")
+    # Thumbnail is optional packaging. Never block a successful video upload
+    # because thumbnail generation failed or the file is missing.
+    thumbnail_ready = thumbnail_path.exists() and thumbnail_path.stat().st_size >= 10000
+    if not thumbnail_ready:
+        print(f"[YOUTUBE] No valid thumbnail at upload time; continuing without custom thumbnail: {thumbnail_path}")
     _save_current_json(CURRENT_UPLOAD_PATH, {
         "video_id": video_id,
         "privacy_status": YOUTUBE_PRIVACY_STATUS,
@@ -3139,11 +3138,14 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
     print(f"[YOUTUBE] uploaded {video_id} ({YOUTUBE_PRIVACY_STATUS})")
 
     try:
-        youtube.thumbnails().set(
-            videoId=video_id,
-            media_body=MediaFileUpload(str(thumbnail_path), mimetype="image/jpeg"),
-        ).execute()
-        print("[YOUTUBE] thumbnail set")
+        if thumbnail_path.exists() and thumbnail_path.stat().st_size >= 10000:
+            youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(str(thumbnail_path), mimetype="image/jpeg"),
+            ).execute()
+            print("[YOUTUBE] thumbnail set")
+        else:
+            print("[YOUTUBE] custom thumbnail unavailable; video upload succeeded without it")
     except Exception as exc:
         print(f"[YOUTUBE] thumbnail upload warning: {exc}")
 
