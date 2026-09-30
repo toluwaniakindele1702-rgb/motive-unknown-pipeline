@@ -2805,7 +2805,7 @@ def _make_emphasis_filter(scene_durations: list[float]) -> str:
         (total * 0.25, "BUT WHY?"),
         (total * 0.50, "THE TWIST"),
         (total * 0.73, "THE REAL REASON"),
-        (max(0.0, total - min(8.0, total * 0.08)), "SO THAT'S WHY"),
+        (max(0.0, total - min(8.0, total * 0.08)), "SO THAT IS WHY"),
     ]
     filters: list[str] = []
     for start, phrase in anchors:
