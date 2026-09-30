@@ -81,31 +81,32 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
     is_thumbnail = bool(subject or important_object or expression or composition)
 
     if is_thumbnail:
-        style = "Modern high-energy YouTube history thumbnail, crisp cartoon linework, sharp graphic shapes, polished cel shading, vivid contrast, dramatic cinematic lighting, huge expressive face, exaggerated readable emotion, strong silhouette, dynamic perspective, premium animated-documentary finish."
-        negative = "No readable text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, glamour portrait, unrelated people, sexualized posing, revealing clothing."
+        # Put the actual subject first so the short local tokenizer budget is spent
+        # on what the thumbnail is supposed to depict, not generic style language.
+        style = "Polished modern 2D YouTube explainer thumbnail, crisp linework, cel shading, dramatic lighting."
+        negative = "No text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage art, unrelated people, decorative subjects."
         fields = [
+            f"SUBJECT: {trim_words(subject, 18)}." if subject else "",
+            f"OBJECT: {trim_words(important_object, 12)}." if important_object else "",
+            f"EXPRESSION: {trim_words(expression, 10)}." if expression else "",
+            f"COMPOSITION: {trim_words(composition, 10)}." if composition else "",
             style,
-            f"SUBJECT: {trim_words(subject, 12)}." if subject else "",
-            f"OBJECT: {trim_words(important_object, 8)}." if important_object else "",
-            f"EXPRESSION: {trim_words(expression, 8)}." if expression else "",
-            f"COMPOSITION: {trim_words(composition, 8)}." if composition else "",
-            f"ERA: {trim_words(era, 5)}." if era else "",
             negative,
         ]
     else:
-        style = "Modern 2D animated-documentary keyframe, crisp clean linework, sharp graphic shapes, polished cel shading, vivid controlled color, expressive stylized faces, believable anatomy, strong silhouette, cinematic lighting, premium television-animation finish."
-        negative = "No readable text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage textbook art, sepia painting, 1960s illustration, cars, asphalt, lane markings, unrelated people, glamour portraits, sexualized posing, revealing clothing."
+        # The narration beat is the source of truth. The previous local prompt put
+        # a long style block first, which consumed most of the tokenizer budget and
+        # left the model too little room to understand the actual subject.
+        style = "Polished modern 2D animated explainer frame, crisp linework, cel shading, cinematic lighting."
+        negative = "No text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage art, unrelated people, decorative subjects."
         fields = [
-            style,
-            f"BEAT: {trim_words(beat, 18)}." if beat else "",
-            f"ACTION: {trim_words(action, 10)}." if action else "",
+            f"BEAT: {trim_words(beat, 30)}." if beat else "",
+            f"ACTION: {trim_words(action, 14)}." if action else "",
+            f"SUBJECT: {trim_words(subject, 10)}." if subject else "",
             f"SETTING: {trim_words(setting, 8)}." if setting else "",
-            f"DEVICE: {trim_words(device, 9)}." if device else "",
-            f"PEOPLE: {trim_words(chars, 7)}." if chars else "",
-            f"PROPS: {trim_words(props, 5)}." if props else "",
-            f"ERA: {trim_words(era, 5)}." if era else "",
-            f"MOOD: {trim_words(mood, 3)}." if mood else "",
-            f"SHOT: {trim_words(shot, 6)}." if shot else "",
+            f"PROPS: {trim_words(props, 8)}." if props else "",
+            f"DEVICE: {trim_words(device, 7)}." if device else "",
+            style,
             negative,
         ]
 
