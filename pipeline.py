@@ -1410,15 +1410,22 @@ RESEARCH:
 DRAFT:
 {json.dumps(script, ensure_ascii=False)}
 """.strip()
-    polished = groq_json(
-        GROQ_WRITER_MODEL,
-        [{"role": "user", "content": prompt}],
-        max_completion_tokens=6500,
-        temperature=0.55,
-        attempts=2,
-    )
-    validate_script(polished)
-    return polished
+    # Style polish is an enhancement, not a production dependency. If the
+    # writer model is rate-limited or the polish response is malformed, keep the
+    # already-valid script and continue the episode instead of losing the run.
+    try:
+        polished = groq_json(
+            GROQ_WRITER_MODEL,
+            [{"role": "user", "content": prompt}],
+            max_completion_tokens=6500,
+            temperature=0.55,
+            attempts=2,
+        )
+        validate_script(polished)
+        return polished
+    except Exception as exc:
+        print(f"[SCRIPT] style polish skipped; retaining validated draft: {exc}")
+        return script
 
 
 # ---------------------------------------------------------------------------
