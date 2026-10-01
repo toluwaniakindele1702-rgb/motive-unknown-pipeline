@@ -1,0 +1,15 @@
+{
+  "question": "Why does a coffee cup stay hot even when the liquid is gone?",
+  "topic": "Empty Coffee Cup",
+  "category": "technology",
+  "era": "modern day",
+  "why_curious": "When you pour out the coffee, the mug still feels warm to the touch. That lingering heat seems magical, but it's actually a result of the mug’s material properties and the trapped air inside. Understanding this explains how everyday objects can store and transfer heat in surprising ways.",
+  "curiosity_gap": "We assume a mug only keeps heat while liquid remains, yet the ceramic and the air gap keep it warm long after the brew is gone.",
+  "curiosity_score": 8,
+  "search_angles": [
+    "Thermal insulation of ceramic",
+    "Air gap heat retention",
+    "Heat transfer models for mugs",
+    "Visual demo of mug warming a hand"
+  ]
+}

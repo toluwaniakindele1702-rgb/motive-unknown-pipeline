@@ -1,0 +1,81 @@
+{
+  "central_question": "Why does a coffee cup stay hot even when the liquid is gone?",
+  "hook": "You pour out your last drop of coffee, yet the mug still feels warm to the touch. How can an empty cup keep heat?",
+  "aha_moment": "The ceramic wall stores a lot of thermal energy and, because it conducts heat slowly and is surrounded by trapped air, it releases that heat over minutes, keeping the surface warm.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – pose the mystery",
+      "reveal": "An empty mug still feels hot after the coffee is poured out.",
+      "required_facts": [
+        "Coffee poured out, mug feels warm"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Opening promise – hint at answer",
+      "reveal": "The mug’s material keeps the heat, but how?",
+      "required_facts": [
+        "Mug made of ceramic"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "First reveal – conduction into the wall",
+      "reveal": "Heat from the coffee flows into the ceramic wall by conduction.",
+      "required_facts": [
+        "Heat transfer by conduction",
+        "Mug wall gains energy"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Second reveal – wall’s thermal capacity",
+      "reveal": "The wall’s mass and specific heat let it hold a lot of energy.",
+      "required_facts": [
+        "Mass ~0.3 kg, specific heat ~0.9 kJ/kg·K"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Third reveal – low conductivity slows loss",
+      "reveal": "Ceramic conducts heat slowly, creating a high thermal resistance across its thickness.",
+      "required_facts": [
+        "Thermal conductivity ~1 W/m·K, wall thickness ~5 mm"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint reversal – misconception about steam",
+      "reveal": "It’s not steam keeping it warm; the solid wall is the source.",
+      "required_facts": [
+        "Evaporation negligible after pouring out"
+      ]
+    },
+    {
+      "section": "7",
+      "purpose": "Fourth reveal – outer surface loses heat mainly by convection",
+      "reveal": "Heat escapes through natural convection (h≈10 W/m²·K) and a tiny bit by radiation.",
+      "required_facts": [
+        "Convection dominates, radiation <5%"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Fifth reveal – trapped air in glaze adds insulation",
+      "reveal": "The glaze’s thin air layer further slows heat flow to the outside.",
+      "required_facts": [
+        "Glaze traps air, adds resistance"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Synthesis – cooling time constant",
+      "reveal": "All these resistances give a cooling time of 10–20 minutes, enough to feel warm.",
+      "required_facts": [
+        "Time constant ≈(m c d)/(k A)"
+      ]
+    }
+  ],
+  "ending_payoff": "When the last drop is gone, the mug’s wall is still a slow‑burning battery of heat, so touching it feels like a warm hug—proof that even an empty cup can surprise you with its hidden thermal memory."
+}
