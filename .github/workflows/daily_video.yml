@@ -61,6 +61,24 @@ jobs:
             echo "PIPELINE_MODE=full" >> "$GITHUB_ENV"
           fi
 
+      - name: Write run identity
+        shell: bash
+        run: |
+          mkdir -p state/current_run
+          cat > state/current_run/github_run.json <<'JSON'
+          {
+            "run_id": "${{ github.run_id }}",
+            "run_number": "${{ github.run_number }}",
+            "workflow": "${{ github.workflow }}",
+            "event": "${{ github.event_name }}",
+            "mode": "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "started_at": "${{ github.run_started_at }}",
+            "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          JSON
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
         with:
@@ -141,6 +159,25 @@ jobs:
           set -o pipefail
           python pipeline.py --mode "$PIPELINE_MODE" 2>&1 | tee pipeline.log
 
+      - name: Mark run result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p state/current_run
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          p = "state/current_run/github_run.json"
+          try:
+              data = json.load(open(p))
+          except Exception:
+              data = {}
+          data["finished_at"] = datetime.now(timezone.utc).isoformat()
+          data["pipeline_log"] = "pipeline.log"
+          with open(p, "w") as f:
+              json.dump(data, f, indent=2)
+          PY
+
       - name: Persist resumable state
         if: always() && env.PIPELINE_MODE == 'full'
         shell: bash
@@ -163,6 +200,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
+            pipeline.log
+            state/current_run/github_run.json
             run_work/topic.json
             run_work/research.txt
             run_work/story.json
