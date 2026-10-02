@@ -40,7 +40,7 @@ jobs:
       HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
       IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,huggingface,replicate,local' }}
-      KOKORO_VOICE: af_bella
+      KOKORO_VOICE: am_adam
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
       MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '110' }}
