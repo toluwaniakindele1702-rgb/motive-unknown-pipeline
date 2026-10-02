@@ -138,7 +138,8 @@ jobs:
       - name: Run pipeline
         shell: bash
         run: |
-          python pipeline.py --mode "$PIPELINE_MODE"
+          set -o pipefail
+          python pipeline.py --mode "$PIPELINE_MODE" 2>&1 | tee pipeline.log
 
       - name: Persist resumable state
         if: always() && env.PIPELINE_MODE == 'full'
