@@ -3504,7 +3504,8 @@ def _render_short(video_path: Path, srt_path: Path, start_seconds: float, durati
 def _upload_short(video_path: Path, title: str, description: str, tags: list[str], short_key: str) -> str:
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
-    from googleapiclient.discovery import build    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
 
     saved = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
     existing = saved.get("shorts", {}).get(short_key) if isinstance(saved, dict) else None
