@@ -39,7 +39,11 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
-      IMAGE_PROVIDERS: ${{ vars.IMAGE_PROVIDERS || 'cloudflare,huggingface,replicate,local' }}
+      PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+      PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
+      # Puter is the production image provider. Local DreamShaper is intentionally
+      # excluded from production because its visual relevance has been unreliable.
+      IMAGE_PROVIDERS: 'puter,cloudflare,huggingface,replicate'
       KOKORO_VOICE: am_adam
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
@@ -120,6 +124,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install Puter image client
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          npm install --no-save @heyputer/puter.js
+          node --check puter_image_worker.mjs
 
       - name: Preflight checks
         shell: bash
