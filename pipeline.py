@@ -3833,7 +3833,15 @@ def main(mode: str = "full") -> None:
     build_video(script, video_path)
 
     video_id = upload_video(video_path, thumb, seo)
-    update_history(topic, seo, video_id)
+    # The YouTube upload is the production success boundary. Everything after
+    # this point is bookkeeping/distribution and must not turn a successful
+    # published video into a failed Actions run.
+    checkpoint("long_form_uploaded", video_id=video_id, title=seo["title"])
+
+    try:
+        update_history(topic, seo, video_id)
+    except Exception as exc:
+        print(f"[STATE] history update failed after successful upload; continuing: {exc}")
 
     # Shorts are a secondary distribution layer. They must never invalidate a
     # completed long-form episode if rendering, selection, or upload has a problem.
@@ -3842,20 +3850,28 @@ def main(mode: str = "full") -> None:
         print(f"[SHORTS] generated/uploaded {len(short_ids)} Shorts.")
     except Exception as exc:
         print(f"[SHORTS] stage failed non-fatally; long-form upload remains successful: {exc}")
-    atomic_write_json(
-        MANIFEST_PATH,
-        {
-            "topic": topic,
-            "title": seo["title"],
-            "video_id": video_id,
-            "privacy_status": YOUTUBE_PRIVACY_STATUS,
-            "scene_count": len(script["scenes"]),
-            "shorts_enabled": SHORTS_ENABLED,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
 
-    clear_current_run()
+    try:
+        atomic_write_json(
+            MANIFEST_PATH,
+            {
+                "topic": topic,
+                "title": seo["title"],
+                "video_id": video_id,
+                "privacy_status": YOUTUBE_PRIVACY_STATUS,
+                "scene_count": len(script["scenes"]),
+                "shorts_enabled": SHORTS_ENABLED,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception as exc:
+        print(f"[STATE] manifest write failed after successful upload; continuing: {exc}")
+
+    try:
+        clear_current_run()
+    except Exception as exc:
+        print(f"[STATE] current-run cleanup failed after successful upload; continuing: {exc}")
+
     checkpoint("complete", video_id=video_id, title=seo["title"])
     print("DONE")
 
