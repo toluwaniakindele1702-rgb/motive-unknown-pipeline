@@ -1,0 +1,15 @@
+{
+  "question": "Why does toast sometimes burn even when the timer says “done”?",
+  "topic": "Burned Toast",
+  "category": "technology",
+  "era": "modern day",
+  "why_curious": "A toaster’s timer is a simple electronic switch, but the bread still ends up blackened. The heating element reaches 1400 °C, and the timer’s bi‑metallic switch only turns it off when the element’s temperature rises. The Maillard reaction that browns toast happens between 285–320 °F; beyond that sugars caramelize and then pyrolyze, turning the surface black. The mismatch between the element’s temperature and the bread’s optimal browning range explains the surprise.",
+  "curiosity_gap": "We assume the toaster’s timer guarantees perfectly cooked toast, yet the bread can burn because the element’s temperature overshoots the optimal browning range.",
+  "curiosity_score": 8,
+  "search_angles": [
+    "How toaster heating element temperature exceeds the Maillard window",
+    "Role of bi‑metallic switch timing in toast burn",
+    "Visual time‑lapse of bread browning vs element heat",
+    "Chemical diagram of Maillard vs pyrolysis reactions"
+  ]
+}
