@@ -139,8 +139,6 @@ jobs:
           )
           print("Packaging gate smoke test: OK", _issues)
 
-          if os.environ.get("PIPELINE_MODE") != "local_image_test":
-
           print("torch:", torch.__version__)
           print("cuda available:", torch.cuda.is_available())
           assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
