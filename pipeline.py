@@ -147,6 +147,26 @@ SCENE_MAX = 38
 SCRIPT_MIN_WORDS = 1700
 SCRIPT_MAX_WORDS = 2600
 
+# Retention-first story guardrails. These are structural checks, not a
+# promise of virality: they make the script earn attention before expensive
+# TTS/image/render stages begin.
+RETENTION_OPENING_MAX_WORDS = 75
+RETENTION_MIN_TURN_MARKERS = 4
+RETENTION_TURN_MARKERS = (
+    "but", "however", "instead", "actually", "surprisingly", "turns out",
+    "the catch", "the strange part", "yet", "except", "until", "which means",
+    "that's why", "the twist", "the real reason",
+)
+RETENTION_WEAK_OPENERS = (
+    "hey everyone", "hello everyone", "welcome back", "in this video",
+    "today we're going to", "today we are going to",
+)
+RETENTION_PAYOFF_MARKERS = (
+    "so that's why", "so that is why", "that's why", "that is why",
+    "the real reason", "the answer is", "now you know why", "in the end",
+    "which is why",
+)
+
 FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
@@ -1127,6 +1147,23 @@ PREMIUM PRODUCTION RULES:
         script = _polish_script_style(topic, research, plan, script, issues)
 
     validate_script(script)
+
+    # Final retention gate: run before TTS/image generation so a weak opening,
+    # thin curiosity chain, or missing payoff does not waste expensive stages.
+    retention_issues = _retention_quality_issues(script, topic)
+    if retention_issues:
+        print(f"[RETENTION] repair pass needed: {retention_issues}")
+        script = _repair_retention_structure(topic, research, plan, script, retention_issues)
+        validate_script(script)
+        retention_issues = _retention_quality_issues(script, topic)
+        if retention_issues:
+            raise RuntimeError(
+                "Retention gate failed after repair: " + "; ".join(retention_issues)
+            )
+
+    atomic_write_json(SCRIPT_PATH, script)
+    _save_current_json(CURRENT_SCRIPT_PATH, script)
+    print("[RETENTION] retention-first script gate passed.")
     return script
 
 def validate_script(script: dict[str, Any], allow_short: bool = False) -> None:
@@ -1204,7 +1241,143 @@ def _script_style_issues(script: dict[str, Any]) -> list[str]:
     return issues
 
 
-def _repair_script_length(topic: dict[str, Any], research: str, plan: dict[str, Any], script: dict[str, Any]) -> dict[str, Any]:
+def _retention_quality_issues(script: dict[str, Any], topic: dict[str, Any]) -> list[str]:
+    """Low-cost structural gate for the hook, curiosity chain, and payoff."""
+    scenes = script.get("scenes") or []
+    if not scenes:
+        return ["Script has no scenes."]
+
+    opening = " ".join(str(scene.get("narration", "")) for scene in scenes[:2]).strip()
+    opening_words = opening.split()[:RETENTION_OPENING_MAX_WORDS]
+    opening_text = " ".join(opening_words)
+    first_sentence = re.split(r"(?<=[.!?])\s+", opening_text)[0].strip()
+    issues: list[str] = []
+
+    if len(first_sentence.split()) > 24:
+        issues.append("First sentence is too slow; make the cold open shorter and sharper.")
+
+    opening_lower = opening_text.lower()
+    if any(opening_lower.startswith(prefix) for prefix in RETENTION_WEAK_OPENERS):
+        issues.append("Opening starts with generic channel framing.")
+
+    if not re.search(
+        r"\b(?:why|how|what|what makes|what causes|what happens|why does|why do|how does|how can)\b",
+        opening_lower,
+    ) and not re.search(
+        r"\b(?:but|however|surprisingly|actually|turns out|strange|weird|unexpected)\b",
+        opening_lower,
+    ):
+        issues.append("Cold open does not establish a clear curiosity or contradiction.")
+
+    turn_hits = sum(
+        len(re.findall(rf"\b{re.escape(marker)}\b", str(scene.get("narration", "")).lower()))
+        for scene in scenes
+        for marker in RETENTION_TURN_MARKERS
+    )
+    if turn_hits < RETENTION_MIN_TURN_MARKERS:
+        issues.append(
+            f"Curiosity chain is too thin; found {turn_hits} meaningful turn markers, "
+            f"need at least {RETENTION_MIN_TURN_MARKERS}."
+        )
+
+    mid_start = max(1, len(scenes) // 3)
+    mid_end = max(mid_start + 1, (len(scenes) * 2) // 3)
+    middle = " ".join(str(scene.get("narration", "")) for scene in scenes[mid_start:mid_end]).lower()
+    if not any(marker in middle for marker in RETENTION_TURN_MARKERS):
+        issues.append("Middle of the episode lacks a clear reversal, complication, or new question.")
+
+    final_text = " ".join(str(scene.get("narration", "")) for scene in scenes[-3:]).lower()
+    question_words = [w.lower() for w in re.findall(r"[a-zA-Z]{4,}", str(topic.get("question", "")))]
+    question_overlap = sum(1 for word in set(question_words) if word in final_text)
+    if not any(marker in final_text for marker in RETENTION_PAYOFF_MARKERS) and question_overlap < 2:
+        issues.append("Ending does not clearly loop back to the opening mystery.")
+
+    if not re.search(r"\b(?:because|but|instead|actually|turns out|means|causes|why|how)\b", opening_lower):
+        issues.append("First 30 seconds lacks a clear answer, complication, or forward-driving question.")
+
+    return issues
+
+
+def _repair_retention_structure(
+    topic: dict[str, Any],
+    research: str,
+    plan: dict[str, Any],
+    script: dict[str, Any],
+    issues: list[str],
+) -> dict[str, Any]:
+    """Repair only the retention-critical scenes while preserving factual content."""
+    scenes = script.get("scenes") or []
+    target_ids = sorted({
+        *range(1, min(3, len(scenes) + 1)),
+        max(1, len(scenes) // 2),
+        max(1, len(scenes) // 2 + 1),
+        *range(max(1, len(scenes) - 1), len(scenes) + 1),
+    })
+    targets = [scene for scene in scenes if int(scene.get("id", 0)) in target_ids]
+
+    prompt = f"""
+You are the retention editor for Relic Loop.
+
+Repair ONLY the selected narration scenes below. Keep every documented fact supported by the
+research. Do not invent facts, dialogue, motives, events, or statistics. Do not change scene IDs,
+settings, characters, actions, props, or moods.
+
+The goal is NOT clickbait. The goal is a clearer, faster story:
+- first scene: immediate curiosity in the first sentence;
+- first 15 seconds: make the mystery and payoff promise obvious;
+- middle: introduce a genuine complication, reversal, or new question;
+- final scenes: directly answer the opening question and make the ordinary thing feel different;
+- use short punchy sentences around important reveals;
+- avoid filler, generic introductions, repeated "but there's more", and excessive rhetorical questions.
+
+RETENTION ISSUES:
+{json.dumps(issues, ensure_ascii=False)}
+
+CENTRAL QUESTION:
+{topic.get("question", "")}
+
+RESEARCH:
+{research}
+
+FULL STORY PLAN:
+{json.dumps(plan, ensure_ascii=False)}
+
+SELECTED SCENES:
+{json.dumps(targets, ensure_ascii=False)}
+
+Return JSON only:
+{{"narrations": ["one replacement narration for each selected scene, in the exact same order"]}}
+""".strip()
+
+    result = groq_json(
+        GROQ_WRITER_MODEL,
+        [{"role": "user", "content": prompt}],
+        max_completion_tokens=3600,
+        temperature=0.45,
+        attempts=3,
+    )
+    narrations = result.get("narrations")
+    if not isinstance(narrations, list) or len(narrations) != len(targets):
+        raise RuntimeError("Retention repair returned the wrong number of narrations.")
+
+    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    by_id = {int(scene.get("id", 0)): scene for scene in repaired.get("scenes", [])}
+    for original, narration in zip(targets, narrations):
+        scene_id = int(original.get("id", 0))
+        text = normalize_spaces(str(narration))
+        if not text:
+            raise RuntimeError(f"Retention repair returned empty narration for scene {scene_id}.")
+        if count_words(text) > 120:
+            text = _fit_narration_to_limit(text, 120)
+        if count_words(text) < 25:
+            raise RuntimeError(f"Retention repair made scene {scene_id} too short.")
+        by_id[scene_id]["narration"] = text
+
+    validate_script(repaired)
+    atomic_write_json(SCRIPT_PATH, repaired)
+    _save_current_json(CURRENT_SCRIPT_PATH, repaired)
+    print(f"[RETENTION] repaired {len(targets)} retention-critical scenes.")
+    return repaired
     """
     Expand narration in small batches. Partial progress is written to the
     persistent current-run state after every successful batch.
@@ -2656,6 +2829,19 @@ IMPORTANT JSON RULES:
 def package_quality_issues(topic: dict[str, Any], script: dict[str, Any], seo: dict[str, Any]) -> list[str]:
     """Final low-cost packaging gate; warnings do not make the pipeline brittle."""
     issues: list[str] = []
+
+    # Packaging is one curiosity unit: title = question/context,
+    # thumbnail = visual mystery/consequence. Keep the pair complementary.
+    title_lower = normalize_spaces(str(seo.get("title", ""))).lower()
+    headline_lower = normalize_spaces(str(seo.get("thumbnail_headline", ""))).lower()
+    if any(x in title_lower for x in ("you won't believe", "shocking", "insane", "gone wrong")):
+        issues.append("Title uses generic clickbait language.")
+    if any(x in headline_lower for x in ("you won't believe", "shocking", "insane", "gone wrong")):
+        issues.append("Thumbnail headline uses generic clickbait language.")
+    if len(title) > 70:
+        issues.append("Title exceeds the 70-character packaging target.")
+    if len(headline.split()) < 2:
+        issues.append("Thumbnail headline needs at least two words for a readable curiosity cue.")
     question = normalize_spaces(str(topic.get("question", "")))
     title = normalize_spaces(str(seo.get("title", "")))
     headline = normalize_spaces(str(seo.get("thumbnail_headline", "")))
