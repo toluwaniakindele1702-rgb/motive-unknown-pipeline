@@ -45,6 +45,10 @@ jobs:
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
       MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '110' }}
       BACKGROUND_MUSIC_VOLUME: ${{ vars.BACKGROUND_MUSIC_VOLUME || '0.055' }}
+      SHORTS_ENABLED: ${{ vars.SHORTS_ENABLED || '1' }}
+      SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '4' }}
+      SHORTS_MIN_SECONDS: ${{ vars.SHORTS_MIN_SECONDS || '30' }}
+      SHORTS_MAX_SECONDS: ${{ vars.SHORTS_MAX_SECONDS || '75' }}
 
     steps:
       - name: Checkout
@@ -217,3 +221,6 @@ jobs:
             run_work/local_image_test/*.jpg
             run_work/scenes/*.jpg
             run_work/output/thumbnail.jpg
+            run_work/output/short_*.mp4
+            run_work/output/short_*.srt
+            state/current_run/shorts.json
