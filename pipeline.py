@@ -1733,13 +1733,8 @@ asphalt or lane markings.
 
 def visual_test() -> None:
     """Generate a few polished sample frames without LLM, TTS, or YouTube."""
-    if IMAGE_PROVIDER != "cloudflare":
-        raise RuntimeError(
-            f"Unsupported IMAGE_PROVIDER={IMAGE_PROVIDER!r}. "
-            "The visual test currently requires cloudflare."
-        )
-    require_secret("CLOUDFLARE_ACCOUNT_ID")
-    require_secret("CLOUDFLARE_API_TOKEN")
+    if not IMAGE_PROVIDER_ORDER:
+        raise RuntimeError("No image providers are configured for visual_test.")
     test_dir = WORK_DIR / "visual_test"
     test_dir.mkdir(parents=True, exist_ok=True)
     samples = [
@@ -1804,7 +1799,7 @@ blank or non-readable unless the scene explicitly requires a documented inscript
         "visual_test_complete",
         image_providers=IMAGE_PROVIDER_ORDER,
         primary_image_provider=IMAGE_PROVIDER,
-        image_model=CLOUDFLARE_IMAGE_MODEL,
+        image_model=PUTER_IMAGE_MODEL if "puter" in IMAGE_PROVIDER_ORDER else CLOUDFLARE_IMAGE_MODEL,
         samples=outputs,
     )
     print("[VISUAL TEST] Complete. Inspect the generated sample images in the workflow artifact.")
