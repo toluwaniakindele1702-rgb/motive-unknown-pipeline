@@ -32,7 +32,7 @@ function dataUriToBuffer(src) {
 async function downloadImage(src) {
   const data = dataUriToBuffer(src);
   if (data) return data;
-  if (!/^https?:\\/\\//i.test(src)) {
+  if (!/^https?:\/\//i.test(src)) {
     throw new Error("Puter returned an unsupported image source.");
   }
   const response = await fetch(src);
