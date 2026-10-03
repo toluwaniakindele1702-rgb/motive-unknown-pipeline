@@ -63,80 +63,79 @@ def trim_words(value: str, count: int) -> str:
 
 
 def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
-    """Preserve the exact narration beat while staying below CLIP's 77-token limit."""
-    era = extract_section(prompt, "ERA / HISTORICAL CONTEXT")
+    """Keep the narration subject dominant; LCM does not benefit from negative prompts."""
     setting = extract_section(prompt, "SETTING")
-    chars = extract_section(prompt, "CHARACTERS")
     action = extract_section(prompt, "VISIBLE ACTION")
-    props = extract_section(prompt, "PROPS / SYMBOLS")
-    mood = extract_section(prompt, "MOOD")
     beat = extract_section(prompt, "NARRATION BEAT")
     device = extract_section(prompt, "VISUAL DEVICE")
-    shot = extract_section(prompt, "SHOT DIRECTION")
     subject = extract_section(prompt, "MAIN SUBJECT")
     important_object = extract_section(prompt, "IMPORTANT OBJECT / SYMBOL")
     expression = extract_section(prompt, "EXPRESSION / BODY LANGUAGE")
     composition = extract_section(prompt, "COMPOSITION")
+    chars = extract_section(prompt, "CHARACTERS")
 
     is_thumbnail = bool(subject or important_object or expression or composition)
 
     if is_thumbnail:
-        # Put the actual subject first so the short local tokenizer budget is spent
-        # on what the thumbnail is supposed to depict, not generic style language.
-        style = "Polished modern 2D YouTube explainer thumbnail, crisp linework, cel shading, dramatic lighting."
-        negative = "No text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage art, unrelated people, decorative subjects."
+        style = (
+            "Polished modern 2D YouTube explainer thumbnail, crisp linework, "
+            "clean cel shading, dramatic readable lighting."
+        )
         fields = [
-            f"SUBJECT: {trim_words(subject, 18)}." if subject else "",
-            f"OBJECT: {trim_words(important_object, 12)}." if important_object else "",
+            f"MAIN SUBJECT: {trim_words(subject, 20)}." if subject else "",
+            f"IMPORTANT OBJECT: {trim_words(important_object, 12)}." if important_object else "",
             f"EXPRESSION: {trim_words(expression, 10)}." if expression else "",
             f"COMPOSITION: {trim_words(composition, 10)}." if composition else "",
             style,
-            negative,
+            "Clean educational composition with one dominant subject and clear visual hierarchy.",
         ]
     else:
-        # The narration beat is the source of truth. The previous local prompt put
-        # a long style block first, which consumed most of the tokenizer budget and
-        # left the model too little room to understand the actual subject.
-        style = "Polished modern 2D animated explainer frame, crisp linework, cel shading, cinematic lighting."
-        negative = "No text, logos, watermarks, captions, photorealism, 3D CGI, anime, vintage art, unrelated people, decorative subjects."
+        style = (
+            "Polished modern 2D animated-documentary explainer frame, crisp linework, "
+            "clean cel shading, cinematic lighting, realistic materials and clear silhouettes."
+        )
+        people = (
+            f"RELEVANT PEOPLE: {trim_words(chars, 10)}."
+            if chars and chars.lower() not in {"none", "none required"}
+            else "OBJECT-AND-PROCESS COMPOSITION with no human figures."
+        )
         fields = [
-            f"BEAT: {trim_words(beat, 30)}." if beat else "",
-            f"ACTION: {trim_words(action, 14)}." if action else "",
-            f"SUBJECT: {trim_words(subject, 10)}." if subject else "",
+            f"NARRATION FACT: {trim_words(beat, 34)}." if beat else "",
+            f"VISIBLE ACTION: {trim_words(action, 14)}." if action else "",
+            f"MAIN SUBJECT: {trim_words(subject, 10)}." if subject else "",
             f"SETTING: {trim_words(setting, 8)}." if setting else "",
-            f"PROPS: {trim_words(props, 8)}." if props else "",
-            f"DEVICE: {trim_words(device, 7)}." if device else "",
+            f"IMPORTANT PROPS: {trim_words(important_object, 8)}." if important_object else "",
+            f"VISUAL DEVICE: {trim_words(device, 7)}." if device else "",
+            people,
             style,
-            negative,
+            "One dominant focal subject, one supporting clue, factual everyday staging, no decorative filler.",
         ]
 
-    candidate_parts = [fields[0]]
-    for field in fields[1:]:
-        if not field:
-            continue
+    fields = [field for field in fields if field]
+    candidate_parts = []
+    for field in fields:
         trial = " ".join(candidate_parts + [field])
         if len(tokenizer(trial, add_special_tokens=True)["input_ids"]) <= 75:
             candidate_parts.append(field)
 
     candidate = " ".join(candidate_parts)
-
     if len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75:
-        candidate = " ".join(
-            x for x in [
-                style,
-                f"BEAT: {trim_words(beat, 24)}." if beat else "",
-                f"ACTION: {trim_words(action, 12)}." if action else "",
-                negative,
-            ] if x
-        )
+        # Keep the narration fact and action first; style is deliberately expendable.
+        core = [
+            f"NARRATION FACT: {trim_words(beat, 38)}." if beat else "",
+            f"VISIBLE ACTION: {trim_words(action, 16)}." if action else "",
+            f"MAIN SUBJECT: {trim_words(subject, 12)}." if subject else "",
+            f"SETTING: {trim_words(setting, 8)}." if setting else "",
+            "Polished modern 2D educational illustration, clear subject and cause-and-effect.",
+        ]
+        candidate = " ".join(x for x in core if x)
         words = candidate.split()
-        while len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75 and len(words) > 20:
-            words.pop(max(1, len(words) // 2))
+        while len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75 and len(words) > 16:
+            words.pop()
             candidate = " ".join(words)
 
     count = len(tokenizer(candidate, add_special_tokens=True)["input_ids"])
     return candidate, count
-
 
 def generate_from_request(request: dict) -> None:
     model_id = str(request["model_id"])
