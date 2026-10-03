@@ -3503,7 +3503,22 @@ def main(mode: str = "full") -> None:
 
 
     atomic_write_json(SCRIPT_PATH, script)
-    checkpoint("script_complete", scene_count=len(script["scenes"]), words=_script_word_count(script))
+
+    # Saved scripts can bypass write_script() on a resumed GitHub Actions run,
+    # so apply the same retention gate here before any expensive media stages.
+    retention_issues = _retention_quality_issues(script, topic)
+    if retention_issues:
+        print(f"[RETENTION] resumed script needs repair: {retention_issues}")
+        script = _repair_retention_structure(topic, research, story, script, retention_issues)
+        validate_script(script)
+        retention_issues = _retention_quality_issues(script, topic)
+        if retention_issues:
+            raise RuntimeError(
+                "Retention gate failed on resumed script: " + "; ".join(retention_issues)
+            )
+    _save_current_json(CURRENT_SCRIPT_PATH, script)
+    checkpoint("script_complete", scene_count=len(script["scenes"]), words=_script_word_count(script),
+               retention_gate="passed")
 
     # Carry topic metadata into the visual director so modern/science/everyday
     # episodes do not inherit historical defaults.
