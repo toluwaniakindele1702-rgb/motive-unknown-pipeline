@@ -3721,9 +3721,16 @@ def main(mode: str = "full") -> None:
     unknown = [x for x in IMAGE_PROVIDER_ORDER if x not in supported]
     if unknown:
         raise RuntimeError(f"Unsupported image providers: {unknown}")
+    # Cloudflare is an optional image provider. If its daily quota is exhausted
+    # or its credentials are unavailable, the provider-level fallback system must
+    # still allow Hugging Face / Replicate / local generation to continue.
     if "cloudflare" in IMAGE_PROVIDER_ORDER:
-        require_secret("CLOUDFLARE_ACCOUNT_ID")
-        require_secret("CLOUDFLARE_API_TOKEN")
+        if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+            print("[IMAGE PREFLIGHT] Cloudflare credentials unavailable; disabling Cloudflare for this run.")
+            IMAGE_PROVIDER_ORDER[:] = [p for p in IMAGE_PROVIDER_ORDER if p != "cloudflare"]
+
+    if not IMAGE_PROVIDER_ORDER:
+        raise RuntimeError("No usable image providers are configured.")
 
     validate_youtube_credentials()
 
