@@ -7,8 +7,8 @@
  * Black Forest Labs/OpenAI/Replicate API key is required.
  */
 
-const fs = require("fs/promises");
-const path = require("path");
+import fs from "node:fs/promises";
+import path from "node:path";
 
 async function loadPuter() {
   try {
