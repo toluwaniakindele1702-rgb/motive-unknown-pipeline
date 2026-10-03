@@ -101,11 +101,11 @@ PREMIUM_EMPHASIS_PHRASES = ["WHY?", "BUT WHY?", "THE TWIST", "THE REAL REASON", 
 # Polished AI illustration generation.
 IMAGE_PROVIDER_ORDER = [
     x.strip().lower()
-    for x in os.environ.get("IMAGE_PROVIDERS", "cloudflare,huggingface,replicate,local").split(",")
+    for x in os.environ.get("IMAGE_PROVIDERS", "puter,cloudflare,huggingface,replicate,local").split(",")
     if x.strip()
 ]
 if not IMAGE_PROVIDER_ORDER:
-    IMAGE_PROVIDER_ORDER = ["cloudflare", "huggingface", "replicate", "local"]
+    IMAGE_PROVIDER_ORDER = ["puter", "cloudflare", "huggingface", "replicate", "local"]
 IMAGE_PROVIDER = IMAGE_PROVIDER_ORDER[0]
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
@@ -117,6 +117,9 @@ HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN", "").strip()
 HUGGINGFACE_IMAGE_MODEL = os.environ.get("HUGGINGFACE_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell").strip()
 REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "").strip()
 REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-labs/flux-1.1-pro").strip()
+PUTER_AUTH_TOKEN = os.environ.get("PUTER_AUTH_TOKEN", "").strip()
+PUTER_IMAGE_MODEL = os.environ.get("PUTER_IMAGE_MODEL", "black-forest-labs/flux-2-pro").strip()
+PUTER_IMAGE_WORKER = ROOT / "puter_image_worker.mjs"
 IMAGE_W = 1024
 IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "110"))
@@ -2045,6 +2048,78 @@ def _save_provider_image_bytes(out_path: Path, raw: bytes, provider: str) -> Non
         raise ImageProviderError(provider, f"Provider returned invalid image data: {exc}") from exc
 
 
+def _puter_image(prompt: str, out_path: Path, seed: int) -> None:
+    """Generate through Puter.js using the account auth token supplied to CI."""
+    if not PUTER_AUTH_TOKEN:
+        raise ImageProviderError(
+            "puter",
+            "PUTER_AUTH_TOKEN is not configured.",
+            disable_for_run=True,
+        )
+    if not PUTER_IMAGE_WORKER.exists():
+        raise ImageProviderError(
+            "puter",
+            f"Missing Puter image worker: {PUTER_IMAGE_WORKER}",
+            disable_for_run=True,
+        )
+
+    request = {
+        "cmd": "generate",
+        "model": PUTER_IMAGE_MODEL,
+        "prompt": prompt,
+        "output_path": str(out_path.resolve()),
+        "seed": seed,
+        "output_megapixels": "1",
+    }
+    print(f"[IMAGE] Puter {PUTER_IMAGE_MODEL} seed={seed}")
+    try:
+        result = subprocess.run(
+            ["node", str(PUTER_IMAGE_WORKER)],
+            input=json.dumps(request),
+            text=True,
+            capture_output=True,
+            timeout=240,
+            env={**os.environ, "PUTER_AUTH_TOKEN": PUTER_AUTH_TOKEN},
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ImageProviderError(
+            "puter",
+            "Puter image generation timed out after 240 seconds.",
+        ) from exc
+    except OSError as exc:
+        raise ImageProviderError(
+            "puter",
+            f"Could not start Node/Puter worker: {exc}",
+            disable_for_run=True,
+        ) from exc
+
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    if result.returncode != 0:
+        combined = (result.stderr or result.stdout or "").strip()
+        status_match = re.search(r"HTTP (401|402|403|404|408|409|429|500|502|503|504)", combined)
+        status = int(status_match.group(1)) if status_match else None
+        disable = status in {401, 402, 403, 404, 429} or "not configured" in combined.lower()
+        raise ImageProviderError(
+            "puter",
+            f"Puter image generation failed: {combined[:2000]}",
+            disable_for_run=disable,
+        )
+
+    if not out_path.exists() or out_path.stat().st_size < 10000:
+        raise ImageProviderError("puter", "Puter produced no valid image file.")
+
+    # Normalize every provider output to the same JPEG contract used downstream.
+    try:
+        with Image.open(out_path) as image:
+            image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
+    except Exception as exc:
+        raise ImageProviderError("puter", f"Puter returned invalid image data: {exc}") from exc
+
+
 def _huggingface_image(prompt: str, out_path: Path, seed: int) -> None:
     if not HUGGINGFACE_TOKEN:
         raise ImageProviderError("huggingface", "HUGGINGFACE_TOKEN is not configured.", disable_for_run=True)
@@ -2252,7 +2327,9 @@ def _generate_image_with_fallback(prompt: str, out_path: Path, seed: int, refere
             continue
         attempted.append(provider)
         try:
-            if provider == "cloudflare":
+            if provider == "puter":
+                _puter_image(prompt, out_path, seed)
+            elif provider == "cloudflare":
                 _cloudflare_image(prompt, out_path, seed, references)
             elif provider == "huggingface":
                 _huggingface_image(prompt, out_path, seed)
