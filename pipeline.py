@@ -497,8 +497,7 @@ def groq_call(
                     fallback, messages,
                     max_completion_tokens=max_completion_tokens,
                     temperature=temperature,
-                    attempts=2,
-                )
+                    attempts=2,                )
             if attempt >= attempts:
                 break
             wait = _retry_wait(exc, attempt)
@@ -997,8 +996,7 @@ Do not repeat sections or pad with generic suspense.
                 print(f"[STORY] validated: {len(arc)} story sections")
                 return plan
 
-        print(
-            f"[STORY] architect attempt {attempt} returned insufficient structure "
+        print(            f"[STORY] architect attempt {attempt} returned insufficient structure "
             f"({len(arc) if isinstance(arc, list) else 0} sections)"
         )
 
@@ -1485,19 +1483,31 @@ SCENES:
                 print(f"[SCRIPT] repair batch {start + 1}-{end}, attempt {attempt} failed: {exc}")
 
         if not success:
+            # A failed model batch is only salvageable if the existing narration
+            # is already within the strict minimum/maximum bounds. Do not let an
+            # underlong scene slip through and fail much later in final validation.
             salvaged = True
             for scene in batch:
-                words = count_words(str(scene.get("narration", "")))
+                narration_text = str(scene.get("narration", "")).strip()
+                words = count_words(narration_text)
                 if words > max_scene_words:
-                    scene["narration"] = _fit_narration_to_limit(
-                        str(scene["narration"]),
+                    narration_text = _fit_narration_to_limit(
+                        narration_text,
                         max_scene_words,
                     )
-                    salvaged = salvaged and count_words(scene["narration"]) >= 45
+                    scene["narration"] = narration_text
+                    words = count_words(narration_text)
+                if words < 45 or words > max_scene_words:
+                    salvaged = False
             if not salvaged:
-                raise RuntimeError(f"Could not repair narration batch {start + 1}-{end} after 3 attempts.")
-            print(f"[SCRIPT] salvaged overlong narration in batch {start + 1}-{end} by trimming to safe limits.")
-
+                raise RuntimeError(
+                    f"Could not repair narration batch {start + 1}-{end} after 3 attempts; "
+                    "existing narration is outside safe bounds."
+                )
+            print(
+                f"[SCRIPT] salvaged repair batch {start + 1}-{end} using narration "
+                "already within safe bounds."
+            )
         # Persist progress so a fresh scheduled/manual run resumes here.
         atomic_write_json(SCRIPT_PATH, repaired)
         _save_current_json(CURRENT_SCRIPT_PATH, repaired)
@@ -1997,8 +2007,7 @@ def _decode_style_reference() -> Path:
         raise RuntimeError(
             "Missing embedded visual style reference at assets/visual_style_reference.jpg.b64"
         )
-    try:
-        data = STYLE_REFERENCE_B64.read_bytes()
+    try:        data = STYLE_REFERENCE_B64.read_bytes()
     except Exception as exc:
         raise RuntimeError("Embedded visual style reference could not be read.") from exc
     if len(data) < 1000 or data[:2] != b"\xff\xd8":
@@ -2497,8 +2506,7 @@ def make_visual_prompt(
     props = ", ".join(raw_props[:4])
 
     # People are optional visual subjects, not a default. The old fallback of
-    # "historical people" was causing science/everyday-life beats to become
-    # unrelated character portraits.
+    # "historical people" was causing science/everyday-life beats to become    # unrelated character portraits.
     people_words = (
         "person", "people", "human", "cook", "chef", "scientist", "researcher",
         "farmer", "worker", "doctor", "child", "man", "woman", "family", "crowd",
@@ -2998,7 +3006,6 @@ modern infrastructure, modern clothing, cars, asphalt lane markings, or other an
         y += h + 24
 
     # Keep the thumbnail focused on one mystery; the title supplies context.
-
     image.save(final, format="JPEG", quality=94, optimize=True)
     if not final.exists() or final.stat().st_size < 10000:
         raise RuntimeError(f"Thumbnail render did not produce a valid file: {final}")
@@ -3497,8 +3504,7 @@ def _render_short(video_path: Path, srt_path: Path, start_seconds: float, durati
 def _upload_short(video_path: Path, title: str, description: str, tags: list[str], short_key: str) -> str:
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.discovery import build    from googleapiclient.http import MediaFileUpload
 
     saved = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
     existing = saved.get("shorts", {}).get(short_key) if isinstance(saved, dict) else None
