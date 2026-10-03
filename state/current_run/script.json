@@ -4,260 +4,359 @@
   "scenes": [
     {
       "id": 1,
-      "narration": "A toaster pops up a golden slice, the green light blinks off, and the bread is already blackened. How can a machine that’s supposed to stop heating still scorch your toast?",
-      "setting": "Kitchen counter, morning light",
+      "narration": "Have you ever pulled a golden slice from the toaster, only to see a blackened edge the moment the green light goes off? The timer says “done,” but the toast is already burnt. What’s really happening inside that tiny kitchen box?",
+      "setting": "Kitchen countertop, modern toaster on a wooden board",
       "characters": [
-        "narrator (voice over)"
+        "narrator (voiceover)"
       ],
-      "action": "Toaster springs open, slice lands on plate, camera zooms on charred surface",
+      "action": "Camera zooms on the toaster’s pop‑up slot as a slice springs up, then pans to the charred edge",
       "props": [
         "toaster",
         "slice of bread",
-        "plate"
+        "timer light"
       ],
       "mood": "curious"
     },
     {
       "id": 2,
-      "narration": "Most of us assume the timer somehow “sees” the colour of the bread and cuts power at the perfect shade. In reality, the timer is just a simple switch that counts seconds.",
-      "setting": "Close‑up of toaster interior",
+      "narration": "We’ll discover why the timer’s green light isn’t a promise of perfect toast, and how a few seconds of invisible heat can turn a perfect slice into a disaster.",
+      "setting": "Close‑up of the timer LED blinking off",
       "characters": [
         "narrator"
       ],
-      "action": "Animated diagram shows a bimetallic strip bending with heat",
+      "action": "LED flickers off, then a faint glow remains on the heating element",
+      "props": [
+        "LED",
+        "heating element"
+      ],
+      "mood": "intrigued"
+    },
+    {
+      "id": 3,
+      "narration": "First, let’s bust a common myth: most of us think the toaster somehow “sees” the colour of the bread. In reality, the timer is just a simple switch that counts seconds.",
+      "setting": "Animated diagram of a toaster’s internal circuit",
+      "characters": [
+        "mechanical timer (illustrated)"
+      ],
+      "action": "A line draws from the timer to a bimetallic strip that bends with heat",
       "props": [
         "bimetallic strip",
         "circuit diagram"
       ],
-      "mood": "informative"
-    },
-    {
-      "id": 3,
-      "narration": "Inside, a nichrome wire glows red‑hot, reaching temperatures over 1,400 °C. When the circuit opens, the wire doesn’t freeze instantly – it stays above 200 °C for a couple of seconds.",
-      "setting": "X‑ray view of heating element",
-      "characters": [],
-      "action": "Wire brightens, then slowly dims while temperature numbers drop",
-      "props": [
-        "nichrome wire",
-        "temperature readout"
-      ],
-      "mood": "scientific"
-    },
-    {
-      "id": 4,
-      "narration": "That lingering heat radiates infrared energy straight onto the bread. The slice continues to absorb energy even after the timer has said “done”.",
-      "setting": "Side view of toast in slot",
-      "characters": [],
-      "action": "Infrared waves illustrated as red arrows hitting the bread",
-      "props": [
-        "infrared arrows",
-        "toast"
-      ],
-      "mood": "visual"
-    },
-    {
-      "id": 5,
-      "narration": "The Maillard reaction, which gives toast its golden crust, peaks between 140 °C and 180 °C. Push the surface past 200 °C and sugars caramelize, then pyrolyze, turning black.",
-      "setting": "Molecular animation",
-      "characters": [],
-      "action": "Molecules collide, change colour from light brown to black",
-      "props": [
-        "molecule models",
-        "temperature gauge"
-      ],
       "mood": "educational"
     },
     {
-      "id": 6,
-      "narration": "So the element’s residual heat can push the bread from a perfect brown into a burnt state in just one or two seconds.",
-      "setting": "Timer countdown overlay",
-      "characters": [],
-      "action": "Timer hits zero, then a second‑hand ticks forward while toast darkens",
+      "id": 4,
+      "narration": "Older toasters use a bimetallic strip – two metals glued together that expand at different rates. As the element heats, the strip bends, eventually breaking the circuit and cutting power.",
+      "setting": "Close‑up of a bimetallic strip inside a cutaway toaster",
+      "characters": [
+        "strip"
+      ],
+      "action": "Strip visibly bends and snaps the circuit line",
       "props": [
-        "timer display",
-        "toast"
+        "bimetallic strip",
+        "copper wires"
+      ],
+      "mood": "technical"
+    },
+    {
+      "id": 5,
+      "narration": "Newer models often replace the strip with a capacitor‑resistor timer. The capacitor charges while the element runs, then discharges to signal “off.” Both methods still only measure time, not colour.",
+      "setting": "Side‑by‑side illustration of strip vs. capacitor timer",
+      "characters": [
+        "strip",
+        "capacitor"
+      ],
+      "action": "Arrows show charge flow into capacitor, then drop to zero",
+      "props": [
+        "capacitor",
+        "resistor"
+      ],
+      "mood": "comparative"
+    },
+    {
+      "id": 6,
+      "narration": "Now, meet the real star of the show: the heating element. It’s a nichrome wire that can glow white at roughly 1 400 °C when current flows.",
+      "setting": "Macro shot of glowing nichrome wire inside a toaster slot",
+      "characters": [
+        "nichrome wire"
+      ],
+      "action": "Wire brightens, then the camera follows a thermal camera overlay showing temperature",
+      "props": [
+        "nichrome wire",
+        "thermal imaging overlay"
       ],
       "mood": "dramatic"
     },
     {
       "id": 7,
-      "narration": "But there’s a twist: the bimetallic strip’s bend speed depends on the kitchen’s ambient temperature. A cold room makes the strip slower to flex, extending heating time.",
-      "setting": "Thermometer on kitchen wall",
-      "characters": [],
-      "action": "Thermometer reads 10 °C, strip animation slows down",
+      "narration": "When the circuit opens, the wire doesn’t instantly freeze. It cools at about ten degrees per second, staying above 200 °C for one to two seconds – hot enough to keep browning the bread.",
+      "setting": "Graph animation of temperature vs. time for the element",
+      "characters": [
+        "temperature curve"
+      ],
+      "action": "Curve drops slowly, lingering above the 200 °C line",
+      "props": [
+        "graph",
+        "temperature markers"
+      ],
+      "mood": "informative"
+    },
+    {
+      "id": 8,
+      "narration": "That lingering heat is the first clue. While the timer says “done,” the element is still radiating infrared energy straight onto the slice.",
+      "setting": "IR video of a slice inside a slot as power cuts",
+      "characters": [
+        "slice of bread"
+      ],
+      "action": "Heat map shows bright red still bathing the slice for 1.5 seconds",
+      "props": [
+        "IR camera feed",
+        "bread slice"
+      ],
+      "mood": "visual"
+    },
+    {
+      "id": 9,
+      "narration": "Let’s talk chemistry. The Maillard reaction – the browning we love – peaks between 140 °C and 180 °C. Below that, the slice stays pale; above it, sugars caramelize, then pyrolyze, turning black.",
+      "setting": "Animated molecular scene of amino acids and sugars reacting",
+      "characters": [
+        "molecules"
+      ],
+      "action": "Molecules collide, glow gold, then turn dark as temperature rises",
+      "props": [
+        "molecular models",
+        "temperature gauge"
+      ],
+      "mood": "scientific"
+    },
+    {
+      "id": 10,
+      "narration": "If the element’s residual heat pushes the bread’s surface past 200 °C, the Maillard window closes and burn sets in – even though the timer already stopped.",
+      "setting": "Side‑by‑side photos: perfect golden toast vs. burnt edge",
+      "characters": [
+        "toast slices"
+      ],
+      "action": "Split screen highlights temperature zones on each slice",
+      "props": [
+        "photo comparison",
+        "temperature overlay"
+      ],
+      "mood": "contrast"
+    },
+    {
+      "id": 11,
+      "narration": "Midpoint twist: ambient kitchen temperature changes how fast the bimetallic strip bends. In a cold kitchen, the strip stays cooler longer, delaying the shut‑off and adding extra heating time.",
+      "setting": "Thermometer reading a chilly kitchen, then a warm one",
+      "characters": [
+        "thermometer"
+      ],
+      "action": "Needle moves from 10 °C to 25 °C, then a timer bar stretches longer in the cold scene",
       "props": [
         "thermometer",
-        "bimetallic strip"
+        "timer bar"
       ],
       "mood": "surprising"
     },
     {
-      "id": 8,
-      "narration": "In a warm kitchen, the strip heats faster, the circuit opens sooner, and the toast stays lighter. The same toaster, different room temperature, different result.",
-      "setting": "Same toaster, sunny kitchen",
-      "characters": [],
-      "action": "Thermometer reads 25 °C, strip snaps quickly, toast emerges golden",
-      "props": [
-        "thermometer",
-        "toaster"
+      "id": 12,
+      "narration": "Conversely, a hot kitchen warms the strip quicker, so the same setting can produce a lighter slice. The timer is blind to the room’s temperature, yet it matters a lot.",
+      "setting": "Two identical toasters side‑by‑side, one in a heated room, one in a cold room",
+      "characters": [
+        "toaster A",
+        "toaster B"
       ],
-      "mood": "contrasting"
+      "action": "Both pop up; A’s toast is darker than B’s despite identical settings",
+      "props": [
+        "two toasters",
+        "room heaters"
+      ],
+      "mood": "comparative"
     },
     {
-      "id": 9,
-      "narration": "Many modern toasters use a capacitor‑based timer instead of a pure bimetal. The capacitor stores charge and releases it until the voltage drops below a set point, adding a tiny overshoot.",
-      "setting": "Circuit board close‑up",
-      "characters": [],
-      "action": "Capacitor charges, then discharges slowly as voltage line falls",
+      "id": 13,
+      "narration": "Now, the capacitor‑based timer adds another layer. When the circuit opens, the capacitor still holds voltage, letting the element stay on for a fraction of a second longer.",
+      "setting": "Circuit schematic highlighting capacitor discharge",
+      "characters": [
+        "capacitor"
+      ],
+      "action": "Voltage line slowly slopes down after the switch flips",
       "props": [
         "capacitor",
-        "resistor",
         "voltage graph"
       ],
       "mood": "technical"
     },
     {
-      "id": 10,
-      "narration": "That overshoot means the element stays on for a fraction of a second longer than the timer display suggests, feeding extra heat to the bread.",
-      "setting": "Overlay of timer vs actual power curve",
-      "characters": [],
-      "action": "Power line continues briefly after timer hits zero",
-      "props": [
-        "power waveform",
-        "timer display"
-      ],
-      "mood": "clarifying"
-    },
-    {
-      "id": 11,
-      "narration": "Bread isn’t a uniform slab either. High‑sugar varieties, thin slices, or low‑moisture loaves reach the burn temperature faster than dense, moist pieces.",
-      "setting": "Three slices side by side",
-      "characters": [],
-      "action": "Heat map shows thin slice heating quickest, turning black first",
-      "props": [
-        "slice of white bread",
-        "slice of rye",
-        "slice of brioche"
-      ],
-      "mood": "comparative"
-    },
-    {
-      "id": 12,
-      "narration": "That’s why the same setting can perfectly brown a thick whole‑grain slice but scorch a thin white slice.",
-      "setting": "Toaster with two settings",
-      "characters": [],
-      "action": "Thin slice emerges black, thick slice emerges golden",
-      "props": [
-        "toaster",
-        "two bread slices"
-      ],
-      "mood": "insightful"
-    },
-    {
-      "id": 13,
-      "narration": "Now watch what happens on the second run. The toaster’s walls and the element are already warm from the first cycle.",
-      "setting": "Toaster interior after first toast",
-      "characters": [],
-      "action": "Heat glow remains on element, walls radiate warm amber",
-      "props": [
-        "heated element",
-        "warm walls"
-      ],
-      "mood": "anticipatory"
-    },
-    {
       "id": 14,
-      "narration": "A second slice slides in, receives extra radiant heat from the hot walls, and often burns even on a lower setting.",
-      "setting": "Second slice entering slot",
-      "characters": [],
-      "action": "Slice enters, temperature line spikes higher than first run",
-      "props": [
-        "temperature graph",
-        "second slice"
+      "narration": "That “overshoot” may seem tiny, but at 1 400 °C even a tenth of a second delivers enough extra IR to tip the bread into the burn zone.",
+      "setting": "Close‑up of a timer button being released, with a flash of heat overlay",
+      "characters": [
+        "timer button"
       ],
-      "mood": "revealing"
+      "action": "A brief flare appears as the button releases",
+      "props": [
+        "timer button",
+        "heat flare"
+      ],
+      "mood": "impactful"
     },
     {
       "id": 15,
-      "narration": "Higher settings don’t increase power; they simply keep the element energized longer. The element’s wattage stays roughly constant, but the exposure time grows.",
-      "setting": "Dial turning from 3 to 7",
-      "characters": [],
-      "action": "Dial animation, timer lengthens, power line stays same height",
+      "narration": "Bread isn’t uniform either. High‑sugar varieties, thin slices, or low‑moisture pieces heat up faster on the surface, reaching the burn threshold earlier than a thick, moist slice.",
+      "setting": "Three slices on a tray: white bagel, rye, and thick sourdough",
+      "characters": [
+        "slice A",
+        "slice B",
+        "slice C"
+      ],
+      "action": "Thermal camera shows slice A hitting 210 °C first, while slice C lags",
       "props": [
-        "toaster dial",
-        "power meter"
+        "thermal camera",
+        "different breads"
+      ],
+      "mood": "demonstrative"
+    },
+    {
+      "id": 16,
+      "narration": "That’s why the same timer setting can scorch a thin English muffin but barely brown a dense whole‑grain loaf.",
+      "setting": "Side‑by‑side of the three slices after one cycle",
+      "characters": [
+        "toaster"
+      ],
+      "action": "Muffin is black, rye is golden, sourdough is light brown",
+      "props": [
+        "toaster",
+        "bread slices"
       ],
       "mood": "clarifying"
     },
     {
-      "id": 16,
-      "narration": "Smart toasters try to fix the problem with IR sensors or thermistors that monitor slot temperature. Yet the element’s thermal mass still creates a brief lag after the sensor tells it to stop.",
-      "setting": "Modern smart toaster UI",
-      "characters": [],
-      "action": "Sensor reads temperature, sends stop signal, element glows out slowly",
+      "id": 17,
+      "narration": "Ever noticed the second slice often ends up darker? The toaster’s walls and the element stay warm from the first run, adding a baseline temperature before the next cycle even starts.",
+      "setting": "Two‑cycle experiment: first slice, then immediate second slice",
+      "characters": [
+        "first slice",
+        "second slice"
+      ],
+      "action": "First slice pops, then second slice pops with a darker hue",
       "props": [
-        "IR sensor",
-        "smart display"
+        "toaster",
+        "timer"
+      ],
+      "mood": "observational"
+    },
+    {
+      "id": 18,
+      "narration": "That residual heat means the element starts each new cycle already above ambient, shortening the time needed to reach the burn threshold.",
+      "setting": "Thermal graph showing element temperature before and after first cycle",
+      "characters": [
+        "temperature line"
+      ],
+      "action": "Line starts at 80 °C after first run, versus 20 °C when cold",
+      "props": [
+        "graph",
+        "temperature markers"
+      ],
+      "mood": "analytical"
+    },
+    {
+      "id": 19,
+      "narration": "Higher settings don’t crank up power; they simply keep the element energized longer. The element’s wattage stays constant, but the total heat dose rises with time.",
+      "setting": "Animated dial moving from low to high, with a timer bar extending",
+      "characters": [
+        "dial"
+      ],
+      "action": "Bar lengthens as dial moves, while wattage number stays fixed",
+      "props": [
+        "dial",
+        "timer bar",
+        "wattage readout"
+      ],
+      "mood": "clarifying"
+    },
+    {
+      "id": 20,
+      "narration": "Smart toasters try to fix the problem with IR sensors or thermistors, but they still battle the same thermal inertia of the nichrome wire. The element’s mass stores heat that can’t be erased instantly.",
+      "setting": "Modern smart toaster with a tiny sensor panel",
+      "characters": [
+        "sensor",
+        "element"
+      ],
+      "action": "Sensor blinks, element glows, then a small lag remains after power cut",
+      "props": [
+        "sensor",
+        "nichrome wire"
       ],
       "mood": "forward‑looking"
     },
     {
-      "id": 17,
-      "narration": "Scientists have filmed the process with infrared cameras. The video shows the element’s heat curve flattening, while the bread’s surface temperature continues climbing for a second.",
-      "setting": "IR video split‑screen",
-      "characters": [],
-      "action": "Red heat map over element, blue‑red gradient over toast rising after timer zero",
-      "props": [
-        "infrared footage",
-        "temperature plot"
-      ],
-      "mood": "visual"
-    },
-    {
-      "id": 18,
-      "narration": "So the mystery isn’t a broken timer – it’s thermal inertia. The element’s mass stores energy, and that energy keeps cooking the toast after the switch flips.",
-      "setting": "Animated energy storage diagram",
-      "characters": [],
-      "action": "Energy bars drain slowly from element to bread",
-      "props": [
-        "energy bar",
-        "element",
-        "toast"
-      ],
-      "mood": "aha"
-    },
-    {
-      "id": 19,
-      "narration": "Practical tip: pull the toast out the instant it pops, or use the “hold‑open” function that keeps the element disconnected while the slice cools.",
-      "setting": "Hand reaching for toast",
+      "id": 21,
+      "narration": "So what can you do right now? Pull the toast out the instant it pops, or use the “hold‑open” lever that keeps the element disconnected while the slice sits on the rack.",
+      "setting": "Hand reaching into toaster, grabbing a slice as it pops",
       "characters": [
-        "hand"
+        "hand",
+        "slice"
       ],
-      "action": "Hand lifts toast, presses hold‑open lever",
+      "action": "Slice is lifted out, then placed on a plate; lever is shown engaging",
       "props": [
-        "toast",
+        "hand",
+        "plate",
         "hold‑open lever"
       ],
-      "mood": "helpful"
+      "mood": "practical"
     },
     {
-      "id": 20,
-      "narration": "Next time the green light goes dark, remember the element is still hot, still radiant, still cooking. Knowing that, you’ll never be surprised by a charred slice again.",
-      "setting": "Final wide shot of kitchen, toast on plate",
-      "characters": [],
-      "action": "Camera pulls back, toast sits perfectly golden, timer display fades out",
-      "props": [
-        "golden toast",
-        "timer"
+      "id": 22,
+      "narration": "If you love a crisp crust, try a brief extra broil in a separate oven where you control the heat directly. That way the toaster’s residual heat never surprises you.",
+      "setting": "Oven broiler with a timer set to 30 seconds",
+      "characters": [
+        "oven"
       ],
-      "mood": "satisfying"
+      "action": "Slice slides onto a broiler rack, timer counts down",
+      "props": [
+        "oven",
+        "timer",
+        "broiler rack"
+      ],
+      "mood": "advisory"
+    },
+    {
+      "id": 23,
+      "narration": "Remember: the timer’s green light is just a signal that the circuit opened. The element’s thermal mass carries on cooking for a heartbeat, and that heartbeat can be the difference between perfect toast and a charcoal stick.",
+      "setting": "Close‑up of the green LED turning off, then a faint ember glow on the element",
+      "characters": [
+        "LED",
+        "element"
+      ],
+      "action": "LED fades, element glows faintly for a moment",
+      "props": [
+        "LED",
+        "nichrome wire"
+      ],
+      "mood": "concluding"
+    },
+    {
+      "id": 24,
+      "narration": "Next time you hear that satisfying “pop,” don’t wait. Grab the slice, enjoy the golden‑brown, and you’ll have cracked the toaster’s hidden secret.",
+      "setting": "Breakfast table, slice being buttered",
+      "characters": [
+        "person",
+        "slice"
+      ],
+      "action": "Person spreads butter, smiles at camera",
+      "props": [
+        "butter knife",
+        "plate"
+      ],
+      "mood": "triumphant"
     }
   ],
   "thumbnail": {
-    "headline": "Burned Toast?",
-    "subject": "charred slice of bread",
-    "supporting_prop": "glowing toaster element",
-    "emotion": "shocked face of a hand holding the toast",
+    "headline": "Burning Toast?",
+    "subject": "charred slice popping from toaster",
+    "supporting_prop": "glowing timer LED",
+    "emotion": "shocked",
     "composition": "central_subject",
     "preferred_variant": 1
   }
