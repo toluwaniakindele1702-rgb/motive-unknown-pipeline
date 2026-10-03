@@ -4,7 +4,7 @@
   "scenes": [
     {
       "id": 1,
-      "narration": "Have you ever pulled a golden slice from the toaster, only to see a blackened edge the moment the green light goes off? The timer says “done,” but the toast is already burnt. What’s really happening inside that tiny kitchen box?",
+      "narration": "Have you ever pulled a golden slice from the toaster, only to see a blackened edge the moment the green light goes off? The timer says “done,” but the toast is already burnt. Inside that tiny kitchen box the heating element is still pouring energy into the bread, and the Maillard reaction has already moved past the sweet spot into caramelization and then pyrolysis. In the next seconds the surface darkens further, turning what should be a perfect breakfast into a surprise char. This paradox sets up our investigation into why the timer isn’t the whole story.",
       "setting": "Kitchen countertop, modern toaster on a wooden board",
       "characters": [
         "narrator (voiceover)"
@@ -19,7 +19,7 @@
     },
     {
       "id": 2,
-      "narration": "We’ll discover why the timer’s green light isn’t a promise of perfect toast, and how a few seconds of invisible heat can turn a perfect slice into a disaster.",
+      "narration": "We’ll discover why the timer’s green light isn’t a promise of perfect toast, and how a few seconds of invisible heat can turn a perfect slice into a disaster. The timer is simply a time‑counting switch; it doesn’t monitor color or temperature of the bread. When the LED blinks off, the element is still hot enough to keep radiating heat, extending the browning window. That lingering energy pushes the surface past the Maillard range, so the slice continues to brown—or burn—after the signal stops. Understanding this hidden heat explains the mystery.",
       "setting": "Close‑up of the timer LED blinking off",
       "characters": [
         "narrator"
@@ -33,7 +33,7 @@
     },
     {
       "id": 3,
-      "narration": "First, let’s bust a common myth: most of us think the toaster somehow “sees” the colour of the bread. In reality, the timer is just a simple switch that counts seconds.",
+      "narration": "First, let’s bust a common myth: most of us think the toaster somehow “sees” the colour of the bread. In reality, the timer is just a simple switch that counts seconds. It has no optical sensor, no feedback loop, and no way to know when the crust reaches the ideal hue. The device merely starts a countdown when you press the lever, and when the preset time expires it flips a circuit. That mechanical or electronic action is blind to the actual state of the toast, which is why timing alone can mislead.",
       "setting": "Animated diagram of a toaster’s internal circuit",
       "characters": [
         "mechanical timer (illustrated)"
@@ -47,7 +47,7 @@
     },
     {
       "id": 4,
-      "narration": "Older toasters use a bimetallic strip – two metals glued together that expand at different rates. As the element heats, the strip bends, eventually breaking the circuit and cutting power.",
+      "narration": "Older toasters use a bimetallic strip – two metals glued together that expand at different rates. As the element heats, the strip bends, eventually breaking the circuit and cutting power. The strip’s curvature depends on temperature, not on the bread’s color, so it triggers when the element has reached a certain heat level. Because the strip reacts to the element’s temperature, not the toast’s surface, the power can be cut while the bread is still in the critical Maillard window, allowing further browning after the click.",
       "setting": "Close‑up of a bimetallic strip inside a cutaway toaster",
       "characters": [
         "strip"
@@ -61,7 +61,7 @@
     },
     {
       "id": 5,
-      "narration": "Newer models often replace the strip with a capacitor‑resistor timer. The capacitor charges while the element runs, then discharges to signal “off.” Both methods still only measure time, not colour.",
+      "narration": "Newer models often replace the strip with a capacitor‑resistor timer. The capacitor charges while the element runs, then discharges to signal “off.” Both methods still only measure time, not colour. In a capacitor‑based circuit the element stays on until the stored voltage falls below a threshold, which can add a brief overshoot of heating. This extra pulse, though milliseconds long, is enough to push a thin or sugary slice past the optimal browning point, resulting in a darker, sometimes burnt, crust despite the timer indicating “done.”",
       "setting": "Side‑by‑side illustration of strip vs. capacitor timer",
       "characters": [
         "strip",
@@ -76,7 +76,7 @@
     },
     {
       "id": 6,
-      "narration": "Now, meet the real star of the show: the heating element. It’s a nichrome wire that can glow white at roughly 1 400 °C when current flows.",
+      "narration": "Now, meet the real star of the show: the heating element. It’s a nichrome wire that can glow white at roughly 1 400 °C when current flows. At that temperature the wire radiates intense infrared energy, and even after the circuit opens it retains heat above 200 °C for a second or two. That residual heat continues to transfer to the bread, extending the Maillard reaction beyond its sweet spot. Because the element cools relatively slowly, a slice can go from golden to black in the moments after the timer clicks off.",
       "setting": "Macro shot of glowing nichrome wire inside a toaster slot",
       "characters": [
         "nichrome wire"
@@ -90,7 +90,7 @@
     },
     {
       "id": 7,
-      "narration": "When the circuit opens, the wire doesn’t instantly freeze. It cools at about ten degrees per second, staying above 200 °C for one to two seconds – hot enough to keep browning the bread.",
+      "narration": "When the circuit finally opens, the heating element doesn’t snap to room temperature. Its nichrome wire cools at roughly ten degrees per second, so for the next one to two seconds it hovers above 200 °C – still hot enough to keep the surface of the bread browning. That lingering heat explains why a slice can go from perfectly golden to slightly darker even after the timer has shut off, because the element’s thermal inertia continues to deliver energy.",
       "setting": "Graph animation of temperature vs. time for the element",
       "characters": [
         "temperature curve"
@@ -104,7 +104,7 @@
     },
     {
       "id": 8,
-      "narration": "That lingering heat is the first clue. While the timer says “done,” the element is still radiating infrared energy straight onto the slice.",
+      "narration": "That lingering heat is the first clue. As soon as the timer cuts power, the element keeps radiating infrared energy directly onto the slice for about a second and a half. An infrared camera shows a bright red heat map still bathing the bread, proving that the “done” signal only stops the current, not the heat already stored in the element. This residual radiation is enough to push the crust further into the Maillard zone and even into caramelization if the slice stays long enough.",
       "setting": "IR video of a slice inside a slot as power cuts",
       "characters": [
         "slice of bread"
@@ -118,7 +118,7 @@
     },
     {
       "id": 9,
-      "narration": "Let’s talk chemistry. The Maillard reaction – the browning we love – peaks between 140 °C and 180 °C. Below that, the slice stays pale; above it, sugars caramelize, then pyrolyze, turning black.",
+      "narration": "Let’s talk chemistry. The Maillard reaction – the complex browning we love – hits its peak between roughly 140 °C and 180 °C. Below that range the slice stays pale, while above it sugars first caramelize and then, past about 200 °C, pyrolyze, turning the surface black. The animation of amino acids and sugars colliding illustrates how temperature governs whether we get a golden crust or a burnt one, linking the physical heat curve to the molecular changes we see.",
       "setting": "Animated molecular scene of amino acids and sugars reacting",
       "characters": [
         "molecules"
@@ -132,7 +132,7 @@
     },
     {
       "id": 10,
-      "narration": "If the element’s residual heat pushes the bread’s surface past 200 °C, the Maillard window closes and burn sets in – even though the timer already stopped.",
+      "narration": "If the element’s residual heat pushes the bread’s surface past the 200 °C mark, the sweet spot for the Maillard reaction closes and burn sets in, even though the timer has already stopped. The side‑by‑side photos highlight this: the left slice stays within the golden zone, while the right slice shows a charred edge where the temperature overshoot occurred. The overlay makes clear that a few extra seconds of heat can move the crust from delicious to ruined.",
       "setting": "Side‑by‑side photos: perfect golden toast vs. burnt edge",
       "characters": [
         "toast slices"
@@ -146,7 +146,7 @@
     },
     {
       "id": 11,
-      "narration": "Midpoint twist: ambient kitchen temperature changes how fast the bimetallic strip bends. In a cold kitchen, the strip stays cooler longer, delaying the shut‑off and adding extra heating time.",
+      "narration": "Midpoint twist: ambient kitchen temperature changes how fast the bimetallic strip bends. In a cold kitchen the strip stays cooler longer, delaying the shut‑off and adding extra heating time, which the animation shows by stretching the timer bar. A thermometer reading 10 °C versus 25 °C demonstrates that the same toaster setting can produce noticeably darker toast in a chilly room because the thermal‑time switch reacts more slowly to the lower ambient heat.",
       "setting": "Thermometer reading a chilly kitchen, then a warm one",
       "characters": [
         "thermometer"
@@ -160,7 +160,7 @@
     },
     {
       "id": 12,
-      "narration": "Conversely, a hot kitchen warms the strip quicker, so the same setting can produce a lighter slice. The timer is blind to the room’s temperature, yet it matters a lot.",
+      "narration": "Conversely, a hot kitchen warms the bimetallic strip more quickly, so the same setting can produce a lighter slice. The two‑toaster side‑by‑side comparison shows one toaster in a heated room delivering a paler toast than the one in a cold room, even though both are set identically. This underscores that the timer is blind to room temperature, yet that external factor dramatically influences how long the element stays on and ultimately how brown the toast becomes.",
       "setting": "Two identical toasters side‑by‑side, one in a heated room, one in a cold room",
       "characters": [
         "toaster A",
@@ -175,7 +175,7 @@
     },
     {
       "id": 13,
-      "narration": "Now, the capacitor‑based timer adds another layer. When the circuit opens, the capacitor still holds voltage, letting the element stay on for a fraction of a second longer.",
+      "narration": "Now, the capacitor‑based timer adds another layer of nuance. When the power switch opens, the capacitor—essentially a tiny reservoir of charge—doesn’t dump its energy instantly. Instead, it discharges over a few hundred milliseconds, keeping the heating element energized just a fraction of a second longer than the mechanical switch would allow. That brief continuation means the element continues radiating infrared energy while the bread is already at the brink of browning, setting the stage for a subtle but measurable overshoot in toast color.",
       "setting": "Circuit schematic highlighting capacitor discharge",
       "characters": [
         "capacitor"
@@ -189,7 +189,7 @@
     },
     {
       "id": 14,
-      "narration": "That “overshoot” may seem tiny, but at 1 400 °C even a tenth of a second delivers enough extra IR to tip the bread into the burn zone.",
+      "narration": "That “overshoot” may seem tiny, but at 1 400 °C even a tenth of a second delivers enough extra IR to tip the bread into the burn zone. The element’s surface emits a massive flux of infrared photons; in a hundred milliseconds it can add several joules of heat to the slice’s surface. Those extra joules push the temperature past the Maillard sweet spot, accelerating caramelization and quickly moving into pyrolysis, which is why a slice that looked perfect a moment ago can end up with a blackened crust in an instant.",
       "setting": "Close‑up of a timer button being released, with a flash of heat overlay",
       "characters": [
         "timer button"
@@ -203,7 +203,7 @@
     },
     {
       "id": 15,
-      "narration": "Bread isn’t uniform either. High‑sugar varieties, thin slices, or low‑moisture pieces heat up faster on the surface, reaching the burn threshold earlier than a thick, moist slice.",
+      "narration": "Bread isn’t uniform either. High‑sugar varieties, thin slices, or low‑moisture pieces heat up faster on the surface, reaching the burn threshold earlier than a thick, moist slice. Sugar lowers the activation energy for browning, so a sugary bagel will hit 210 °C at its crust in less than a second, while a dense sourdough with higher water content lags behind. Thermal imaging in the demo shows the thin, sugary slice spiking well above the Maillard window while the thicker loaf still climbs toward the optimal browning range.",
       "setting": "Three slices on a tray: white bagel, rye, and thick sourdough",
       "characters": [
         "slice A",
@@ -219,7 +219,7 @@
     },
     {
       "id": 16,
-      "narration": "That’s why the same timer setting can scorch a thin English muffin but barely brown a dense whole‑grain loaf.",
+      "narration": "That’s why the same timer setting can scorch a thin English muffin but barely brown a dense whole‑grain loaf. The muffin’s low mass and high surface sugar mean its crust reaches pyrolysis temperature almost as soon as the element turns off, while the whole‑grain loaf’s interior acts as a heat sink, keeping the surface in the golden‑brown window longer. This disparity explains the everyday frustration of inconsistent toast when you use a single setting for different breads.",
       "setting": "Side‑by‑side of the three slices after one cycle",
       "characters": [
         "toaster"
@@ -233,7 +233,7 @@
     },
     {
       "id": 17,
-      "narration": "Ever noticed the second slice often ends up darker? The toaster’s walls and the element stay warm from the first run, adding a baseline temperature before the next cycle even starts.",
+      "narration": "Ever noticed the second slice often ends up darker? The toaster’s walls and the heating element stay warm from the first run, adding a baseline temperature before the next cycle even starts. That residual heat means the second slice begins its journey already a few tens of degrees hotter, so it reaches the critical burn threshold sooner than the first slice did. It’s a classic case of thermal inertia carrying over between cycles, turning a seemingly identical toast cycle into a subtly hotter one.",
       "setting": "Two‑cycle experiment: first slice, then immediate second slice",
       "characters": [
         "first slice",
@@ -248,7 +248,7 @@
     },
     {
       "id": 18,
-      "narration": "That residual heat means the element starts each new cycle already above ambient, shortening the time needed to reach the burn threshold.",
+      "narration": "That residual heat means the element starts each new cycle already above ambient, shortening the time needed to reach the burn threshold. A thermal graph shows the element lingering at about 80 °C after one toast, compared with the 20 °C baseline of a cold toaster. Because the element needs less time to climb back to the 140–180 °C Maillard window, the timer’s fixed duration now overshoots, delivering extra energy that pushes the bread into the caramelization and pyrolysis zones faster than expected.",
       "setting": "Thermal graph showing element temperature before and after first cycle",
       "characters": [
         "temperature line"
@@ -262,7 +262,7 @@
     },
     {
       "id": 19,
-      "narration": "Higher settings don’t crank up power; they simply keep the element energized longer. The element’s wattage stays constant, but the total heat dose rises with time.",
+      "narration": "Higher settings on a toaster don’t increase the wattage at all – the heating element stays at the same power level. What changes is how long that power is applied. By turning the dial up, you extend the timer bar, so the element stays energized for a longer period and the bread receives a larger total heat dose. This longer exposure pushes the surface past the Maillard sweet spot into deeper caramelization or even pyrolysis, which is why a “high” setting can still produce a burnt slice if you’re not careful.",
       "setting": "Animated dial moving from low to high, with a timer bar extending",
       "characters": [
         "dial"
@@ -277,7 +277,7 @@
     },
     {
       "id": 20,
-      "narration": "Smart toasters try to fix the problem with IR sensors or thermistors, but they still battle the same thermal inertia of the nichrome wire. The element’s mass stores heat that can’t be erased instantly.",
+      "narration": "Smart toasters try to outsmart the problem by adding infrared sensors or thermistors that monitor surface temperature, but they can’t beat the physics of thermal inertia. The nichrome wire that glows red stores a lot of heat energy; when the power is cut, that stored energy continues to radiate for a fraction of a second. Even a tiny lag is enough to keep browning the bread after the sensor signals “done,” so the slice can still turn black despite the toaster thinking it’s finished.",
       "setting": "Modern smart toaster with a tiny sensor panel",
       "characters": [
         "sensor",
@@ -292,7 +292,7 @@
     },
     {
       "id": 21,
-      "narration": "So what can you do right now? Pull the toast out the instant it pops, or use the “hold‑open” lever that keeps the element disconnected while the slice sits on the rack.",
+      "narration": "Here’s the immediate fix: as soon as the toast pops, grab it. Pull the slice out the instant the lever releases, or engage the “hold‑open” lever that mechanically disconnects the element while the bread sits on the rack. By removing the slice before the residual heat can finish cooking it, you prevent that extra few seconds of browning that turns a golden crust into a char. It’s a simple habit that eliminates the surprise burn every morning.",
       "setting": "Hand reaching into toaster, grabbing a slice as it pops",
       "characters": [
         "hand",
@@ -308,7 +308,7 @@
     },
     {
       "id": 22,
-      "narration": "If you love a crisp crust, try a brief extra broil in a separate oven where you control the heat directly. That way the toaster’s residual heat never surprises you.",
+      "narration": "If you crave an extra‑crisp crust without risking a burnt slice, finish the toast in a conventional oven’s broiler. Transfer the already‑browned piece to a broiler rack and set the timer for just 20‑30 seconds. In the oven you control the heat directly and can stop it instantly, so the toaster’s lingering heat never catches up to the bread. This two‑step method gives you a reliably crunchy surface without the unpredictable overshoot of the toaster’s element.",
       "setting": "Oven broiler with a timer set to 30 seconds",
       "characters": [
         "oven"
@@ -323,7 +323,7 @@
     },
     {
       "id": 23,
-      "narration": "Remember: the timer’s green light is just a signal that the circuit opened. The element’s thermal mass carries on cooking for a heartbeat, and that heartbeat can be the difference between perfect toast and a charcoal stick.",
+      "narration": "The green LED on the toaster isn’t a promise that the toast is perfectly done; it’s merely an indicator that the circuit has opened. When the LED goes out, the nichrome element still holds thermal energy and glows faintly for a heartbeat. That brief continuation of heat can push the bread from a perfect golden‑brown into a charcoal‑black state, which explains why the same timer setting can sometimes yield dramatically different results.",
       "setting": "Close‑up of the green LED turning off, then a faint ember glow on the element",
       "characters": [
         "LED",
@@ -338,7 +338,7 @@
     },
     {
       "id": 24,
-      "narration": "Next time you hear that satisfying “pop,” don’t wait. Grab the slice, enjoy the golden‑brown, and you’ll have cracked the toaster’s hidden secret.",
+      "narration": "When you hear that satisfying “pop,” don’t hesitate. Grab the slice immediately, admire the even golden‑brown color, and enjoy it while it’s at its peak. By acting on the moment the toaster signals completion, you outsmart the hidden thermal lag and keep the toast from slipping into the burn zone. It’s a tiny timing trick that reveals the toaster’s secret and turns a frustrating breakfast mishap into a reliable routine.",
       "setting": "Breakfast table, slice being buttered",
       "characters": [
         "person",
