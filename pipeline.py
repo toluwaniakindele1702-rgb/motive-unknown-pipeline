@@ -3789,7 +3789,7 @@ def main(mode: str = "full") -> None:
     require_secret("GROQ_API_KEY")
     require_secret("YOUTUBE_TOKEN_JSON")
     require_secret("YOUTUBE_CLIENT_SECRET_JSON")
-    supported = {"cloudflare", "huggingface", "replicate", "local"}
+    supported = {"puter", "cloudflare", "huggingface", "replicate", "local"}
     unknown = [x for x in IMAGE_PROVIDER_ORDER if x not in supported]
     if unknown:
         raise RuntimeError(f"Unsupported image providers: {unknown}")
