@@ -124,7 +124,7 @@ jobs:
       - name: Preflight checks
         shell: bash
         run: |
-          python -m py_compile pipeline.py
+          python -m py_compile pipeline.py local_image_worker.py
           python - <<'PY'
           import os
           import torch
