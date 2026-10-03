@@ -1383,6 +1383,14 @@ Return JSON only:
     _save_current_json(CURRENT_SCRIPT_PATH, repaired)
     print(f"[RETENTION] repaired {len(targets)} retention-critical scenes.")
     return repaired
+
+
+def _repair_script_length(
+    topic: dict[str, Any],
+    research: str,
+    plan: dict[str, Any],
+    script: dict[str, Any],
+) -> dict[str, Any]:
     """
     Expand narration in small batches. Partial progress is written to the
     persistent current-run state after every successful batch.
