@@ -2853,8 +2853,10 @@ def package_quality_issues(topic: dict[str, Any], script: dict[str, Any], seo: d
 
     # Packaging is one curiosity unit: title = question/context,
     # thumbnail = visual mystery/consequence. Keep the pair complementary.
-    title_lower = normalize_spaces(str(seo.get("title", ""))).lower()
-    headline_lower = normalize_spaces(str(seo.get("thumbnail_headline", ""))).lower()
+    title = normalize_spaces(str(seo.get("title", "")))
+    headline = normalize_spaces(str(seo.get("thumbnail_headline", "")))
+    title_lower = title.lower()
+    headline_lower = headline.lower()
     if any(x in title_lower for x in ("you won't believe", "shocking", "insane", "gone wrong")):
         issues.append("Title uses generic clickbait language.")
     if any(x in headline_lower for x in ("you won't believe", "shocking", "insane", "gone wrong")):
