@@ -120,6 +120,10 @@ REPLICATE_IMAGE_MODEL = os.environ.get("REPLICATE_IMAGE_MODEL", "black-forest-la
 IMAGE_W = 1024
 IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "110"))
+SHORTS_ENABLED = os.environ.get("SHORTS_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+SHORTS_COUNT = max(1, min(4, int(os.environ.get("SHORTS_COUNT", "4"))))
+SHORTS_MIN_SECONDS = max(20, float(os.environ.get("SHORTS_MIN_SECONDS", "30")))
+SHORTS_MAX_SECONDS = min(180, float(os.environ.get("SHORTS_MAX_SECONDS", "75")))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
@@ -206,6 +210,7 @@ CURRENT_STORY_PATH = CURRENT_RUN_DIR / "story.json"
 CURRENT_SCRIPT_PATH = CURRENT_RUN_DIR / "script.json"
 CURRENT_SEO_PATH = CURRENT_RUN_DIR / "seo.json"
 CURRENT_UPLOAD_PATH = CURRENT_RUN_DIR / "upload.json"
+CURRENT_SHORTS_PATH = CURRENT_RUN_DIR / "shorts.json"
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -3345,6 +3350,261 @@ def upload_video(video_path: Path, thumbnail_path: Path, seo: dict[str, Any]) ->
     return video_id
 
 
+
+def _select_short_segments(script: dict[str, Any]) -> list[dict[str, Any]]:
+    """Choose strong, non-overlapping contiguous scene ranges for standalone Shorts."""
+    scenes = script.get("scenes") or []
+    if len(scenes) < 3:
+        return []
+    scene_text = []
+    for i, scene in enumerate(scenes, 1):
+        narration = normalize_spaces(str(scene.get("narration", "")))
+        scene_text.append(f"SCENE {i}: {narration}")
+
+    prompt = f"""
+Select up to {SHORTS_COUNT} strong, non-overlapping contiguous scene ranges from this Relic Loop episode.
+Each range must work as a standalone curiosity Short: it needs a hook, useful explanation or reveal,
+and a satisfying mini-payoff. Prefer surprising facts, mechanisms, contradictions, reveals, or strong questions.
+Avoid a generic intro/outro and do not invent scene numbers.
+
+Return JSON only:
+{{"shorts":[{{"start_scene":2,"end_scene":4,"hook":"short hook","reason":"why it stands alone"}}]}}
+Use 1-based scene numbers. Ranges must be contiguous and must not overlap.
+
+EPISODE:
+{chr(10).join(scene_text)}
+""".strip()
+
+    try:
+        data = groq_json(
+            GROQ_LIGHT_MODEL,
+            [{"role": "user", "content": prompt}],
+            max_completion_tokens=1800,
+            temperature=0.35,
+            attempts=2,
+        )
+        selected = []
+        used: set[int] = set()
+        raw = data.get("shorts", [])
+        for item in raw if isinstance(raw, list) else []:
+            try:
+                start = int(item["start_scene"])
+                end = int(item["end_scene"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if start < 1 or end < start or end > len(scenes):
+                continue
+            if any(i in used for i in range(start, end + 1)):
+                continue
+            selected.append({
+                "start_scene": start,
+                "end_scene": end,
+                "hook": normalize_spaces(str(item.get("hook", "Why this happens"))),
+                "reason": normalize_spaces(str(item.get("reason", ""))),
+            })
+            used.update(range(start, end + 1))
+            if len(selected) >= SHORTS_COUNT:
+                break
+        return selected
+    except Exception as exc:
+        print(f"[SHORTS] candidate selection failed; using deterministic fallback: {exc}")
+
+    # Fallback keeps the feature available even if the lightweight model fails.
+    fallback = []
+    step = max(1, len(scenes) // SHORTS_COUNT)
+    for start in range(1, len(scenes), step):
+        end = min(start + 1, len(scenes))
+        if any(
+            set(range(start, end + 1)) & set(range(x["start_scene"], x["end_scene"] + 1))
+            for x in fallback
+        ):
+            continue
+        fallback.append({
+            "start_scene": start,
+            "end_scene": end,
+            "hook": "Why this happens",
+            "reason": "deterministic fallback",
+        })
+        if len(fallback) >= SHORTS_COUNT:
+            break
+    return fallback
+
+
+def _write_short_srt(script: dict[str, Any], start_scene: int, end_scene: int, out_path: Path) -> float:
+    elapsed = 0.0
+    entries = []
+    for idx in range(start_scene, end_scene + 1):
+        audio_path = AUDIO_DIR / f"scene_{idx:03d}.wav"
+        duration = audio_duration(audio_path)
+        narration = normalize_spaces(str(script["scenes"][idx - 1].get("narration", "")))
+        if narration:
+            words = narration.split()
+            chunks = [" ".join(words[i:i + 10]) for i in range(0, len(words), 10)]
+            chunk_dur = duration / max(1, len(chunks))
+            for n, chunk in enumerate(chunks):
+                a = elapsed + n * chunk_dur
+                b = elapsed + (n + 1) * chunk_dur
+                entries.append((a, b, chunk))
+        elapsed += duration
+
+    def ts(seconds: float) -> str:
+        ms = int(round(seconds * 1000))
+        h, ms = divmod(ms, 3600000)
+        m, ms = divmod(ms, 60000)
+        s, ms = divmod(ms, 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    lines = []
+    for n, (a, b, text) in enumerate(entries, 1):
+        lines.extend([str(n), f"{ts(a)} --> {ts(b)}", text, ""])
+    atomic_write_text(out_path, "\n".join(lines))
+    return elapsed
+
+
+def _render_short(video_path: Path, srt_path: Path, start_seconds: float, duration: float, out_path: Path) -> None:
+    # Keep the whole 16:9 composition visible inside a 9:16 canvas, with a blurred
+    # version behind it, rather than aggressively center-cropping important visuals.
+    subtitle_file = str(srt_path.resolve()).replace("\\", "/").replace(":", "\\:")
+    filter_complex = (
+        "[0:v]scale=1080:608:force_original_aspect_ratio=decrease,"
+        "pad=1080:1920:0:656:color=black,setsar=1[fg];"
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,gblur=sigma=22,eq=brightness=-0.12[bg];"
+        "[bg][fg]overlay=0:0,format=yuv420p,"
+        f"subtitles=filename='{subtitle_file}':force_style='FontName=DejaVu Sans,FontSize=22,"
+        "PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,Outline=3,Shadow=1,Alignment=2,MarginV=80'"
+    )
+    run_cmd(
+        [
+            "ffmpeg", "-y", "-ss", f"{start_seconds:.3f}", "-i", str(video_path),
+            "-t", f"{duration:.3f}", "-filter_complex", filter_complex,
+            "-r", str(VIDEO_FPS), "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "21", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
+            str(out_path),
+        ],
+        f"render Short {out_path.stem}",
+    )
+
+
+def _upload_short(video_path: Path, title: str, description: str, tags: list[str], short_key: str) -> str:
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    saved = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
+    existing = saved.get("shorts", {}).get(short_key) if isinstance(saved, dict) else None
+    if existing and existing.get("video_id"):
+        print(f"[SHORTS] Reusing uploaded Short {existing['video_id']} for {short_key}")
+        return str(existing["video_id"])
+
+    token_text = require_secret("YOUTUBE_TOKEN_JSON")
+    token_path = ROOT / "youtube_token.json"
+    token_path.write_text(token_text, encoding="utf-8")
+    credentials = Credentials.from_authorized_user_file(
+        str(token_path), ["https://www.googleapis.com/auth/youtube.upload"]
+    )
+    if not credentials.valid:
+        if credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+        else:
+            raise RuntimeError("YouTube OAuth credentials are invalid for Short upload.")
+
+    youtube = build("youtube", "v3", credentials=credentials)
+    body = {
+        "snippet": {
+            "title": title[:100],
+            "description": description[:4900],
+            "tags": tags[:15],
+            "categoryId": "24",
+        },
+        "status": {
+            "privacyStatus": YOUTUBE_PRIVACY_STATUS,
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+    media = MediaFileUpload(str(video_path), mimetype="video/mp4", chunksize=-1, resumable=True)
+    response = youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
+    video_id = response["id"]
+
+    if not isinstance(saved, dict):
+        saved = {"shorts": {}}
+    saved.setdefault("shorts", {})[short_key] = {
+        "video_id": video_id,
+        "title": title,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _save_current_json(CURRENT_SHORTS_PATH, saved)
+    print(f"[SHORTS] uploaded {video_id}: {title}")
+    return video_id
+
+
+def generate_and_upload_shorts(
+    video_path: Path,
+    script: dict[str, Any],
+    seo: dict[str, Any],
+    long_video_id: str,
+) -> list[str]:
+    if not SHORTS_ENABLED:
+        print("[SHORTS] disabled by SHORTS_ENABLED=0")
+        return []
+
+    candidates = _select_short_segments(script)
+    if not candidates:
+        print("[SHORTS] no viable Short segments found; skipping.")
+        return []
+
+    scene_starts = []
+    cursor = 0.0
+    for idx in range(1, len(script["scenes"]) + 1):
+        scene_starts.append(cursor)
+        cursor += audio_duration(AUDIO_DIR / f"scene_{idx:03d}.wav")
+
+    uploaded = []
+    manifest = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
+    for n, candidate in enumerate(candidates, 1):
+        start_scene = candidate["start_scene"]
+        end_scene = candidate["end_scene"]
+        start = scene_starts[start_scene - 1]
+        end = scene_starts[end_scene - 1] + audio_duration(AUDIO_DIR / f"scene_{end_scene:03d}.wav")
+        duration = end - start
+        if duration < SHORTS_MIN_SECONDS or duration > SHORTS_MAX_SECONDS:
+            print(f"[SHORTS] skipping candidate {n}: {duration:.1f}s outside {SHORTS_MIN_SECONDS:.0f}-{SHORTS_MAX_SECONDS:.0f}s")
+            continue
+
+        short_key = f"{long_video_id}-{start_scene}-{end_scene}"
+        short_path = OUTPUT_DIR / f"short_{n:02d}.mp4"
+        srt_path = OUTPUT_DIR / f"short_{n:02d}.srt"
+        if not short_path.exists() or short_path.stat().st_size < 10000:
+            _write_short_srt(script, start_scene, end_scene, srt_path)
+            _render_short(video_path, srt_path, start, duration, short_path)
+
+        hook = candidate["hook"] or f"The surprising part of {seo['title']}"
+        short_title = normalize_spaces(hook)
+        if len(short_title) < 8:
+            short_title = f"{short_title} — {seo['title']}"
+        short_description = (
+            f"{short_title}\n\n"
+            f"From the Relic Loop episode: {seo['title']}\n"
+            f"Watch the full explanation on Relic Loop. Long-form video ID: {long_video_id}"
+        )
+        try:
+            video_id = _upload_short(short_path, short_title, short_description, seo.get("tags", []), short_key)
+            uploaded.append(video_id)
+            manifest.setdefault("shorts", {})[short_key] = {
+                "video_id": video_id,
+                "start_scene": start_scene,
+                "end_scene": end_scene,
+                "duration_seconds": round(duration, 2),
+            }
+            _save_current_json(CURRENT_SHORTS_PATH, manifest)
+        except Exception as exc:
+            print(f"[SHORTS] upload failed for candidate {n}; continuing: {exc}")
+
+    checkpoint("shorts_complete", count=len(uploaded), long_video_id=long_video_id)
+    return uploaded
+
+
 def validate_youtube_credentials() -> None:
     """Preflight the stored YouTube OAuth credentials before expensive work."""
     from google.oauth2.credentials import Credentials
@@ -3550,6 +3810,14 @@ def main(mode: str = "full") -> None:
 
     video_id = upload_video(video_path, thumb, seo)
     update_history(topic, seo, video_id)
+
+    # Shorts are a secondary distribution layer. They must never invalidate a
+    # completed long-form episode if rendering, selection, or upload has a problem.
+    try:
+        short_ids = generate_and_upload_shorts(video_path, script, seo, video_id)
+        print(f"[SHORTS] generated/uploaded {len(short_ids)} Shorts.")
+    except Exception as exc:
+        print(f"[SHORTS] stage failed non-fatally; long-form upload remains successful: {exc}")
     atomic_write_json(
         MANIFEST_PATH,
         {
@@ -3558,6 +3826,7 @@ def main(mode: str = "full") -> None:
             "video_id": video_id,
             "privacy_status": YOUTUBE_PRIVACY_STATUS,
             "scene_count": len(script["scenes"]),
+            "shorts_enabled": SHORTS_ENABLED,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
