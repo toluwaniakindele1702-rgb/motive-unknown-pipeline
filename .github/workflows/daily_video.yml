@@ -182,6 +182,52 @@ jobs:
               json.dump(data, f, indent=2)
           PY
 
+      - name: Capture run report
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p state/current_run
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+
+          identity_path = "state/current_run/github_run.json"
+          report_path = "state/current_run/run_report.json"
+
+          try:
+              identity = json.load(open(identity_path))
+          except Exception:
+              identity = {}
+
+          log_path = "pipeline.log"
+          log_exists = os.path.exists(log_path)
+          log_size = os.path.getsize(log_path) if log_exists else 0
+
+          report = {
+              "report_version": 1,
+              "captured_at": datetime.now(timezone.utc).isoformat(),
+              "status": os.environ.get("JOB_STATUS", "unknown"),
+              "run_id": "${{ github.run_id }}",
+              "run_number": "${{ github.run_number }}",
+              "workflow": "${{ github.workflow }}",
+              "event": "${{ github.event_name }}",
+              "mode": "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}",
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref }}",
+              "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "pipeline_log": log_path if log_exists else None,
+              "pipeline_log_size_bytes": log_size,
+              "identity": identity,
+          }
+
+          with open(report_path, "w") as f:
+              json.dump(report, f, indent=2)
+          print(json.dumps(report, indent=2))
+          PY
+        env:
+          JOB_STATUS: ${{ job.status }}
+
       - name: Persist resumable state
         if: always() && env.PIPELINE_MODE == 'full'
         shell: bash
@@ -206,6 +252,7 @@ jobs:
           path: |
             pipeline.log
             state/current_run/github_run.json
+            state/current_run/run_report.json
             run_work/topic.json
             run_work/research.txt
             run_work/story.json
