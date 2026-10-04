@@ -50,9 +50,9 @@ jobs:
       MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '110' }}
       BACKGROUND_MUSIC_VOLUME: ${{ vars.BACKGROUND_MUSIC_VOLUME || '0.055' }}
       SHORTS_ENABLED: ${{ vars.SHORTS_ENABLED || '1' }}
-      SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '4' }}
-      SHORTS_MIN_SECONDS: ${{ vars.SHORTS_MIN_SECONDS || '15' }}
-      SHORTS_MAX_SECONDS: ${{ vars.SHORTS_MAX_SECONDS || '60' }}
+      SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '3' }}
+      SHORTS_MIN_SECONDS: ${{ vars.SHORTS_MIN_SECONDS || '60' }}
+      SHORTS_MAX_SECONDS: ${{ vars.SHORTS_MAX_SECONDS || '180' }}
 
     steps:
       - name: Checkout
