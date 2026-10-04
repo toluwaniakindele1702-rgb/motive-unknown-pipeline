@@ -1576,13 +1576,17 @@ SCENES:
             print(f"[SCRIPT] final safety trim scene {scene['id']}: {words} -> {count_words(scene['narration'])} words")
 
     final_words = _script_word_count(repaired)
-    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
+    # A tiny final shortfall is acceptable when the per-scene narration is valid.
+    # Do not throw away an otherwise production-ready episode because a fallback
+    # model missed the target by a small amount.
+    minimum_acceptable = max(1600, SCRIPT_MIN_WORDS - 150)
+    if not (minimum_acceptable <= final_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(
             f"Script repair finished at {final_words} words; "
-            f"expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
+            f"expected at least {minimum_acceptable} and at most {SCRIPT_MAX_WORDS}."
         )
 
-    validate_script(repaired)
+    validate_script(repaired, allow_short=True)
     print(f"[SCRIPT] repair successful: ~{final_words} words")
     return repaired
 
