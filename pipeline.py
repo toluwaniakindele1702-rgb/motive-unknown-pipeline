@@ -766,14 +766,28 @@ Reject broad subjects, generic biographies, simple event summaries, fake mysteri
 conspiracies/paranormal claims presented as fact, medical diagnosis/advice,
 body-comparison/appearance-ideal framing, and claims the sources cannot support.
 
+VIRAL-REACH IDEA FILTER:
+0. The topic must be understandable to someone who has never heard of Relic Loop.
+1. Prefer an experience millions of people recognize immediately: something they have seen, felt,
+used, eaten, heard, done, or wondered about.
+2. There must be a strong curiosity gap: the obvious explanation should be incomplete or wrong.
+3. The title should make a viewer think "wait... I actually want to know that."
+4. The thumbnail should have one instantly readable visual mystery, reaction, contrast, or transformation.
+5. The answer must contain multiple escalating reveals rather than one fact stretched into a video.
+6. Favor topics that can produce a satisfying "OH, THAT'S WHY" moment and a memorable final reveal.
+7. Prefer ideas that can naturally produce at least one excellent Short without feeling like an ad for the long video.
+8. Prefer evergreen topics with broad appeal, but allow timely/trending angles when they genuinely fit.
+9. Avoid topics that need specialist knowledge before the viewer can care.
+10. Reject ideas that are merely "interesting facts" with no strong question or tension.
+
 Quality checks:
-0. The topic can support a strong title + thumbnail pairing and at least one visually obvious mystery.
-0b. The explanation can be demonstrated visually, not just described verbally.
-1. Familiar subject.
-2. Immediate curiosity gap.
-3. Satisfying evidence-backed answer.
-4. Strong visual explanation potential.
-5. At least 8 useful reveals/steps without filler.
+0. Familiar subject.
+1. Immediate curiosity gap.
+2. Satisfying evidence-backed answer.
+3. Strong visual explanation potential.
+4. At least 8 useful reveals/steps without filler.
+5. Strong title + thumbnail pairing.
+6. A memorable final payoff.
 
 Do not repeat or closely imitate previous questions:
 {history_text}
@@ -956,15 +970,19 @@ def build_story_plan(topic: dict[str, Any], research: str) -> dict[str, Any]:
     for attempt in range(1, 4):
         prompt = base_prompt + """
 
-PREMIUM CHANNEL RETENTION LAYER:
+PREMIUM VIRAL RETENTION LAYER:
 - Treat the episode as a visual investigation, not a lecture.
-- The opening 15 seconds must contain a concrete mystery and a specific payoff promise.
-- Build 3-5 major reveals, with a meaningful turn or new question every 20-45 seconds.
-- Use "because X, but that creates Y" logic to keep answers opening new questions.
-- Include at least one memorable comparison, one concrete example, and one consequence viewers can picture.
-- Around the midpoint, introduce a reversal, misconception, hidden tradeoff, or unexpected connection.
-- The final section must resolve the opening question and explain why the ordinary thing viewers know is actually surprising.
-- Avoid fake suspense, repetitive "but there's more" phrasing, and fact dumping.
+- Do NOT target a fixed runtime. Use exactly the time needed to make the idea satisfying; never add filler.
+- The opening 15 seconds must contain a concrete mystery, an emotional/visual hook, and a specific payoff promise.
+- Build 4-7 escalating reveals, with a meaningful turn, contrast, consequence, or new question roughly every 15-35 seconds.
+- Use "because X, but that creates Y" logic so each answer naturally opens the next question.
+- Introduce the most compelling fact/reveal early instead of saving everything good for the end.
+- Include at least one memorable comparison, one concrete example, one counterintuitive detail, and one consequence viewers can picture.
+- Around the midpoint, introduce a reversal, misconception, hidden tradeoff, surprising connection, or "you thought X, but actually Y" moment.
+- Create at least one visually memorable sequence that could work as a standalone Short.
+- Use occasional short punch lines after dense explanations to reset attention.
+- End with a strong payoff that resolves the opening mystery and makes the viewer reinterpret the ordinary thing.
+- Avoid fake suspense, repetitive "but there's more" phrasing, empty cliffhangers, and fact dumping.
 """.strip()
         if attempt > 1:
             prompt += """
@@ -1015,7 +1033,9 @@ Do not repeat sections or pad with generic suspense.
 SCRIPTWRITER_PROMPT = """
 You are the head writer of the curiosity-first YouTube channel Relic Loop.
 
-Write an 8-15 minute narration that answers one irresistible curiosity question. Topics may be everyday life, animals, science, human behavior, technology, culture/society, or history.
+Write a retention-first narration that answers one irresistible curiosity question. Do NOT force the episode
+to 8, 10, or 15 minutes. The finished video should be only as long as the idea deserves, with zero filler.
+Topics may be everyday life, animals, science, human behavior, technology, culture/society, or history.
 The audience is curious teenagers and adults. The language is simple, but the ideas are not childish.
 
 RETENTION-FIRST STORY ARCHITECTURE
@@ -1039,7 +1059,21 @@ Build from familiar to surprising to deeper mechanism to consequence to final ah
 Return to the original question and make the opening make more sense after the explanation. End cleanly without generic filler.
 
 IMPORTANT RETENTION RULE:
-Every 15-30 seconds, introduce a new piece of information, contrast, question, consequence, or visual surprise. Never let the narration sit on the same idea for a long time. The story should feel like a chain of discoveries rather than a list of facts.
+Every 15-30 seconds, introduce a new piece of information, contrast, question, consequence, mechanism,
+example, or visual surprise. Never let the narration sit on the same idea for a long time.
+
+CURIOSITY CHAIN:
+- Hook the viewer with the familiar thing.
+- Challenge the obvious explanation.
+- Reveal the first mechanism.
+- Make that mechanism create a second question.
+- Escalate into a surprising consequence or connection.
+- Deliver a memorable "that's why" explanation.
+- Loop back to the opening so the first sentence feels smarter at the end.
+
+SHARE / REWATCH VALUE:
+Favor one or two details that make viewers think "I never knew that" and want to tell someone else.
+Use concrete comparisons and visual demonstrations rather than empty hype.
 
 VOICE / PERFORMANCE
 - Modern, conversational, confident, vivid, energetic.
@@ -1574,6 +1608,16 @@ SCENES:
 
         final_words = _script_word_count(repaired)
 
+    # Final safety clamp: a model repair can occasionally leave one scene just
+    # above the per-scene ceiling. Trim only that scene at a sentence boundary
+    # so a tiny formatting overshoot cannot waste the entire production run.
+    for scene in repaired["scenes"]:
+        words = count_words(str(scene.get("narration", "")))
+        if words > 120:
+            scene["narration"] = _fit_narration_to_limit(str(scene["narration"]), 120)
+            print(f"[SCRIPT] final safety trim scene {scene['id']}: {words} -> {count_words(scene['narration'])} words")
+
+    final_words = _script_word_count(repaired)
     if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(
             f"Script repair finished at {final_words} words; "
@@ -2837,11 +2881,17 @@ def build_seo(topic: dict[str, Any], script: dict[str, Any], research: str) -> d
         SEO_PROMPT
         + """
 
-PREMIUM PACKAGING RULES:
-- Title and thumbnail must create complementary curiosity rather than repeat each other.
+PREMIUM VIRAL PACKAGING RULES:
+- Treat title + thumbnail as one curiosity package: each should reveal a different piece of the mystery.
 - Prefer a specific familiar mystery over a generic topic title.
-- Thumbnail headline should be 2-4 words and add curiosity, not restate the title.
+- Make the title instantly understandable to a broad viewer while leaving a genuine unanswered question.
+- Thumbnail should communicate one strong visual idea at phone size: one subject, one action/reaction,
+  one contrast, or one strange consequence. Avoid clutter.
+- Thumbnail headline should be 2-4 words and add a new curiosity cue, not repeat the title.
+- Favor expressive human reactions when they genuinely fit the topic, plus one oversized/obvious visual element.
+- Never use fake shock, misleading claims, or generic clickbait.
 - Description should open with the central mystery and naturally include the key search phrase.
+- Alternate titles should test genuinely different curiosity angles, not tiny wording changes.
 """
         + "\n\nCENTRAL QUESTION:\n"
         + topic["question"]
