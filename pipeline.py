@@ -777,17 +777,22 @@ body-comparison/appearance-ideal framing, and claims the sources cannot support.
 
 VIRAL-REACH IDEA FILTER:
 0. The topic must be understandable to someone who has never heard of Relic Loop.
-1. Prefer an experience millions of people recognize immediately: something they have seen, felt,
-used, eaten, heard, done, or wondered about.
-2. There must be a strong curiosity gap: the obvious explanation should be incomplete or wrong.
-3. The title should make a viewer think "wait... I actually want to know that."
-4. The thumbnail should have one instantly readable visual mystery, reaction, contrast, or transformation.
-5. The answer must contain multiple escalating reveals rather than one fact stretched into a video.
-6. Favor topics that can produce a satisfying "OH, THAT'S WHY" moment and a memorable final reveal.
-7. Prefer ideas that can naturally produce at least one excellent Short without feeling like an ad for the long video.
-8. Prefer evergreen topics with broad appeal, but allow timely/trending angles when they genuinely fit.
-9. Avoid topics that need specialist knowledge before the viewer can care.
-10. Reject ideas that are merely "interesting facts" with no strong question or tension.
+1. Run the "I HAVE EXPERIENCED THAT" test: prefer something millions of people have personally
+experienced, felt, thought, noticed, used, heard, or done.
+2. Give the highest priority to brain, memory, attention, perception, habits, sensations, and
+everyday human behavior.
+3. There must be a strong curiosity gap: the obvious explanation should be incomplete, misleading,
+or surprisingly different from the real mechanism.
+4. The title should make a viewer think "WAIT... WHY DO I DO/FEEL/NOTICE THAT?"
+5. The thumbnail should have one instantly readable visual mystery, reaction, contrast, or transformation.
+6. The answer must contain multiple escalating reveals rather than one fact stretched into a video.
+7. Favor topics that can produce a satisfying "OH, THAT'S WHY" moment and a memorable final reveal.
+8. Prefer ideas that can naturally produce at least one excellent Short.
+9. Prefer evergreen topics with broad appeal, but allow timely/trending angles when they genuinely fit.
+10. Reject topics that need specialist knowledge before the viewer can care.
+11. Reject generic object trivia unless its mystery is much stronger than a human-experience idea.
+12. Avoid repetitive mundane mechanical questions unless the mechanism itself is extraordinary.
+13. Reject ideas that are merely "interesting facts" with no strong personal recognition.
 
 Quality checks:
 0. Familiar subject.
