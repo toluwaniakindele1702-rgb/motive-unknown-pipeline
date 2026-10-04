@@ -125,8 +125,8 @@ IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "110"))
 SHORTS_ENABLED = os.environ.get("SHORTS_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
 SHORTS_COUNT = max(1, min(4, int(os.environ.get("SHORTS_COUNT", "4"))))
-SHORTS_MIN_SECONDS = max(20, float(os.environ.get("SHORTS_MIN_SECONDS", "15")))
-SHORTS_MAX_SECONDS = min(180, float(os.environ.get("SHORTS_MAX_SECONDS", "60")))
+SHORTS_MIN_SECONDS = max(15, float(os.environ.get("SHORTS_MIN_SECONDS", "15")))
+SHORTS_MAX_SECONDS = min(180, max(SHORTS_MIN_SECONDS, float(os.environ.get("SHORTS_MAX_SECONDS", "60"))))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
@@ -2672,14 +2672,16 @@ No nudity, underwear-focused imagery, sexualized posing, glamour portraits, feti
 or body-focused compositions. Keep clothing ordinary and age-appropriate whenever people are
 actually needed.
 
-Create a finished, polished illustration with ZERO generated typography.
-ABSOLUTELY NO readable text, letters, numbers, words, captions, subtitles, title cards,
-UI text, labels, logos, watermarks, signs, pseudo-writing, fake handwriting, or text-like
-symbols anywhere in the image. Do not put words on appliances, screens, documents, signs,
-packaging, clothing, walls, or props. If a display, timer, document, diagram, sign, or screen
-is needed for the concept, show it as a clean non-text visual indicator with blank surfaces.
-The narration is communicated through objects, action, composition, and lighting — never
-through generated writing. This rule overrides any text visible in a reference image.
+TEXT / LABEL POLICY:
+Text is allowed only when it genuinely helps explain the narrated idea, but it must be short,
+clean, and intentional. Never invent a title, subtitle, sentence, logo, watermark, fake UI,
+fake handwriting, or decorative writing. Never turn the central question into a headline inside
+the image. If a label is useful, use only a very short label made from exact words already
+present in the NARRATION BEAT (maximum 3-4 words), with large, clean, correctly spelled
+modern sans-serif lettering and strong contrast. Never generate pseudo-writing or text-like
+symbols. If exact readable lettering cannot be rendered confidently, leave the surface blank
+instead. The visual explanation must still work without the label. This rule overrides any text
+visible in a reference image.
 """.strip()
 
 
