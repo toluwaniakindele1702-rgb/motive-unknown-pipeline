@@ -3713,27 +3713,46 @@ def _upload_short(video_path: Path, title: str, description: str, tags: list[str
 
 
 def _fallback_short_segments(scene_starts: list[float], scene_durations: list[float]) -> list[dict[str, Any]]:
-    """Split the already-rendered full video into 3-4 contiguous scene ranges."""
+    """Find contiguous scene ranges that are genuinely 1-3 minute Shorts."""
     scene_count = len(scene_starts)
     total = scene_starts[-1] + scene_durations[-1] if scene_count else 0.0
-    if scene_count < 3 or total < SHORTS_MIN_SECONDS * 2:
+    if scene_count < 2 or total < SHORTS_MIN_SECONDS:
         return []
 
-    target = 4 if total >= SHORTS_MIN_SECONDS * 4 else 3 if total >= SHORTS_MIN_SECONDS * 3 else 2
-    target = min(target, scene_count)
+    ranges: list[dict[str, Any]] = []
+    used: set[int] = set()
+    target_seconds = min(150.0, max(105.0, (SHORTS_MIN_SECONDS + SHORTS_MAX_SECONDS) / 2.0))
 
-    ranges = []
-    for i in range(target):
-        start_idx = int(round(i * scene_count / target)) + 1
-        end_idx = int(round((i + 1) * scene_count / target))
-        start_idx = max(1, min(scene_count, start_idx))
-        end_idx = max(start_idx, min(scene_count, end_idx))
+    for _ in range(min(SHORTS_COUNT, 4)):
+        best = None
+        best_score = float("inf")
+        for start_idx in range(1, scene_count + 1):
+            if start_idx in used:
+                continue
+            duration = 0.0
+            for j in range(start_idx, scene_count + 1):
+                if j in used:
+                    break
+                duration += scene_durations[j - 1]
+                if duration > SHORTS_MAX_SECONDS:
+                    break
+                if duration >= SHORTS_MIN_SECONDS:
+                    score = abs(duration - target_seconds)
+                    if score < best_score:
+                        best_score = score
+                        best = (start_idx, j, duration)
+                    break
+        if best is None:
+            break
+        start_idx, end_idx, duration = best
         ranges.append({
             "start_scene": start_idx,
             "end_scene": end_idx,
-            "hook": f"Part {i + 1} of the explanation",
-            "reason": "deterministic full-video split",
+            "hook": f"Part {len(ranges) + 1}: the surprising answer",
+            "reason": "deterministic duration-safe scene split",
         })
+        used.update(range(start_idx, end_idx + 1))
+
     return ranges
 
 
@@ -3787,9 +3806,11 @@ def generate_and_upload_shorts(
 
     # Never silently produce zero Shorts because the AI selected ranges that are
     # too short/long. Fall back to splitting the finished long-form video.
-    if len(viable) < 3:
-        print(f"[SHORTS] Only {len(viable)} viable AI selections; using deterministic 3-4 part split.")
-        viable = _fallback_short_segments(scene_starts, scene_durations)
+    if len(viable) < min(2, SHORTS_COUNT):
+        print(f"[SHORTS] Only {len(viable)} viable AI selections; using duration-safe fallback.")
+        fallback = _fallback_short_segments(scene_starts, scene_durations)
+        if len(fallback) > len(viable):
+            viable = fallback
 
     uploaded: list[str] = []
     manifest = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
