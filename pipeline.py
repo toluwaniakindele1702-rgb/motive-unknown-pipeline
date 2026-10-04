@@ -105,7 +105,7 @@ IMAGE_PROVIDER_ORDER = [
     if x.strip()
 ]
 if not IMAGE_PROVIDER_ORDER:
-    IMAGE_PROVIDER_ORDER = ["puter", "cloudflare", "huggingface", "replicate", "local"]
+    IMAGE_PROVIDER_ORDER = ["cloudflare", "puter", "huggingface", "replicate", "local"]
 IMAGE_PROVIDER = IMAGE_PROVIDER_ORDER[0]
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
@@ -125,8 +125,8 @@ IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "110"))
 SHORTS_ENABLED = os.environ.get("SHORTS_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
 SHORTS_COUNT = max(1, min(4, int(os.environ.get("SHORTS_COUNT", "4"))))
-SHORTS_MIN_SECONDS = max(20, float(os.environ.get("SHORTS_MIN_SECONDS", "30")))
-SHORTS_MAX_SECONDS = min(180, float(os.environ.get("SHORTS_MAX_SECONDS", "75")))
+SHORTS_MIN_SECONDS = max(20, float(os.environ.get("SHORTS_MIN_SECONDS", "15")))
+SHORTS_MAX_SECONDS = min(180, float(os.environ.get("SHORTS_MAX_SECONDS", "60")))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
@@ -2672,8 +2672,14 @@ No nudity, underwear-focused imagery, sexualized posing, glamour portraits, feti
 or body-focused compositions. Keep clothing ordinary and age-appropriate whenever people are
 actually needed.
 
-Create a finished, polished illustration. No readable text, lettering, pseudo-writing, logos,
-watermarks, or accidental modern signage. Documents, screens, labels, or diagrams may be shown as detailed objects, but do not invent readable text unless the narration explicitly requires documented text.
+Create a finished, polished illustration with ZERO generated typography.
+ABSOLUTELY NO readable text, letters, numbers, words, captions, subtitles, title cards,
+UI text, labels, logos, watermarks, signs, pseudo-writing, fake handwriting, or text-like
+symbols anywhere in the image. Do not put words on appliances, screens, documents, signs,
+packaging, clothing, walls, or props. If a display, timer, document, diagram, sign, or screen
+is needed for the concept, show it as a clean non-text visual indicator with blank surfaces.
+The narration is communicated through objects, action, composition, and lighting — never
+through generated writing. This rule overrides any text visible in a reference image.
 """.strip()
 
 
@@ -3528,7 +3534,19 @@ def _write_short_srt(script: dict[str, Any], start_scene: int, end_scene: int, o
         narration = normalize_spaces(str(script["scenes"][idx - 1].get("narration", "")))
         if narration:
             words = narration.split()
-            chunks = [" ".join(words[i:i + 10]) for i in range(0, len(words), 10)]
+            chunks = []
+            current_words = []
+            current_chars = 0
+            for word in words:
+                extra = len(word) + (1 if current_words else 0)
+                if current_words and (len(current_words) >= 7 or current_chars + extra > 42):
+                    chunks.append(" ".join(current_words))
+                    current_words = []
+                    current_chars = 0
+                current_words.append(word)
+                current_chars += len(word) + (1 if len(current_words) > 1 else 0)
+            if current_words:
+                chunks.append(" ".join(current_words))
             chunk_dur = duration / max(1, len(chunks))
             for n, chunk in enumerate(chunks):
                 a = elapsed + n * chunk_dur
@@ -3628,57 +3646,121 @@ def _upload_short(video_path: Path, title: str, description: str, tags: list[str
     return video_id
 
 
+def _fallback_short_segments(scene_starts: list[float], scene_durations: list[float]) -> list[dict[str, Any]]:
+    """Split the already-rendered full video into 3-4 contiguous scene ranges."""
+    scene_count = len(scene_starts)
+    total = scene_starts[-1] + scene_durations[-1] if scene_count else 0.0
+    if scene_count < 3 or total < SHORTS_MIN_SECONDS * 2:
+        return []
+
+    target = 4 if total >= SHORTS_MIN_SECONDS * 4 else 3 if total >= SHORTS_MIN_SECONDS * 3 else 2
+    target = min(target, scene_count)
+
+    ranges = []
+    for i in range(target):
+        start_idx = int(round(i * scene_count / target)) + 1
+        end_idx = int(round((i + 1) * scene_count / target))
+        start_idx = max(1, min(scene_count, start_idx))
+        end_idx = max(start_idx, min(scene_count, end_idx))
+        ranges.append({
+            "start_scene": start_idx,
+            "end_scene": end_idx,
+            "hook": f"Part {i + 1} of the explanation",
+            "reason": "deterministic full-video split",
+        })
+    return ranges
+
+
 def generate_and_upload_shorts(
     video_path: Path,
     script: dict[str, Any],
     seo: dict[str, Any],
     long_video_id: str,
 ) -> list[str]:
+    """Repurpose the completed long-form file into 3-4 vertical Shorts.
+
+    The long-form video is rendered once. Shorts are cut directly from that
+    finished file; no scenes, images, or narration are regenerated.
+    """
     if not SHORTS_ENABLED:
         print("[SHORTS] disabled by SHORTS_ENABLED=0")
         return []
 
-    candidates = _select_short_segments(script)
-    if not candidates:
-        print("[SHORTS] no viable Short segments found; skipping.")
-        return []
-
-    scene_starts = []
+    scene_starts: list[float] = []
+    scene_durations: list[float] = []
     cursor = 0.0
     for idx in range(1, len(script["scenes"]) + 1):
+        duration = audio_duration(AUDIO_DIR / f"scene_{idx:03d}.wav")
         scene_starts.append(cursor)
-        cursor += audio_duration(AUDIO_DIR / f"scene_{idx:03d}.wav")
+        scene_durations.append(duration)
+        cursor += duration
 
-    uploaded = []
+    total_duration = cursor
+    if total_duration < SHORTS_MIN_SECONDS * 2:
+        print(f"[SHORTS] Episode is only {total_duration:.1f}s; too short to make useful Shorts.")
+        return []
+
+    candidates = _select_short_segments(script)
+    viable = []
+    used: set[int] = set()
+    for candidate in candidates:
+        start_scene = candidate["start_scene"]
+        end_scene = candidate["end_scene"]
+        if start_scene < 1 or end_scene < start_scene or end_scene > len(script["scenes"]):
+            continue
+        if any(i in used for i in range(start_scene, end_scene + 1)):
+            continue
+        start = scene_starts[start_scene - 1]
+        end = scene_starts[end_scene - 1] + scene_durations[end_scene - 1]
+        duration = end - start
+        if SHORTS_MIN_SECONDS <= duration <= SHORTS_MAX_SECONDS:
+            viable.append(candidate)
+            used.update(range(start_scene, end_scene + 1))
+        if len(viable) >= SHORTS_COUNT:
+            break
+
+    # Never silently produce zero Shorts because the AI selected ranges that are
+    # too short/long. Fall back to splitting the finished long-form video.
+    if len(viable) < 3:
+        print(f"[SHORTS] Only {len(viable)} viable AI selections; using deterministic 3-4 part split.")
+        viable = _fallback_short_segments(scene_starts, scene_durations)
+
+    uploaded: list[str] = []
     manifest = _load_current_json(CURRENT_SHORTS_PATH) or {"shorts": {}}
-    for n, candidate in enumerate(candidates, 1):
+
+    for n, candidate in enumerate(viable[:SHORTS_COUNT], 1):
         start_scene = candidate["start_scene"]
         end_scene = candidate["end_scene"]
         start = scene_starts[start_scene - 1]
-        end = scene_starts[end_scene - 1] + audio_duration(AUDIO_DIR / f"scene_{end_scene:03d}.wav")
+        end = scene_starts[end_scene - 1] + scene_durations[end_scene - 1]
         duration = end - start
+
         if duration < SHORTS_MIN_SECONDS or duration > SHORTS_MAX_SECONDS:
-            print(f"[SHORTS] skipping candidate {n}: {duration:.1f}s outside {SHORTS_MIN_SECONDS:.0f}-{SHORTS_MAX_SECONDS:.0f}s")
+            print(f"[SHORTS] skipping segment {n}: {duration:.1f}s outside {SHORTS_MIN_SECONDS:.0f}-{SHORTS_MAX_SECONDS:.0f}s")
             continue
 
         short_key = f"{long_video_id}-{start_scene}-{end_scene}"
         short_path = OUTPUT_DIR / f"short_{n:02d}.mp4"
         srt_path = OUTPUT_DIR / f"short_{n:02d}.srt"
+
         if not short_path.exists() or short_path.stat().st_size < 10000:
             _write_short_srt(script, start_scene, end_scene, srt_path)
             _render_short(video_path, srt_path, start, duration, short_path)
 
-        hook = candidate["hook"] or f"The surprising part of {seo['title']}"
-        short_title = normalize_spaces(hook)
-        if len(short_title) < 8:
-            short_title = f"{short_title} — {seo['title']}"
+        hook = normalize_spaces(str(candidate.get("hook", ""))) or f"{seo['title']} — Part {n}"
+        if len(hook) < 8:
+            hook = f"{seo['title']} — Part {n}"
+        short_title = hook[:100]
         short_description = (
             f"{short_title}\n\n"
             f"From the Relic Loop episode: {seo['title']}\n"
-            f"Watch the full explanation on Relic Loop. Long-form video ID: {long_video_id}"
+            f"Full video: https://youtu.be/{long_video_id}"
         )
+
         try:
-            video_id = _upload_short(short_path, short_title, short_description, seo.get("tags", []), short_key)
+            video_id = _upload_short(
+                short_path, short_title, short_description, seo.get("tags", []), short_key
+            )
             uploaded.append(video_id)
             manifest.setdefault("shorts", {})[short_key] = {
                 "video_id": video_id,
@@ -3687,12 +3769,22 @@ def generate_and_upload_shorts(
                 "duration_seconds": round(duration, 2),
             }
             _save_current_json(CURRENT_SHORTS_PATH, manifest)
+            print(f"[SHORTS] {n}/{len(viable[:SHORTS_COUNT])} uploaded: {video_id} ({duration:.1f}s)")
         except Exception as exc:
-            print(f"[SHORTS] upload failed for candidate {n}; continuing: {exc}")
+            print(f"[SHORTS] upload failed for segment {n}: {exc}")
 
-    checkpoint("shorts_complete", count=len(uploaded), long_video_id=long_video_id)
+    checkpoint(
+        "shorts_complete",
+        count=len(uploaded),
+        expected=min(SHORTS_COUNT, len(viable)),
+        long_video_id=long_video_id,
+    )
+    if len(uploaded) < min(3, len(viable)):
+        print(f"[SHORTS] WARNING: only {len(uploaded)} Short(s) uploaded; expected at least 3.")
+    else:
+        print(f"[SHORTS] SUCCESS: {len(uploaded)} vertical Shorts created from the finished long-form video.")
+
     return uploaded
-
 
 def validate_youtube_credentials() -> None:
     """Preflight the stored YouTube OAuth credentials before expensive work."""
