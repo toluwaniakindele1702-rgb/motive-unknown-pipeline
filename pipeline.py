@@ -101,7 +101,7 @@ PREMIUM_EMPHASIS_PHRASES = ["WHY?", "BUT WHY?", "THE TWIST", "THE REAL REASON", 
 # Polished AI illustration generation.
 IMAGE_PROVIDER_ORDER = [
     x.strip().lower()
-    for x in os.environ.get("IMAGE_PROVIDERS", "puter,cloudflare,huggingface,replicate,local").split(",")
+    for x in os.environ.get("IMAGE_PROVIDERS", "cloudflare,puter,huggingface,replicate,local").split(",")
     if x.strip()
 ]
 if not IMAGE_PROVIDER_ORDER:
