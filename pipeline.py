@@ -124,9 +124,10 @@ IMAGE_W = 1024
 IMAGE_H = 576
 MAX_VISUAL_BEATS_PER_VIDEO = int(os.environ.get("MAX_VISUAL_BEATS_PER_VIDEO", "110"))
 SHORTS_ENABLED = os.environ.get("SHORTS_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
-SHORTS_COUNT = max(1, min(4, int(os.environ.get("SHORTS_COUNT", "4"))))
-SHORTS_MIN_SECONDS = max(15, float(os.environ.get("SHORTS_MIN_SECONDS", "15")))
-SHORTS_MAX_SECONDS = min(180, max(SHORTS_MIN_SECONDS, float(os.environ.get("SHORTS_MAX_SECONDS", "60"))))
+SHORTS_COUNT = max(1, min(4, int(os.environ.get("SHORTS_COUNT", "3"))))
+# Shorts are useful mini-stories, not forced 15-60 second snippets.
+SHORTS_MIN_SECONDS = max(60, float(os.environ.get("SHORTS_MIN_SECONDS", "60")))
+SHORTS_MAX_SECONDS = min(180, max(SHORTS_MIN_SECONDS, float(os.environ.get("SHORTS_MAX_SECONDS", "180"))))
 VISUAL_BEAT_MIN_DURATION = float(os.environ.get("VISUAL_BEAT_MIN_DURATION", "0.9"))
 LOCAL_IMAGE_MODEL = os.environ.get("LOCAL_IMAGE_MODEL", "OpenVINO/LCM_Dreamshaper_v7-int8-ov").strip()
 LOCAL_IMAGE_STEPS = int(os.environ.get("LOCAL_IMAGE_STEPS", "4"))
