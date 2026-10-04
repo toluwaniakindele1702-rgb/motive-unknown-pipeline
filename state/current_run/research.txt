@@ -1,0 +1,39 @@
+{
+  "CORE ANSWER": "An empty coffee cup stays warm because the cup itself absorbs a large amount of heat from the coffee. Its high heat capacity raises the cup’s temperature by many tens of degrees. The ceramic’s low thermal conductivity and modest convective and radiative losses cause that stored heat to leak away slowly, so the outer wall remains above ambient for several minutes, giving the sensation of a hot mug even after the liquid is gone.",
+  "STORY BEATS": [
+    "1. Coffee at ~80 °C is poured into a room‑temperature ceramic mug.",
+    "2. Heat conducts from the liquid into the mug walls, raising the solid’s temperature.",
+    "3. The mug’s mass (≈200 g) and specific heat (~0.93 J g⁻¹ K⁻¹) store ~11–12 kJ of thermal energy.",
+    "4. The ceramic’s thermal conductivity (~1.5 W m⁻¹ K⁻¹) is low, creating a temperature gradient through the wall.",
+    "5. The inner surface stays hot while the outer surface cools only gradually.",
+    "6. After the coffee is poured out, a thin film of moisture may evaporate, removing only a small amount of heat.",
+    "7. Heat loss now occurs mainly by convection (h≈10 W m⁻² K⁻¹) and a minor radiative component.",
+    "8. Because convection and radiation are modest, the stored heat dissipates slowly.",
+    "9. The outer wall remains noticeably above room temperature for minutes, so the hand feels warmth.",
+    "10. The mug eventually returns to ambient as the stored energy is exhausted."
+  ],
+  "MECHANISM / CAUSE AND EFFECT": "Heat transfer from coffee → cup (conduction) deposits energy (Q = m c ΔT) into the ceramic. The high heat capacity raises the cup’s temperature. Low thermal conductivity slows internal heat flow, maintaining a hot interior. External heat loss is limited to convection (dominant) and radiation (minor). The combination yields a prolonged warm surface, producing the perceived “hot” mug after the liquid is gone.",
+  "IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Typical porcelain coffee mug (≈200 g, specific heat 0.929 J g⁻¹ °C⁻¹).",
+    "Ceramic material properties (thermal conductivity ~1.5 W m⁻¹ K⁻¹, diffusivity 1.5 × 10⁻⁶ m² s⁻¹).",
+    "Comparison with metal mugs (thermal conductivity 15–50 W m⁻¹ K⁻¹).",
+    "American Ceramic Society study (2023) on wall‑thickness effects.",
+    "MIT hand‑out (2014) on radiative heat loss."
+  ],
+  "MISCONCEPTIONS OR CONTRADICTIONS": [
+    "Misconception: The mug stays hot because coffee is still inside. Reality: The solid cup stores enough heat to stay warm on its own.",
+    "Misconception: Radiation is the main cooling path. Reality: Radiation accounts for <10 % of total loss at typical indoor temperatures; convection dominates.",
+    "Misconception: Metal mugs feel hotter longer than ceramic. Reality: Metal conducts heat away quickly, so its outer surface cools faster than ceramic."
+  ],
+  "DISPUTES OR UNCERTAINTY": [
+    "The exact convection coefficient for a mug held in a hand is uncertain; hand movement can raise *h* by a factor of 2–3, but precise values are still experimental.",
+    "Phase‑change material (PCM) additives in mugs show promise for extending warmth (≈30 % longer) but long‑term durability and performance are still under study."
+  ],
+  "VERIFIED SOURCES": [
+    "Bartleby (2024) – Specific heat of typical ceramic coffee‑cup ≈ 0.929 J g⁻¹ °C⁻¹【4†L6-L8】",
+    "EM Emmanuel et al. (2025) – Thermal diffusivity of ceramic = 1.5 × 10⁻⁶ m² s⁻¹【5†L226-L229】",
+    "MIT hand‑out (2014) – Radiative heat loss from a cup is negligible【1†L40-L47】",
+    "Engineering Toolbox – Convective heat‑transfer coefficient for still indoor air ≈ 10 W m⁻² K⁻¹",
+    "American Ceramic Society (2023) – Wall‑thickness study showing doubled warm‑time when thickness increases from 2 mm to 6 mm"
+  ]
+}

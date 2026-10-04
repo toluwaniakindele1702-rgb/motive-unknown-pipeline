@@ -1,0 +1,92 @@
+{
+  "central_question": "Why does a coffee cup stay hot even after the liquid is gone?",
+  "hook": "A steaming mug sits on a counter, its surface still warm, yet the cup is empty. How can a dry cup feel hot?",
+  "aha_moment": "The mug’s ceramic walls absorb and store a huge amount of heat from the coffee; their low thermal conductivity and high heat capacity make that heat leak out slowly, keeping the outer surface warm for minutes.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – pose the mystery",
+      "reveal": "A mug feels hot even though it’s empty",
+      "required_facts": [
+        "Empty mug feels warm"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Opening promise – hint at answer",
+      "reveal": "The mug itself is the heat source, not the coffee",
+      "required_facts": [
+        "Heat stays in mug"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Context – why it matters",
+      "reveal": "We all feel a mug’s warmth after pouring out coffee",
+      "required_facts": [
+        "Common experience"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "First reveal – conduction into the mug",
+      "reveal": "Coffee at 80 °C pours into a room‑temperature ceramic mug; heat flows into the walls",
+      "required_facts": [
+        "Coffee temp 80 °C",
+        "Mug material ceramic"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Second reveal – energy stored",
+      "reveal": "The 200 g mug with 0.93 J g⁻¹ K⁻¹ heat capacity stores ~12 kJ of energy",
+      "required_facts": [
+        "Mug mass 200 g",
+        "Specific heat 0.93 J g⁻¹ K⁻¹"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint reversal – low conductivity creates a gradient",
+      "reveal": "Ceramic’s 1.5 W m⁻¹ K⁻¹ conductivity means the inner wall stays hot while the outer cools slowly",
+      "required_facts": [
+        "Thermal conductivity 1.5 W m⁻¹ K⁻¹"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Third reveal – after pouring out",
+      "reveal": "Only a thin film of moisture evaporates, removing little heat; now loss is by convection and radiation",
+      "required_facts": [
+        "Evaporation minimal",
+        "Convection coefficient ~10 W m⁻² K⁻¹"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Fourth reveal – slow loss",
+      "reveal": "Convection dominates; radiation is <10 % of loss, so heat leaks out over minutes",
+      "required_facts": [
+        "Convection dominates",
+        "Radiation minor"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Payoff – why we feel warmth",
+      "reveal": "The outer wall stays noticeably above room temperature for several minutes, giving the “hot” sensation",
+      "required_facts": [
+        "Outer wall above ambient for minutes"
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Conclusion – return to ambient",
+      "reveal": "Eventually the stored energy is exhausted and the mug cools to room temperature",
+      "required_facts": [
+        "Mug cools to ambient"
+      ]
+    }
+  ],
+  "ending_payoff": "So the next time you touch an empty mug, remember it’s the ceramic’s own thermal memory, not the coffee, that keeps it warm—turning a simple cup into a tiny, slow‑release heat bank."
+}
