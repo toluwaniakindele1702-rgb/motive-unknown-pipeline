@@ -82,7 +82,7 @@
     },
     {
       "id": 7,
-      "narration": "Now that the coffee has been poured out, the empty mug cools primarily via two mechanisms. First, convection: as air moves across the ceramic surface, it scoops away heat at a rate roughly 10 W m⁻² K⁻¹, a value typical for still indoor air. Second, radiation: the mug emits infrared photons, but because ceramic is a relatively poor emitter, this pathway accounts for less than ten percent of the total energy loss. Together these processes drain the stored heat slowly, which is why the mug still feels warm even though the liquid is gone, illustrating basic thermodynamic principles.",
+      "narration": "Now that the coffee has been poured out, the empty mug loses its heat mainly through convection and radiation. As indoor air brushes across the ceramic surface, it carries away energy at roughly 10 W m⁻² K⁻¹—a typical value for still air—so each square meter of mug wall transfers a modest amount of heat to the surrounding room. At the same time the mug radiates infrared photons, but because glazed ceramic is a relatively poor emitter, this accounts for less than ten percent of the total loss. The combined effect is a slow, steady drain of stored energy, which is why the mug still feels warm even without liquid inside, illustrating basic thermodynamic principles.",
       "setting": "mug on a table, air currents visualized",
       "characters": [],
       "action": "air arrows sweep past mug, faint red glow shows radiation",
@@ -94,7 +94,7 @@
     },
     {
       "id": 8,
-      "narration": "Because convection only modestly strips heat and the mug’s outer wall is just a few degrees above room temperature, the cooling stretches over several minutes. At any moment only a few watts are leaving the mug, which translates to a gentle, continuous heat flow onto your fingertips. That small, steady transfer is enough to keep the surface pleasantly warm, creating the familiar tingling sensation that persists long after the coffee has vanished, reinforcing our perception of residual warmth.",
+      "narration": "Because convection only modestly strips heat and the mug’s outer wall stays just a few degrees above room temperature, the cooling process stretches over several minutes. At any instant only a few watts are leaving the ceramic, which translates into a gentle, continuous heat flow onto your fingertips. That low‑level, steady transfer is enough to keep the surface pleasantly warm, producing the familiar tingling sensation that persists long after the coffee has vanished. The slow loss reinforces our perception of residual warmth and shows how even small heat fluxes can be noticeable to human skin.",
       "setting": "hand reaching for mug",
       "characters": [
         "hand"
@@ -108,7 +108,7 @@
     },
     {
       "id": 9,
-      "narration": "Consider a metal mug of identical size. Its thermal conductivity is about ten times higher than ceramic, so heat races through the walls and reaches the outer surface almost instantly. As a result, the metal’s exterior drops to ambient temperature within seconds, making it feel cool to the touch even while the coffee inside remains hot. This contrast highlights how material conductivity governs the rate at which stored heat becomes perceptible, affecting user comfort.",
+      "narration": "Consider a metal mug of identical size. Its thermal conductivity is about ten times higher than ceramic, so heat races through the walls and reaches the outer surface almost instantly. As a result, the metal’s exterior drops to ambient temperature within seconds, making it feel cool to the touch even while the coffee inside remains hot. This contrast highlights how material conductivity governs the rate at which stored heat becomes perceptible, affecting user comfort and explaining why ceramic cups are preferred when you want a lingering warm feel.",
       "setting": "split screen: ceramic vs. metal mug",
       "characters": [],
       "action": "temperature bars drop quickly for metal, slowly for ceramic",
@@ -121,7 +121,7 @@
     },
     {
       "id": 10,
-      "narration": "If we double the wall thickness, the thermal resistance of the mug increases dramatically. A six‑millimeter ceramic wall, for example, can keep the outer surface above room temperature for roughly twice as long as a two‑millimeter wall. The thicker barrier slows the conduction path, meaning the stored heat leaks out at a lower rate, extending the period during which the mug feels warm to the hand, which matters for prolonged use.",
+      "narration": "If we double the wall thickness, the thermal resistance of the mug increases dramatically. A six‑millimeter ceramic wall, for example, can keep the outer surface above room temperature for roughly twice as long as a two‑millimeter wall. The thicker barrier slows the conduction path, meaning the stored heat leaks out at a lower rate, extending the period during which the mug feels warm to the hand. This principle matters for designers who aim to provide prolonged warmth for users who sip slowly or keep the mug on a desk for hours.",
       "setting": "animated cross‑section showing thin vs. thick walls",
       "characters": [],
       "action": "two mugs side by side, heat maps fade at different rates",
@@ -133,7 +133,7 @@
     },
     {
       "id": 11,
-      "narration": "Adding a lid changes the game by trapping a thin layer of warm air inside the cup. This dramatically reduces convection, the dominant loss channel, and cuts overall heat loss by a large margin. Consequently, a lidded travel mug can stay noticeably warm for up to thirty minutes, and manufacturers can claim “keeps drinks hot for 5 hours” because they essentially suppress the same convection and radiation pathways that empty mugs rely on, greatly improving practicality.",
+      "narration": "Adding a lid changes the game by trapping a thin layer of warm air inside the cup. This dramatically reduces convection, the dominant loss channel, and cuts overall heat loss by a large margin. Consequently, a lidded travel mug can stay noticeably warm for up to thirty minutes, and manufacturers can claim “keeps drinks hot for 5 hours” because they essentially suppress the same convection and radiation pathways that empty mugs rely on. The lid therefore turns a simple mug into an efficient insulated container, greatly improving practicality for on‑the‑go coffee drinkers.",
       "setting": "travel mug with lid placed on table",
       "characters": [],
       "action": "lid snaps on, convection arrows shrink",
@@ -145,7 +145,7 @@
     },
     {
       "id": 12,
-      "narration": "Even the mug’s color influences how quickly it cools. Dark surfaces are better at emitting infrared radiation, so a black ceramic mug loses heat slightly faster than a white one. Conversely, a light‑colored mug reflects more infrared, reducing radiative loss by a small fraction. That difference may only add a few seconds to the warm‑feeling period, but it’s enough to be noticeable in a quiet kitchen where every degree counts, subtly affecting user preference.",
+      "narration": "Even the mug’s color influences how quickly it cools. Dark surfaces are better at emitting infrared radiation, so a black ceramic mug loses heat slightly faster than a white one. Conversely, a light‑colored mug reflects more infrared, reducing radiative loss by a small fraction. That difference may only add a few seconds to the warm‑feeling period, but it’s enough to be noticeable in a quiet kitchen where every degree counts, subtly affecting user preference and the perceived comfort of the cup.",
       "setting": "two mugs, one black, one white, side by side",
       "characters": [],
       "action": "radiation arrows stronger from black mug",
@@ -157,7 +157,7 @@
     },
     {
       "id": 13,
-      "narration": "Now, let’s bring the numbers together. Starting at 80 °C, a 200‑gram ceramic mug stores about 12 kJ of thermal energy. With convection shedding roughly 8 W and radiation contributing another 1 W, the total heat loss is about 9 W. If you divide the stored energy by that power you get a cooling time on the order of 20 minutes before the outer surface cools to a comfortable 30 °C. This simple back‑of‑the‑envelope calculation shows why the mug stays noticeably warm for several minutes after the coffee is poured out, and it sets the stage for the sensory explanation that follows.",
+      "narration": "Now, let’s bring the numbers together. Starting at 80 °C, a 200‑gram ceramic mug stores roughly 12 kJ of thermal energy. With convection shedding about 8 W and radiation adding another 1 W, the total heat loss is near 9 W. Dividing the stored energy by that power gives a cooling time on the order of 20 minutes before the outer surface drops to a comfortable 30 °C. This back‑of‑the‑envelope estimate explains why the mug remains noticeably warm for several minutes after the coffee is poured out, and it sets up the sensory explanation that follows.",
       "setting": "whiteboard style calculation overlay",
       "characters": [],
       "action": "equations appear, timer counts down",
@@ -169,7 +169,7 @@
     },
     {
       "id": 14,
-      "narration": "That 20‑minute window is why you can still feel heat after the coffee is gone. Human skin is extremely sensitive to small temperature differences; a few degrees above ambient are enough to trigger thermoreceptors that send a strong signal to the brain. Because the mug’s outer wall remains a few degrees hotter than the room, those receptors fire, and our nervous system amplifies the sensation, making the empty mug feel distinctly “hot.” In other words, the physics of slow heat loss translates directly into a perceptual experience that lasts well beyond the liquid’s presence.",
+      "narration": "That 20‑minute window is why you can still feel heat after the coffee is gone. Human skin is extremely sensitive to small temperature differences; just a few degrees above ambient trigger thermoreceptors that send a strong signal to the brain. Because the mug’s outer wall stays a few degrees hotter than the room, those receptors fire, and our nervous system amplifies the sensation, making the empty mug feel distinctly “hot.” In other words, the physics of slow heat loss translates directly into a perceptual experience that outlasts the liquid.",
       "setting": "hand holding mug, close‑up of skin contact",
       "characters": [
         "hand"
@@ -183,7 +183,7 @@
     },
     {
       "id": 15,
-      "narration": "What if we wanted the mug to stay warm even longer? Engineers have started embedding phase‑change materials (PCMs) inside the ceramic walls. These substances melt at around 60 °C, absorbing extra heat that would otherwise be lost, and then solidify later, releasing that stored energy slowly back into the mug. Laboratory tests show a roughly 30 % increase in the warm‑time compared with a plain ceramic cup, although the long‑term durability of the PCM layer and its impact on taste are still being evaluated. This approach illustrates how we can deliberately boost thermal inertia beyond what ordinary ceramics provide.",
+      "narration": "What if we wanted the mug to stay warm even longer? Engineers have begun embedding phase‑change materials (PCMs) inside the ceramic walls. These substances melt around 60 °C, absorbing extra heat that would otherwise be lost, then solidify later, releasing that stored energy slowly back into the mug. Laboratory tests show roughly a 30 % increase in warm‑time compared with a plain ceramic cup, though the long‑term durability of the PCM layer and any impact on taste are still under evaluation. This illustrates how we can deliberately boost thermal inertia beyond ordinary ceramics.",
       "setting": "lab bench with prototype mug",
       "characters": [
         "researcher (off‑screen)"
@@ -197,7 +197,7 @@
     },
     {
       "id": 16,
-      "narration": "Conversely, if you crave a cooler drink faster, you’d reach for a metal mug. Metals such as stainless steel have thermal conductivities an order of magnitude higher than ceramic, so heat flows through the wall almost instantly. The outer surface therefore mirrors the liquid’s temperature, allowing a hot drink to cool quickly or a cold drink to stay cold, but it also means the mug loses any residual warmth within seconds. In short, high conductivity gives rapid temperature equalization—great for quick cooling, terrible for prolonged warmth after the liquid is gone.",
+      "narration": "Conversely, if you crave a cooler drink faster, you’d reach for a metal mug. Metals such as stainless steel have thermal conductivities an order of magnitude higher than ceramic, so heat rushes through the wall almost instantly. The outer surface therefore mirrors the liquid’s temperature, allowing a hot drink to cool quickly or a cold drink to stay cold, but it also means the mug loses any residual warmth within seconds. In short, high conductivity gives rapid temperature equalization—great for quick cooling, terrible for prolonged warmth after the liquid is gone.",
       "setting": "metal mug with ice cubes",
       "characters": [],
       "action": "ice cubes melt rapidly, steam disappears",
