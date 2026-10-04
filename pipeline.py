@@ -2049,6 +2049,51 @@ def _save_provider_image_bytes(out_path: Path, raw: bytes, provider: str) -> Non
         raise ImageProviderError(provider, f"Provider returned invalid image data: {exc}") from exc
 
 
+def _puter_safe_retry_prompt(prompt: str) -> str:
+    """Rewrite a visual beat into a conservative Puter-safe prompt after E005."""
+    def section(label: str) -> str:
+        match = re.search(
+            rf"{re.escape(label)}:\s*(.*?)(?=\n[A-Z][A-Z /_-]+:|$)",
+            prompt,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        return normalize_spaces(match.group(1)) if match else ""
+
+    beat = section("NARRATION BEAT")
+    setting = section("SETTING")
+    action = section("VISIBLE ACTION")
+    props = section("PROPS / SYMBOLS")
+    device = section("VISUAL DEVICE")
+
+    return f"""
+Modern 2D animated educational explainer frame for Relic Loop.
+Crisp clean linework, polished cel shading, vivid controlled colors, strong silhouettes,
+clear foreground/midground/background separation, accurate objects and environments,
+premium modern television-animation finish.
+
+Explain this harmless factual idea visually:
+{beat}
+
+SETTING:
+{setting}
+
+VISIBLE PROCESS:
+{action}
+
+IMPORTANT OBJECTS:
+{props}
+
+EXPLANATORY DEVICE:
+{device}
+
+Use objects, environments, diagrams, arrows, cutaways, simple symbols, and process views
+to explain the idea. Prefer an object/process-first composition with no close-up people.
+No nudity, sexual content, suggestive content, injuries, gore, blood, violence, medical
+procedures, body-focused framing, revealing clothing, unrelated people, readable text,
+logos, watermarks, captions, subtitles, or decorative subjects.
+""".strip()
+
+
 def _puter_image(prompt: str, out_path: Path, seed: int) -> None:
     """Generate through Puter.js using the account auth token supplied to CI."""
     if not PUTER_AUTH_TOKEN:
@@ -2101,6 +2146,60 @@ def _puter_image(prompt: str, out_path: Path, seed: int) -> None:
 
     if result.returncode != 0:
         combined = (result.stderr or result.stdout or "").strip()
+
+        # Puter/FLUX may conservatively reject a harmless explanatory prompt with
+        # E005. Retry once with an object/process-first sanitized prompt before
+        # disabling Puter. This preserves the beat's meaning while reducing
+        # wording that commonly triggers the safety classifier.
+        if "E005" in combined or "flagged as sensitive" in combined.lower():
+            safe_prompt = _puter_safe_retry_prompt(prompt)
+            print("[IMAGE] Puter E005 filter hit; retrying with sanitized visual prompt.")
+            retry_request = {
+                "cmd": "generate",
+                "model": PUTER_IMAGE_MODEL,
+                "prompt": safe_prompt,
+                "output_path": str(out_path.resolve()),
+                "seed": (seed + 1) & 0x7FFFFFFF,
+                "output_megapixels": "1",
+            }
+            try:
+                retry_result = subprocess.run(
+                    ["node", str(PUTER_IMAGE_WORKER)],
+                    input=json.dumps(retry_request),
+                    text=True,
+                    capture_output=True,
+                    timeout=240,
+                    env={**os.environ, "PUTER_AUTH_TOKEN": PUTER_AUTH_TOKEN},
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ImageProviderError(
+                    "puter",
+                    "Puter sanitized retry timed out after 240 seconds.",
+                ) from exc
+            except OSError as exc:
+                raise ImageProviderError(
+                    "puter",
+                    f"Could not start Node/Puter worker for sanitized retry: {exc}",
+                ) from exc
+
+            if retry_result.stdout:
+                print(retry_result.stdout.rstrip())
+            if retry_result.stderr:
+                print(retry_result.stderr.rstrip())
+
+            if retry_result.returncode == 0 and out_path.exists() and out_path.stat().st_size >= 10000:
+                try:
+                    with Image.open(out_path) as image:
+                        image.convert("RGB").save(out_path, format="JPEG", quality=92, optimize=True)
+                    print("[IMAGE] Puter sanitized retry succeeded.")
+                    return
+                except Exception as exc:
+                    raise ImageProviderError("puter", f"Puter sanitized retry returned invalid image data: {exc}") from exc
+
+            retry_combined = (retry_result.stderr or retry_result.stdout or "").strip()
+            if retry_combined:
+                combined = f"{combined} | sanitized retry: {retry_combined[:1200]}"
+
         status_match = re.search(r"HTTP (401|402|403|404|408|409|429|500|502|503|504)", combined)
         status = int(status_match.group(1)) if status_match else None
         disable = status in {401, 402, 403, 404, 429} or "not configured" in combined.lower()
