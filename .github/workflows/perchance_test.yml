@@ -1,0 +1,62 @@
+name: Perchance Image Automation Test
+
+on:
+  push:
+    paths:
+      - ".github/workflows/perchance_test.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install perchance pillow
+
+      - name: Generate Perchance test image
+        shell: bash
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+          from pathlib import Path
+          from perchance import ImageGenerator
+          from PIL import Image
+
+          prompt = (
+              "modern polished 2D educational infographic illustration, "
+              "a glass of cold water beside a warm glass, visible heat waves "
+              "showing the contrast, clean professional YouTube explainer style, "
+              "clear composition, crisp shapes, cinematic lighting, no readable text"
+          )
+
+          async def main():
+              out = Path("perchance_test.jpg")
+              async with ImageGenerator() as gen:
+                  result = await gen.image(prompt, shape="landscape")
+                  binary = await result.download()
+                  img = Image.open(binary).convert("RGB")
+                  print("Generated:", img.size, img.format)
+                  img.save(out, quality=92)
+              print("Saved:", out, out.stat().st_size, "bytes")
+
+          asyncio.run(main())
+          PY
+
+      - name: Upload generated image
+        uses: actions/upload-artifact@v7
+        with:
+          name: perchance-test-image
+          path: perchance_test.jpg
+          retention-days: 3
