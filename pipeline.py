@@ -640,12 +640,20 @@ creative mix across many uploads, favor:
 
 These are guidance for variety, not rigid quotas.
 
-The best Relic Loop topic starts with something the viewer already recognizes and then exposes a
-hidden reason, surprising consequence, strange design choice, forgotten origin, social behavior,
-unexpected chain of events, or counterintuitive explanation.
+The best Relic Loop topic starts with something the viewer has personally experienced, noticed,
+felt, thought, or done, then exposes a hidden brain mechanism, surprising behavior, strange
+consequence, overlooked reason, or counterintuitive explanation.
 
-Think like a great curiosity channel: "You see this all the time. But why is it like that?"
-The topic should make the viewer want the answer BEFORE they know the answer.
+The strongest lane is: "WAIT... I experience that all the time. Why does that happen?"
+The viewer should recognize themselves in the question before they know the answer.
+
+PRIORITY ORDER:
+1. Human experience and brain mysteries.
+2. Everyday behavior and social curiosities.
+3. Familiar objects, technology, places, food and design when the mystery is unusually strong.
+4. Relatable history, animals, and science when the question is immediately relatable.
+
+Use variety, but do not let generic object trivia become the channel identity.
 
 HIGH-VALUE TOPIC SHAPES:
 - ordinary thing + strange design choice
