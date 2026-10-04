@@ -24,6 +24,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install perchance pillow
           python -m playwright install --with-deps chromium
+          python - <<'PY'
+          from pathlib import Path
+          import perchance.imagegenerator as mod
+          p = Path(mod.__file__)
+          s = p.read_text()
+          s = s.replace('key_entry = content.find(\'"userKey":"\')', 'import re; key_match = re.search(r\'[\"\\\']userKey[\"\\\']\\s*:\\s*[\"\\\']([^\"\\\']+)[\"\\\']\', content); key_entry = key_match.start() if key_match else -1')
+          s = s.replace('start_index = key_entry + len(\'"userKey":"\')', 'start_index = key_match.start(1) if key_match else -1')
+          s = s.replace('end_index = content.find(\'"\', start_index)', 'end_index = key_match.end(1) if key_match else -1')
+          p.write_text(s)
+          print("Patched Perchance user-key parser:", p)
+          PY
 
       - name: Generate Perchance test image
         shell: bash
