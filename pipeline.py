@@ -1566,63 +1566,7 @@ SCENES:
 
     final_words = _script_word_count(repaired)
 
-    # If the batches still landed slightly short overall, top up in the same
-    # bounded batches rather than failing because of one underlong scene.
-    if final_words < SCRIPT_MIN_WORDS:
-        deficit = SCRIPT_MIN_WORDS - final_words
-        print(f"[SCRIPT] top-up needed: {deficit} words")
-        topup_per_scene = max(8, min(30, int(np.ceil(deficit / scene_count)) + 3))
-
-        for start in range(0, scene_count, batch_size):
-            end = min(scene_count, start + batch_size)
-            batch = repaired["scenes"][start:end]
-            prompt = f"""
-Lightly expand the narration for these history-video scenes.
-
-Preserve every fact and the existing wording as much as practical. Add only useful explanation,
-context, consequences, or transitions. Do not add scenery, repetition, dialogue, or unsupported claims.
-
-Add roughly {topup_per_scene} useful words to EACH narration. Never take any scene above 120 words.
-
-Return JSON only:
-{{"narrations": ["one updated narration per scene, in order"]}}
-
-SCENES:
-{json.dumps(
-    [{"id": scene["id"], "narration": scene["narration"]} for scene in batch],
-    ensure_ascii=False,
-)}
-""".strip()
-            result = groq_json(
-                GROQ_WRITER_MODEL,
-                [{"role": "user", "content": prompt}],
-                max_completion_tokens=1800,
-                temperature=0.40,
-                attempts=3,
-            )
-            narrations = result.get("narrations")
-            if not isinstance(narrations, list) or len(narrations) != len(batch):
-                raise RuntimeError("Top-up returned the wrong number of narrations.")
-            for scene, narration in zip(batch, narrations):
-                narration_text = str(narration).strip()
-                words = count_words(narration_text)
-                if words < 45:
-                    raise RuntimeError(
-                        f"Top-up produced {words} words for scene {scene['id']}; minimum is 45."
-                    )
-                if words > 120:
-                    narration_text = _fit_narration_to_limit(narration_text, 120)
-                    print(
-                        f"[SCRIPT] trimmed top-up scene {scene['id']} from {words} to "
-                        f"{count_words(narration_text)} words"
-                    )
-                scene["narration"] = narration_text
-            atomic_write_json(SCRIPT_PATH, repaired)
-            _save_current_json(CURRENT_SCRIPT_PATH, repaired)
-
-        final_words = _script_word_count(repaired)
-
-    # Final safety clamp: a model repair can occasionally leave one scene just
+    # If the batches still landed slightly short overall, top up in small,\n    # independently validated batches. A malformed/partial model response must\n    # never kill an otherwise repairable production run.\n    if final_words < SCRIPT_MIN_WORDS:\n        deficit = SCRIPT_MIN_WORDS - final_words\n        print(f"[SCRIPT] top-up needed: {deficit} words")\n        topup_per_scene = max(8, min(24, int(np.ceil(deficit / scene_count)) + 3))\n\n        # Smaller batches are deliberately used here: they greatly reduce the\n        # chance that a fallback/light model truncates a JSON array.\n        topup_batch_size = 3\n        for start in range(0, scene_count, topup_batch_size):\n            end = min(scene_count, start + topup_batch_size)\n            batch = repaired["scenes"][start:end]\n            prompt = f"""\nLightly expand the narration for these Relic Loop scenes.\n\nPreserve every fact and the existing wording as much as practical. Add only useful explanation,\ncontext, consequences, or transitions. Do not add scenery, repetition, dialogue, or unsupported claims.\n\nAdd roughly {topup_per_scene} useful words to EACH narration. Never take any scene above 120 words.\nThere MUST be exactly {len(batch)} narration strings in the returned array, one for each scene, in order.\nDo not omit a scene.\n\nReturn JSON only:\n{{"narrations": ["one updated narration per scene, in order"]}}\n\nSCENES:\n{json.dumps(\n    [{"id": scene["id"], "narration": scene["narration"]} for scene in batch],\n    ensure_ascii=False,\n)}\n""".strip()\n\n            updated = False\n            for attempt in range(1, 4):\n                try:\n                    result = groq_json(\n                        GROQ_WRITER_MODEL,\n                        [{"role": "user", "content": prompt}],\n                        max_completion_tokens=1200,\n                        temperature=0.35,\n                        attempts=2,\n                    )\n                    narrations = result.get("narrations")\n                    if not isinstance(narrations, list) or len(narrations) != len(batch):\n                        raise RuntimeError(\n                            f"expected {len(batch)} narrations, got " +\n                            (str(len(narrations)) if isinstance(narrations, list) else "non-list")\n                        )\n\n                    proposed: list[str] = []\n                    for scene, narration in zip(batch, narrations):\n                        narration_text = str(narration).strip()\n                        words = count_words(narration_text)\n                        if words < 45:\n                            raise RuntimeError(\n                                f"top-up produced only {words} words for scene {scene['id']}"\n                            )\n                        if words > 120:\n                            narration_text = _fit_narration_to_limit(narration_text, 120)\n                        proposed.append(narration_text)\n\n                    for scene, narration_text in zip(batch, proposed):\n                        scene["narration"] = narration_text\n                    updated = True\n                    break\n                except Exception as exc:\n                    print(\n                        f"[SCRIPT] top-up batch {start + 1}-{end}, attempt {attempt}/3 failed: {exc}"\n                    )\n                    if attempt < 3:\n                        time.sleep(min(8.0, 2.0 * attempt))\n\n            if not updated:\n                # Keep the already-valid narration. The overall minimum is a\n                # soft production target; failing the whole video over a small\n                # optional top-up is worse than publishing a slightly shorter one.\n                print(\n                    f"[SCRIPT] top-up batch {start + 1}-{end} could not be expanded; " +\n                    "keeping existing valid narration and continuing."\n                )\n\n            atomic_write_json(SCRIPT_PATH, repaired)\n            _save_current_json(CURRENT_SCRIPT_PATH, repaired)\n\n        final_words = _script_word_count(repaired)\n\n        # The repair target is preferred, but a valid script that is only slightly\n        # under it should continue rather than fail the production after all the\n        # expensive repair work has already succeeded.\n        if final_words < SCRIPT_MIN_WORDS:\n            shortfall = SCRIPT_MIN_WORDS - final_words\n            if shortfall <= 150:\n                print(\n                    f"[SCRIPT] final top-up shortfall {shortfall} words is within " +\n                    "the safe tolerance; continuing with the validated script."\n                )\n            else:\n                raise RuntimeError(\n                    f"Script remains too short after repair: {final_words} words " +\n                    f"(minimum {SCRIPT_MIN_WORDS})."\n                )\n\n    # Final safety clamp: a model repair can occasionally leave one scene just
     # above the per-scene ceiling. Trim only that scene at a sentence boundary
     # so a tiny formatting overshoot cannot waste the entire production run.
     for scene in repaired["scenes"]:
