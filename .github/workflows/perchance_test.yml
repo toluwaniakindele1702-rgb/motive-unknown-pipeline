@@ -23,13 +23,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install perchance pillow
+          python -m playwright install --with-deps chromium
 
       - name: Generate Perchance test image
         shell: bash
         run: |
           python - <<'PY'
           import asyncio
-          import os
           from pathlib import Path
           from perchance import ImageGenerator
           from PIL import Image
