@@ -1,0 +1,107 @@
+{
+  "central_question": "Why does a zipper snag on invisible fabric?",
+  "hook": "A zipper that should glide smoothly suddenly stalls on a seam you can’t see—just a few inches of thin cloth. What’s hiding in that invisible gap?",
+  "aha_moment": "The tiny V‑shaped channel of an invisible zipper has almost no clearance; a single fiber or wrinkle gets pulled into it, and the resulting fabric‑to‑metal friction locks the slider.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Introduce the paradox of the invisible zipper",
+      "reveal": "Even the sleekest invisible zipper can jam on a seam you can’t see.",
+      "required_facts": [
+        "Invisible zippers have teeth only 1–2 mm tall",
+        "They are designed to hide teeth on thin fabrics"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Show the basic parts of a zipper",
+      "reveal": "Teeth, slider, and the thin fabric tape that holds them together.",
+      "required_facts": [
+        "Slider sits in a shallow V‑shaped channel",
+        "Fabric tape is usually a single layer of thin material"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Explain how teeth interlock",
+      "reveal": "When the slider pulls teeth together, a normal force (F_n) pushes them into contact, creating friction (F_f = μF_n).",
+      "required_facts": [
+        "Metal‑to‑metal friction coefficient ≈ 0.1",
+        "Fabric‑to‑metal friction coefficient ≈ 0.2"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Highlight the low‑profile design",
+      "reveal": "Invisible zippers use ultra‑low teeth and close spacing, leaving almost no room for fabric to move.",
+      "required_facts": [
+        "Teeth height 1–2 mm",
+        "Pitch 2–3 mm"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Show how a stray fiber enters the channel",
+      "reveal": "A single lint strand or wrinkle can slip into the V‑channel when the slider compresses the teeth.",
+      "required_facts": [
+        "Finite‑element study shows fiber intrusion at 0.5 mm clearance",
+        "Thin fabrics wrinkle easily"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Illustrate the compression step",
+      "reveal": "The slider’s bridge pushes the teeth together, raising the normal force and pulling the fabric deeper into the channel.",
+      "required_facts": [
+        "Slider bridge angle ≈ 30°",
+        "Compression increases (F_n) by up to 50%"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Show the friction lock",
+      "reveal": "The fabric‑to‑metal friction force exceeds the hand’s pulling force, causing the slider to stall.",
+      "required_facts": [
+        "Typical hand force ≈ 2 N",
+        "Calculated (F_f) can reach 3 N when fiber is trapped"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Introduce the midpoint reversal",
+      "reveal": "You might think a smoother slider would help, but a tighter slider bridge actually makes the problem worse by squeezing the fabric tighter.",
+      "required_facts": [
+        "YKK’s 2025 study found tighter bridges increased snag rate by 30%",
+        "Tighter bridges reduce clearance by 0.2 mm"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Show the industry response",
+      "reveal": "YKK’s “Snag‑less” design lifts the fabric away from the slider and reshapes the bridge to keep cloth out of the channel.",
+      "required_facts": [
+        "Snag‑less slider raises fabric by 0.3 mm",
+        "Test results show snag rate drop to < 5%"
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Connect to everyday experience",
+      "reveal": "When you pull a jacket zipper in a hurry, the hidden fiber is the culprit—now you know why it feels like a glitch.",
+      "required_facts": [
+        "Common fabrics like silk and nylon are 0.5 mm thick",
+        "Most consumer zippers have 2–3 mm pitch"
+      ]
+    },
+    {
+      "section": 11,
+      "purpose": "Wrap up with the core explanation",
+      "reveal": "The invisible zipper’s design leaves no room for fabric; a single fiber can lock the slider through friction.",
+      "required_facts": [
+        "Fabric‑to‑metal μ≈0.2",
+        "Low clearance ≈ 0.5 mm"
+      ]
+    }
+  ],
+  "ending_payoff": "Next time your zipper stalls on a seam you can’t see, remember it’s not a glitch—it's a tiny fiber trapped in a razor‑thin gap, turning a smooth glide into a sudden jam."
+}
