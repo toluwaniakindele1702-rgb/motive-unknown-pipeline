@@ -45,9 +45,9 @@ jobs:
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
       PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
       PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
-      # Cloudflare is primary. Puter/Hugging Face/Replicate are secondary; local OpenVINO is the emergency fallback.
-      # Provider health is persisted so exhausted/unconfigured providers are skipped instead of wasting a run.
-      IMAGE_PROVIDERS: 'cloudflare,puter,huggingface,replicate,local'
+      # Cloudflare stays primary. Local OpenVINO is deliberately the first emergency fallback
+      # so exhausted Puter/HF/Replicate services cannot waste the run before local generation.
+      IMAGE_PROVIDERS: 'cloudflare,local,puter,huggingface,replicate'
       KOKORO_VOICE: am_michael
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
@@ -140,7 +140,7 @@ jobs:
       - name: Preflight checks
         shell: bash
         run: |
-          python -m py_compile pipeline.py local_image_worker.py
+          python -m py_compile pipeline.py local_image_worker.py sitecustomize.py
           python - <<'PY'
           import os
           import torch
@@ -151,6 +151,7 @@ jobs:
               {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
           )
           print("Packaging gate smoke test: OK", _issues)
+          print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
           print("torch:", torch.__version__)
           print("cuda available:", torch.cuda.is_available())
           assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
@@ -239,19 +240,21 @@ jobs:
         env:
           JOB_STATUS: ${{ job.status }}
 
-      - name: Persist resumable state
+      - name: Persist resumable state safely
         if: always() && env.PIPELINE_MODE == 'full'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A state
-          if git diff --cached --quiet; then
-            echo "No state changes to commit."
-          else
+          if ! git diff --cached --quiet; then
             git commit -m "chore: persist pipeline state"
-            git push
           fi
+          # The pipeline may already have pushed a checkpoint commit. Rebase any
+          # remaining local state commit onto the latest main before pushing so a
+          # late failure cannot turn a successful video into a failed workflow.
+          git pull --rebase origin main
+          git push
 
       - name: Upload run diagnostics
         if: always()
@@ -271,11 +274,13 @@ jobs:
             run_work/manifest.json
             state/last_run.json
             state/current_run/*.json
+            state/provider_health.json
             run_work/visual_test/*.jpg
             run_work/local_image_test/*.jpg
             run_work/scenes/*.jpg
             run_work/output/thumbnail.jpg
             run_work/output/*.mp4
             run_work/output/*.srt
+            run_work/output/*.wav
+            run_work/audio/*.wav
             state/current_run/shorts.json
-            state/provider_health.json
