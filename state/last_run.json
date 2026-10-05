@@ -1,7 +1,4 @@
 {
-  "stage": "scenes_complete",
-  "updated_at": "2026-10-05T02:07:21.277025+00:00",
-  "visual_beats": 85,
-  "image_provider": "cloudflare",
-  "image_model": "@cf/black-forest-labs/flux-2-klein-4b"
+  "stage": "voiceovers_complete",
+  "updated_at": "2026-10-05T02:25:08.717731+00:00"
 }
