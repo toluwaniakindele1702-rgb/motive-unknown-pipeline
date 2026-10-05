@@ -23,7 +23,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-production
   cancel-in-progress: true
-  queue: max
 
 permissions:
   contents: write
@@ -44,8 +43,6 @@ jobs:
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
       PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
       PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
-      # Cloudflare stays primary. Local OpenVINO is deliberately the first emergency fallback
-      # so exhausted Puter/HF/Replicate services cannot waste the run before local generation.
       IMAGE_PROVIDERS: 'cloudflare,local,puter,huggingface,replicate'
       KOKORO_VOICE: am_michael
       KOKORO_SPEED: '1.05'
