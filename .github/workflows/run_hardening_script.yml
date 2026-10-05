@@ -21,7 +21,7 @@ jobs:
       - name: Apply hardening
         run: python harden_pipeline.py
 
-      - name: Validate
+      - name: Validate patched source
         run: python -m py_compile pipeline.py local_image_worker.py
 
       - name: Commit hardening
