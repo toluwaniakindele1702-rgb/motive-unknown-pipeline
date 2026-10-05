@@ -1,0 +1,84 @@
+{
+  "central_question": "Why does a coffee mug stay hot even after the liquid is gone?",
+  "hook": "You finish your last sip, the mug is empty, yet it still feels warm to the touch. How can a cup that’s lost its coffee still keep heat?",
+  "aha_moment": "The ceramic wall itself becomes a hot reservoir: its high heat capacity stores energy, and its low thermal conductivity plus an insulating air cavity slow the loss of that heat.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – pose the mystery",
+      "reveal": "The mug stays warm after the coffee is gone.",
+      "required_facts": [
+        "empty mug feels hot"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Opening promise – hint at a concrete answer",
+      "reveal": "We’ll uncover why the ceramic wall keeps the heat.",
+      "required_facts": [
+        "ceramic wall has high heat capacity"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Context – coffee heats the wall",
+      "reveal": "During brewing, ~200 g of coffee pours 130 kJ into the ~150 g ceramic wall.",
+      "required_facts": [
+        "coffee mass",
+        "wall mass",
+        "specific heat"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "First reveal – wall stores energy",
+      "reveal": "Even after the liquid leaves, the wall still holds ~130 kJ of heat.",
+      "required_facts": [
+        "thermal mass of ceramic"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Second reveal – how heat can leave",
+      "reveal": "Heat exits only by conduction through ceramic, convection to room air, and radiation.",
+      "required_facts": [
+        "low κ of ceramic",
+        "convection coefficient",
+        "radiation amount"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint reversal – evaporative cooling stops",
+      "reveal": "While coffee was present, evaporation removed ~80 % of heat; once gone, that fast loss channel disappears.",
+      "required_facts": [
+        "evaporation dominates when liquid present"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Third reveal – slow cooling after evaporation",
+      "reveal": "With evaporation gone, the wall cools only a few kelvin per minute via weak convection and radiation.",
+      "required_facts": [
+        "cooling rate after evaporation"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Contrast – metal mug example",
+      "reveal": "A metal mug, with high conductivity, spreads heat quickly and feels cooler after the coffee is poured out.",
+      "required_facts": [
+        "metal conductivity vs. ceramic"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Final reveal – everyday implication",
+      "reveal": "That lingering warmth is why ceramic mugs are preferred for hot drinks and even in space where heat retention matters.",
+      "required_facts": [
+        "ceramic use in space"
+      ]
+    }
+  ],
+  "ending_payoff": "So the next time you touch an empty mug and feel a gentle heat, remember it’s the ceramic wall’s stubborn, slow‑cooling reservoir doing the work—proof that even ordinary objects have a hidden physics story."
+}

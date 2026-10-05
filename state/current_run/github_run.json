@@ -1,4 +1,13 @@
 {
-  "finished_at": "2026-10-05T16:01:27.501972+00:00",
+  "run_id": "37346482897",
+  "run_number": "175",
+  "workflow": "Relic Loop Daily Video",
+  "event": "workflow_dispatch",
+  "mode": "full",
+  "sha": "10e3bad08ca0be3e58ea9b770a06ee5a35cbaa19",
+  "ref": "refs/heads/main",
+  "started_at": "",
+  "run_url": "https://github.com/toluwaniakindele1702-rgb/motive-unknown-pipeline/actions/runs/37346482897",
+  "finished_at": "2026-10-05T17:14:35.806718+00:00",
   "pipeline_log": "pipeline.log"
 }

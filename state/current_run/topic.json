@@ -1,0 +1,15 @@
+{
+  "question": "Why does a coffee mug stay hot even after the liquid is gone?",
+  "topic": "Coffee Mug Heat Retention",
+  "category": "technology",
+  "era": "modern day",
+  "why_curious": "When you finish a cup, the mug still feels warm to the touch. The ceramic walls seem to keep the heat for minutes after the liquid evaporates, and we often wonder if the mug itself is somehow storing energy. Understanding the physics behind this can reveal how everyday materials manage heat and even explain why astronauts use ceramic mugs in space.",
+  "curiosity_gap": "People assume the mug stays hot because the coffee inside is still warm, but the liquid is gone—so why does the mug feel hot?",
+  "curiosity_score": 8,
+  "search_angles": [
+    "Thermal mass and low conductivity of ceramic",
+    "Evaporative cooling and trapped warm air",
+    "Heat transfer from mug walls to hand",
+    "Comparing ceramic vs. glass mug heat retention"
+  ]
+}

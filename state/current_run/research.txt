@@ -1,0 +1,40 @@
+{
+  "CORE ANSWER": "A coffee mug stays warm after the coffee is gone because the ceramic wall itself becomes a hot reservoir. Its high heat capacity stores a large amount of thermal energy, while its low thermal conductivity and the insulating air cavity limit heat loss by conduction, convection, and radiation. Once the evaporative cooling that dominates a full cup disappears, the remaining loss mechanisms are weak, so the mug’s surface remains noticeably warm for many minutes.",
+  "STORY BEATS": [
+    "1. Coffee (≈200 g) pours heat into the mug wall during brewing.",
+    "2. The ceramic wall (≈150 g, c≈0.9 J g⁻¹ K⁻¹) stores ~130 kJ when heated from room to coffee temperature.",
+    "3. When the coffee is poured out, the liquid’s heat‑capacity reservoir disappears, but the wall retains its stored energy.",
+    "4. Heat can leave the wall only by conduction through the ceramic (κ≈0.5–1.0 W m⁻¹ K⁻¹), convection from the outer surface to room air (h≈10 W m⁻² K⁻¹), and radiation (minor).",
+    "5. The thin layer of air left inside the empty cup has very low thermal conductivity, acting as an insulating blanket.",
+    "6. Evaporative cooling, which accounted for ~80 % of heat loss while liquid was present, stops once the coffee is gone.",
+    "7. With evaporation gone, the total heat‑loss rate drops to a few tens of watts, cooling the wall only a few kelvin per minute.",
+    "8. The outer surface stays above skin temperature, so the hand perceives the mug as still hot.",
+    "9. A metal mug would lose heat faster because its high conductivity spreads stored heat quickly, making it feel cooler after the coffee is poured out.",
+    "10. Over several minutes the mug gradually returns to room temperature, but the decay is slow compared with the coffee’s cooling curve."
+  ],
+  "MECHANISM / CAUSE AND EFFECT": {
+    "Thermal mass": "The ceramic wall’s high heat capacity stores a large amount of energy, so temperature drops slowly after the liquid is removed.",
+    "Low conductivity": "Ceramic’s κ≈0.5–1.0 W m⁻¹ K⁻¹ limits the rate at which heat conducts to the outer surface.",
+    "Insulating air cavity": "Air inside the empty cup has κ≈0.024 W m⁻¹ K⁻¹ and weak natural convection, reducing heat transfer from the inner wall.",
+    "Reduced evaporation": "Evaporative cooling dominates when liquid is present; its cessation removes the fastest loss channel.",
+    "Radiation": "Radiative loss is small (≈15 W for a 10 cm mug at 80 °C), causing only ~1 K cooling in five minutes."
+  },
+  "IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Typical stone‑ware mug (≈150 g fired clay)",
+    "Metal mug (high κ, faster cooling)",
+    "Thermal‑camera video showing lingering heat in the ceramic wall",
+    "Simple experiment with temperature probe comparing ceramic vs. metal cup"
+  ],
+  "MISCONCEPTIONS OR CONTRADICTIONS": {
+    "Myth: The mug stays hot because coffee is still inside.": "Reality: The mug’s own thermal mass is the source of retained heat.",
+    "Myth: Radiation is the main cooling path.": "Reality: Radiation accounts for only ~1 K of cooling in five minutes; convection and evaporation dominate while liquid is present.",
+    "Myth: All mugs behave the same.": "Reality: Materials differ—ceramic and porcelain have low κ and high heat capacity, glass loses heat faster, double‑wall or vacuum‑insulated mugs add extra low‑κ layers."
+  },
+  "DISPUTES OR UNCERTAINTY": "The supplied sources present a consistent physical picture; no explicit disagreements were found in the search results. Minor uncertainties remain in the exact convection coefficient (h) for a given environment and the precise heat‑loss rate, but the overall conclusion that low conductivity and high heat capacity keep the mug warm is well supported.",
+  "VERIFIED SOURCES": [
+    "MIT hand‑out “Simplified model of heat loss from a coffee cup” – quantitative description of heat‑loss mechanisms and minor role of radiation.",
+    "Physics Stack‑Exchange answer – shows evaporation stops after liquid is gone and calculates tiny radiative cooling.",
+    "Engineering Toolbox – thermal conductivity of ceramics (κ≈0.5–1.0 W m⁻¹ K⁻¹).",
+    "Thermtest.com “Keeping Your Warm Drink Warm – Thermal Properties” – specific heat of fired clay (~0.9 J g⁻¹ K⁻¹) and typical wall mass."
+  ]
+}
