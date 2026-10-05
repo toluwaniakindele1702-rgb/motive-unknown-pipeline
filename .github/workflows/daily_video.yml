@@ -30,7 +30,6 @@ permissions:
 
 jobs:
   build:
-    if: ${{ github.event_name != 'push' || contains(join(github.event.commits.*.modified, ','), '.github/force_production_run') || contains(join(github.event.commits.*.added, ','), '.github/force_production_run') }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -250,9 +249,6 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "chore: persist pipeline state"
           fi
-          # The pipeline may already have pushed a checkpoint commit. Rebase any
-          # remaining local state commit onto the latest main before pushing so a
-          # late failure cannot turn a successful video into a failed workflow.
           git pull --rebase origin main
           git push
 
