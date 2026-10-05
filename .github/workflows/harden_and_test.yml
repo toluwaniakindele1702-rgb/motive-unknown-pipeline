@@ -1,0 +1,103 @@
+name: Relic Loop Hardening And Test
+
+on:
+  push:
+    paths:
+      - ".github/workflows/harden_and_test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Apply reliability patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('pipeline.py')
+          s = p.read_text(encoding='utf-8')
+
+          # Persistent provider health: once a provider is known to be exhausted,
+          # skip it for the rest of the day instead of paying its failure latency
+          # on every single visual beat.
+          anchor = 'CURRENT_SHORTS_PATH = CURRENT_RUN_DIR / "shorts.json"\n'
+          block = '''\nPROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"\n\ndef _provider_health() -> dict[str, Any]:\n    data = load_json(PROVIDER_HEALTH_PATH, {})\n    return data if isinstance(data, dict) else {}\n\ndef _provider_blocked(provider: str) -> bool:\n    entry = _provider_health().get(provider)\n    if not isinstance(entry, dict):\n        return False\n    until = str(entry.get("disabled_until", ""))\n    if not until:\n        return False\n    try:\n        return datetime.now(timezone.utc) < datetime.fromisoformat(until)\n    except ValueError:\n        return False\n\ndef _block_provider(provider: str, reason: str) -> None:\n    from datetime import timedelta\n    now = datetime.now(timezone.utc)\n    until = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)\n    data = _provider_health()\n    data[provider] = {\n        "disabled_until": until.isoformat(),\n        "reason": str(reason)[:1200],\n        "updated_at": now.isoformat(),\n    }\n    atomic_write_json(PROVIDER_HEALTH_PATH, data)\n    print(f"[PROVIDER HEALTH] {provider} disabled until {until.isoformat()}: {str(reason)[:300]}")\n\ndef _should_block_provider(provider: str, message: str) -> bool:\n    text = str(message).lower()\n    if provider == "cloudflare":\n        return "daily free allocation" in text or "10,000 neurons" in text or "http 429" in text\n    if provider == "puter":\n        return "insufficient credits" in text or "insufficient credit" in text\n    if provider in {"huggingface", "replicate"}:\n        return "not configured" in text\n    return False\n\n'''
+          if 'PROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"' not in s:
+              if anchor not in s:
+                  raise SystemExit('provider-health anchor missing')
+              s = s.replace(anchor, anchor + block, 1)
+
+          # Add persistent health gate to the provider loop.
+          old = '''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        attempted ='''
+          new = '''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        if _provider_blocked(provider):\n            print(f"[IMAGE FALLBACK] skipping {provider}: persistent provider health block")\n            disabled.add(provider)\n            continue\n        attempted ='''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('provider-loop anchor missing')
+
+          # Persist known hard failures. Also make the provider loop stop retrying
+          # Puter after its first insufficient-credit response.
+          pattern = r'(except ImageProviderError as exc:\n\s+print\(f"\[IMAGE FALLBACK\] \{provider\} failed: \{exc\}"\)\n)'
+          repl = r'\1            if _should_block_provider(provider, str(exc)):\n                _block_provider(provider, str(exc))\n'
+          if 'if _should_block_provider(provider, str(exc))' not in s:
+              s, n = re.subn(pattern, repl, s, count=1)
+              if n != 1:
+                  raise SystemExit('provider-exception anchor missing')
+
+          p.write_text(s, encoding='utf-8')
+
+          # Groq SEO structured output is the remaining brittle stage. The SEO
+          # payload is already parsed/validated by the pipeline, so use generic
+          # JSON for this one schema and never let Groq's server-side maxItems
+          # mismatch kill a completed image run.
+          sc = Path('sitecustomize.py')
+          t = sc.read_text(encoding='utf-8')
+          marker = 'if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n'
+          replacement = '''if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n            json_schema = response_format.get("json_schema")\n            if isinstance(json_schema, dict) and json_schema.get("name") == "motive_unknown_seo":\n                fallback_kwargs = dict(kwargs)\n                fallback_kwargs["response_format"] = {"type": "json_object"}\n                print("[GROQ COMPAT] SEO schema forced to generic JSON for server compatibility.")\n                return _original_create(self, *args, **fallback_kwargs)\n'''
+          if 'SEO schema forced to generic JSON' not in t:
+              if marker not in t:
+                  raise SystemExit('sitecustomize schema marker missing')
+              t = t.replace(marker, replacement, 1)
+          sc.write_text(t, encoding='utf-8')
+
+          # Persist the local image environment/model cache so the local emergency
+          # provider is not rebuilt from scratch on every retry when GitHub cache is available.
+          w = Path('.github/workflows/daily_video.yml')
+          y = w.read_text(encoding='utf-8')
+          if 'state/provider_health.json' not in y:
+              y = y.replace('run_work/output/*.srt\n            state/current_run/shorts.json', 'run_work/output/*.srt\n            state/current_run/shorts.json\n            state/provider_health.json', 1)
+          w.write_text(y, encoding='utf-8')
+
+          print('Reliability patches applied.')
+          PY
+
+      - name: Validate source
+        run: |
+          python -m py_compile pipeline.py sitecustomize.py local_image_worker.py
+          grep -n "IMAGE_PROVIDERS" .github/workflows/daily_video.yml
+          grep -n "PROVIDER_HEALTH_PATH" pipeline.py
+          grep -n "SEO schema forced" sitecustomize.py
+
+      - name: Commit patches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline.py sitecustomize.py .github/workflows/daily_video.yml
+          if git diff --cached --quiet; then
+            echo "No changes needed."
+          else
+            git commit -m "fix: harden image fallback and SEO recovery"
+            git push
+          fi
