@@ -53,3 +53,15 @@ try:
     Completions.create = _patched_create
 except Exception as exc:
     print(f"[GROQ COMPAT] Could not install compatibility patch: {exc}")
+
+# Apply the topic-selection hardening inside the runner workspace before pipeline.py is imported.
+# This keeps the production workflow self-healing even if the main pipeline file is restored
+# from an older commit. The patch is idempotent and only changes the topic-selection rules.
+try:
+    from pathlib import Path
+    import runpy
+    _topic_patch = Path("harden_topic_selection.py")
+    if _topic_patch.exists():
+        runpy.run_path(str(_topic_patch), run_name="__topic_hardening__")
+except Exception as exc:
+    print(f"[TOPIC HARDENING] Could not apply runtime topic patch: {exc}")
