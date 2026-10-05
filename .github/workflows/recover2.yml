@@ -17,5 +17,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Dispatching production workflow from latest main..."
+          echo "Dispatching production workflow from latest hardened main..."
           gh workflow run daily_video.yml --repo "${{ github.repository }}" --ref main -f mode=full
