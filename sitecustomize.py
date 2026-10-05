@@ -54,6 +54,10 @@ try:
     _topic_patch = Path("harden_topic_selection.py")
     if _topic_patch.exists():
         runpy.run_path(str(_topic_patch), run_name="__topic_hardening__")
+    _topic_gate = Path("topic_originality_gate.py")
+    if _topic_gate.exists():
+        runpy.run_path(str(_topic_gate), run_name="__topic_originality_gate__")
+        print("[TOPIC GATE] Persisted-history originality gate installed before topic selection.")
 except Exception as exc:
     print(f"[TOPIC HARDENING] Could not apply runtime topic patch: {exc}")
 
