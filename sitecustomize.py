@@ -65,3 +65,40 @@ try:
         runpy.run_path(str(_topic_patch), run_name="__topic_hardening__")
 except Exception as exc:
     print(f"[TOPIC HARDENING] Could not apply runtime topic patch: {exc}")
+
+# Keep the burned-in Shorts captions compact. pipeline.py currently renders
+# them through ffmpeg's subtitles filter at FontSize=22; intercept only that
+# exact Shorts style token so the long-form renderer remains untouched.
+try:
+    import subprocess
+
+    _original_subprocess_run = subprocess.run
+
+    def _shorts_caption_size_patch(*args, **kwargs):
+        patched_args = list(args)
+        if patched_args:
+            command = patched_args[0]
+            if isinstance(command, (list, tuple)):
+                patched_args[0] = [
+                    str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
+                    if isinstance(item, str) else item
+                    for item in command
+                ]
+            elif isinstance(command, str):
+                patched_args[0] = command.replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
+        elif isinstance(kwargs.get("args"), (list, tuple)):
+            kwargs = dict(kwargs)
+            kwargs["args"] = [
+                str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
+                if isinstance(item, str) else item
+                for item in kwargs["args"]
+            ]
+        elif isinstance(kwargs.get("args"), str):
+            kwargs = dict(kwargs)
+            kwargs["args"] = kwargs["args"].replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
+        return _original_subprocess_run(*patched_args, **kwargs)
+
+    subprocess.run = _shorts_caption_size_patch
+    print("[SHORTS CAPTIONS] Compact caption style enabled: FontSize=18, Outline=2.")
+except Exception as exc:
+    print(f"[SHORTS CAPTIONS] Could not install caption-size patch: {exc}")
