@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '23 2 * * *'
       timezone: 'Africa/Lagos'
+  push:
+    paths:
+      - '.github/force_production_run'
   workflow_dispatch:
     inputs:
       mode:
@@ -27,6 +30,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.event_name != 'push' || contains(join(github.event.commits.*.modified, ','), '.github/force_production_run') || contains(join(github.event.commits.*.added, ','), '.github/force_production_run') }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -41,9 +45,9 @@ jobs:
       REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
       PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
       PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
-      # Cloudflare is the primary image provider. Puter/Hugging Face/Replicate are fallbacks.
-      # Local DreamShaper is intentionally excluded from production because its visual relevance has been unreliable.
-      IMAGE_PROVIDERS: 'cloudflare,puter,huggingface,replicate'
+      # Cloudflare is primary. Puter/Hugging Face/Replicate are secondary; local OpenVINO is the emergency fallback.
+      # Provider health is persisted so exhausted/unconfigured providers are skipped instead of wasting a run.
+      IMAGE_PROVIDERS: 'cloudflare,puter,huggingface,replicate,local'
       KOKORO_VOICE: am_michael
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
@@ -141,16 +145,12 @@ jobs:
           import os
           import torch
           from pipeline import package_quality_issues
-
-          # Exercise the final packaging gate with minimal valid data so a
-          # variable-scope regression cannot survive until after image generation.
           _issues = package_quality_issues(
               {"question": "Why does this work?", "topic": "preflight", "category": "general"},
               {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
               {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
           )
           print("Packaging gate smoke test: OK", _issues)
-
           print("torch:", torch.__version__)
           print("cuda available:", torch.cuda.is_available())
           assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
@@ -170,12 +170,7 @@ jobs:
           vf = _make_emphasis_filter([40.0, 45.0, 50.0])
           if not vf:
               raise SystemExit("Emphasis filter was unexpectedly empty")
-          print("Emphasis filter:", vf)
-          cmd = [
-              "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
-              "-i", "color=c=black:s=1280x720:r=30:d=2", "-vf", vf + ",format=yuv420p",
-              "-frames:v", "1", "-f", "null", "-"
-          ]
+          cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=2", "-vf", vf + ",format=yuv420p", "-frames:v", "1", "-f", "null", "-"]
           subprocess.run(cmd, check=True)
           print("FFmpeg emphasis filter smoke test: OK")
           PY
@@ -211,22 +206,16 @@ jobs:
         run: |
           mkdir -p state/current_run
           python - <<'PY'
-          import json
-          import os
+          import json, os
           from datetime import datetime, timezone
-
           identity_path = "state/current_run/github_run.json"
           report_path = "state/current_run/run_report.json"
-
           try:
               identity = json.load(open(identity_path))
           except Exception:
               identity = {}
-
           log_path = "pipeline.log"
           log_exists = os.path.exists(log_path)
-          log_size = os.path.getsize(log_path) if log_exists else 0
-
           report = {
               "report_version": 1,
               "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -240,10 +229,9 @@ jobs:
               "ref": "${{ github.ref }}",
               "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "pipeline_log": log_path if log_exists else None,
-              "pipeline_log_size_bytes": log_size,
+              "pipeline_log_size_bytes": os.path.getsize(log_path) if log_exists else 0,
               "identity": identity,
           }
-
           with open(report_path, "w") as f:
               json.dump(report, f, indent=2)
           print(json.dumps(report, indent=2))
@@ -283,14 +271,11 @@ jobs:
             run_work/manifest.json
             state/last_run.json
             state/current_run/*.json
-            voice_test_current_male.wav
-            voice_test_female_bella.wav
-            voice_test_female_nicole.wav
-            voice_test_onyx.wav
             run_work/visual_test/*.jpg
             run_work/local_image_test/*.jpg
             run_work/scenes/*.jpg
             run_work/output/thumbnail.jpg
-            run_work/output/short_*.mp4
-            run_work/output/short_*.srt
+            run_work/output/*.mp4
+            run_work/output/*.srt
             state/current_run/shorts.json
+            state/provider_health.json
