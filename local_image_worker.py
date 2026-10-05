@@ -34,7 +34,6 @@ LABELS = [
     "COMPOSITION",
 ]
 
-
 PIPELINE = None
 LOCAL_MODEL_ID = os.environ.get(
     "MOTIVE_LOCAL_IMAGE_MODEL",
@@ -63,7 +62,7 @@ def trim_words(value: str, count: int) -> str:
 
 
 def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
-    """Keep the narration subject dominant; LCM does not benefit from negative prompts."""
+    """Keep the exact narrated idea dominant and suppress generic filler."""
     setting = extract_section(prompt, "SETTING")
     action = extract_section(prompt, "VISIBLE ACTION")
     beat = extract_section(prompt, "NARRATION BEAT")
@@ -97,7 +96,7 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
         people = (
             f"RELEVANT PEOPLE: {trim_words(chars, 10)}."
             if chars and chars.lower() not in {"none", "none required"}
-            else "OBJECT-AND-PROCESS COMPOSITION with no human figures."
+            else "OBJECT-AND-PROCESS COMPOSITION with no human figures unless the narration requires them."
         )
         fields = [
             f"NARRATION FACT: {trim_words(beat, 34)}." if beat else "",
@@ -118,15 +117,20 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
         if len(tokenizer(trial, add_special_tokens=True)["input_ids"]) <= 75:
             candidate_parts.append(field)
 
-    candidate = " ".join(candidate_parts)
+    if beat:
+        # Force the narration beat to remain first. This prevents the short local
+        # prompt budget from dropping the actual fact while preserving style cues.
+        candidate = "NARRATION FACT: " + trim_words(beat, 38) + ". " + " ".join(candidate_parts)
+    else:
+        candidate = " ".join(candidate_parts)
+
     if len(tokenizer(candidate, add_special_tokens=True)["input_ids"]) > 75:
-        # Keep the narration fact and action first; style is deliberately expendable.
         core = [
-            f"NARRATION FACT: {trim_words(beat, 38)}." if beat else "",
-            f"VISIBLE ACTION: {trim_words(action, 16)}." if action else "",
-            f"MAIN SUBJECT: {trim_words(subject, 12)}." if subject else "",
-            f"SETTING: {trim_words(setting, 8)}." if setting else "",
-            "Polished modern 2D educational illustration, clear subject and cause-and-effect.",
+            f"NARRATION FACT: {trim_words(beat, 30)}." if beat else "",
+            f"VISIBLE ACTION: {trim_words(action, 12)}." if action else "",
+            f"MAIN SUBJECT: {trim_words(subject, 10)}." if subject else "",
+            f"SETTING: {trim_words(setting, 7)}." if setting else "",
+            "Modern 2D educational illustration, clear subject and cause-and-effect.",
         ]
         candidate = " ".join(x for x in core if x)
         words = candidate.split()
@@ -136,6 +140,7 @@ def compact_prompt(prompt: str, tokenizer) -> tuple[str, int]:
 
     count = len(tokenizer(candidate, add_special_tokens=True)["input_ids"])
     return candidate, count
+
 
 def generate_from_request(request: dict) -> None:
     model_id = str(request["model_id"])
@@ -157,8 +162,17 @@ def generate_from_request(request: dict) -> None:
     print("[LOCAL WORKER] prompt_tokens={}".format(token_count), flush=True)
 
     generator = torch.Generator(device="cpu").manual_seed(seed)
+    negative_prompt = (
+        "text, letters, words, captions, subtitles, logos, watermark, fake writing, "
+        "random signage, UI screenshot, poster, collage, split screen, duplicate objects, "
+        "extra limbs, malformed hands, distorted face, deformed body, inappropriate body-focused framing, "
+        "unrelated person, unrelated animal, gore, blood, injury, violence, horror, "
+        "photorealistic stock photo, vintage textbook art, sepia, muddy composition, "
+        "blurry, low detail, clutter, decorative filler"
+    )
     result = PIPELINE(
         compact,
+        negative_prompt=negative_prompt,
         num_inference_steps=steps,
         guidance_scale=8.0,
         lcm_origin_steps=50,
@@ -177,8 +191,6 @@ def generate_from_request(request: dict) -> None:
         (1024, 576),
         method=Image.Resampling.LANCZOS,
     )
-    # CPU generation stays at a manageable size; this cheap post-process restores
-    # perceived edge/detail without materially increasing generation time.
     image = ImageOps.autocontrast(image, cutoff=0.4)
     image = ImageEnhance.Contrast(image).enhance(1.04)
     image = ImageEnhance.Color(image).enhance(1.03)
@@ -227,9 +239,6 @@ def main() -> int:
         print("[LOCAL WORKER] Loading model once: {}".format(LOCAL_MODEL_ID), flush=True)
         PIPELINE = OVLatentConsistencyModelPipeline.from_pretrained(
             LOCAL_MODEL_ID,
-            # This checkpoint contains a stale safety_checker entry without the
-            # corresponding model files. Explicitly disable that missing optional
-            # component so the OpenVINO fallback can actually load.
             safety_checker=None,
             requires_safety_checker=False,
         )
