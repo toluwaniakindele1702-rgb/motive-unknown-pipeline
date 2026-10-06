@@ -1,98 +1,79 @@
 {
-  "central_question": "Why do we sometimes walk into a room and immediately forget why we entered?",
-  "hook": "You’re at your desk, coffee mug in hand, and the next moment you’re standing in the kitchen, staring at the fridge and wondering, ‘What was I supposed to do?’",
-  "aha_moment": "Crossing a doorway triggers an event‑boundary that the brain treats as a fresh context, temporarily suppressing the intention you were carrying; a cue in the new room then re‑activates it.",
+  "central_question": "Why do elevator doors start opening before the car actually reaches the floor?",
+  "hook": "Ever stepped into an elevator and felt the doors begin to slide open a heartbeat before the car even touches the landing? It’s not a glitch—there’s a clever prediction at play.",
+  "aha_moment": "Elevators predict the car will be almost level and moving slowly enough that the doors can safely start moving in advance, shaving off time while keeping passengers safe.",
   "story_arc": [
     {
       "section": 1,
-      "purpose": "Introduce the everyday glitch",
-      "reveal": "You decide to get coffee while at your desk.",
+      "purpose": "Cold open: immediate mystery",
+      "reveal": "Doors begin to move before the car arrives",
       "required_facts": [
-        "You form an intention in a specific location",
-        "Intention is held in working memory"
+        "Passengers notice early door motion"
       ]
     },
     {
       "section": 2,
-      "purpose": "Show the transition",
-      "reveal": "You walk toward the kitchen doorway, still holding the coffee plan.",
+      "purpose": "Opening promise: hint at a hidden system",
+      "reveal": "A sensor on the landing tells the controller the car is close enough to start the doors",
       "required_facts": [
-        "Movement toward a doorway while holding intention",
-        "Working memory keeps intention active until boundary"
+        "Landing sensor exists",
+        "Controller can act on sensor data"
       ]
     },
     {
       "section": 3,
-      "purpose": "Explain the event‑boundary",
-      "reveal": "Crossing the doorway signals a new event, creating a fresh context tag in the hippocampus.",
+      "purpose": "Context: why this matters",
+      "reveal": "Early opening reduces total travel time and smooths the final stop",
       "required_facts": [
-        "Doorway acts as a salient event boundary",
-        "Hippocampus updates context representation"
+        "Travel efficiency",
+        "Passenger comfort"
       ]
     },
     {
       "section": 4,
-      "purpose": "Show the reset",
-      "reveal": "The dorsolateral prefrontal cortex briefly resets, freeing resources for the new room.",
+      "purpose": "First reveal: the sensor mechanism",
+      "reveal": "Infrared/optical strip detects the car’s proximity within ~20 mm",
       "required_facts": [
-        "DLPFC resets during event boundaries",
-        "Resource reallocation is automatic"
+        "Sensor type",
+        "Detection range"
       ]
     },
     {
       "section": 5,
-      "purpose": "Illustrate suppression",
-      "reveal": "The link between the kitchen context and the coffee intention is down‑regulated, making the intention less accessible.",
+      "purpose": "Second reveal: speed check",
+      "reveal": "Controller also measures car velocity; only if below ~0.1 m/s does it allow door motion",
       "required_facts": [
-        "Cue‑intention association weakened by boundary",
-        "Temporary suppression of intention"
+        "Speed threshold",
+        "Safety limit"
       ]
     },
     {
       "section": 6,
-      "purpose": "Create the ‘I forgot’ moment",
-      "reveal": "You stand in the kitchen, staring at the fridge, feeling a sudden blankness about why you’re there.",
+      "purpose": "Midpoint reversal: the car still stops",
+      "reveal": "Even though doors start moving, the car’s brake holds it in place until fully level",
       "required_facts": [
-        "Subjective feeling of forgetting",
-        "Intention is still present but dormant"
+        "Brake system",
+        "Fine‑adjustment mechanism"
       ]
     },
     {
-      "section": 7,
-      "purpose": "Introduce the cue",
-      "reveal": "A coffee mug on the counter or the smell of espresso suddenly pops into view.",
+      "section": "7",
+      "purpose": "Third reveal: safety circuit",
+      "reveal": "Once doors open, the hoist motor is disabled, preventing any movement with doors open",
       "required_facts": [
-        "Salient cue in new environment",
-        "Cue can trigger memory reinstatement"
+        "Safety circuit design",
+        "Standard compliance"
       ]
     },
     {
-      "section": 8,
-      "purpose": "Show reinstatement",
-      "reveal": "The coffee intention resurfaces automatically, often before you consciously notice it.",
+      "section": "8",
+      "purpose": "Final reveal: overall benefit",
+      "reveal": "Advance opening cuts stop time by a few seconds, especially in high‑rise buildings",
       "required_facts": [
-        "Cue‑driven reactivation of intention",
-        "Intention returns without effort"
-      ]
-    },
-    {
-      "section": 9,
-      "purpose": "Highlight the reversal",
-      "reveal": "Even when you’re back in the original room, the forgetting can persist—doors aren’t the only boundary, and the effect isn’t just context mismatch.",
-      "required_facts": [
-        "Effect persists after returning to original room",
-        "Other event boundaries (sound, task change) produce similar dips"
-      ]
-    },
-    {
-      "section": 10,
-      "purpose": "Wrap up with everyday implication",
-      "reveal": "Next time you walk through a doorway, pause for a second or place a small reminder—your brain will do the heavy lifting for you.",
-      "required_facts": [
-        "Implementation intentions can reduce the effect",
-        "Simple cues can mitigate forgetting"
+        "Time savings data",
+        "High‑rise example"
       ]
     }
   ],
-  "ending_payoff": "So the next time you feel that sudden blankness, remember it’s just your brain giving you a quick reset; a simple cue is all you need to bring the forgotten intention back into focus."
+  "ending_payoff": "So the next time you feel those doors creep open early, remember: the elevator’s brain is already predicting your arrival, making the whole ride faster and safer—an invisible choreography you just didn’t see coming."
 }

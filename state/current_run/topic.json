@@ -1,15 +1,15 @@
 {
-  "question": "Why Do You Sometimes Walk Into a Room and Immediately Forget Why?",
-  "topic": "Walking Into a Room and Forgetting Why",
-  "category": "human mind",
+  "question": "Why do elevator doors start opening before the car actually reaches the floor?",
+  "topic": "Elevator Door Pre-Opening",
+  "category": "technology",
   "era": "modern day",
-  "why_curious": "Almost everyone has walked into a room and suddenly forgotten what they meant to do. The strange part is that the intention can feel completely obvious a few seconds earlier, then seem to vanish the moment the setting changes. The explanation reveals how attention, working memory, context, and interruptions interact in an everyday mental glitch.",
-  "curiosity_gap": "You feel like the reason for entering the room simply disappeared, but the intention may still be recoverable once the right context returns.",
-  "curiosity_score": 10,
+  "why_curious": "We all notice elevators that seem to open a fraction of a second before the car arrives, and we wonder if it’s just a quirk or a safety feature. Behind the curtain is a clever sensor system that predicts the car’s position and reacts to people in the doorway, balancing speed, safety, and comfort.",
+  "curiosity_gap": "Most people think the doors wait until the car stops, but in reality the doors begin moving in anticipation, guided by sensors that detect both the car’s proximity and people’s presence.",
+  "curiosity_score": 8,
   "search_angles": [
-    "context-dependent memory and environmental context changes",
-    "working memory and prospective memory during everyday tasks",
-    "attention shifts and event boundaries when moving between rooms",
-    "interruptions, distraction, and recovering the forgotten intention"
+    "Sensor strip and motion‑gap detection on the landing",
+    "Control logic that predicts car position and starts door motor",
+    "Safety role of early door opening in preventing collisions",
+    "User experience: how the timing feels smooth and intuitive"
   ]
 }
