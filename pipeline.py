@@ -1220,11 +1220,17 @@ PREMIUM PRODUCTION RULES:
         if repaired_words < SCRIPT_MIN_WORDS:
             print(
                 f"[RETENTION] repair reduced script to {repaired_words} words; "
-                f"restoring original ({original_words} words)."
+                "expanding the repaired script back to the hard minimum."
             )
-            script = original_script
-            if original_words < SCRIPT_MIN_WORDS:
-                script = _repair_script_length(topic, research, plan, script)
+            script = _repair_script_length(topic, research, plan, repaired_script)
+            if _script_word_count(script) < SCRIPT_MIN_WORDS:
+                print(
+                    f"[RETENTION] repaired script still below minimum; "
+                    f"restoring original ({original_words} words)."
+                )
+                script = original_script
+                if original_words < SCRIPT_MIN_WORDS:
+                    script = _repair_script_length(topic, research, plan, script)
         else:
             script = repaired_script
 
