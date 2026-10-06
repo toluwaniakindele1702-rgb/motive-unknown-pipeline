@@ -96,127 +96,8 @@ jobs:
           if old in s:
               s = s.replace(old, new, 1)
 
-          # SOURCE-LEVEL SCENE-COUNT FIX: preliminary validation must allow an
-          # under-segmented LLM draft to reach a dedicated re-segmentation pass.
-          old = '''    scenes = script.get("scenes")
-    if not isinstance(scenes, list) or not (SCENE_MIN <= len(scenes) <= SCENE_MAX):
-        raise RuntimeError(f"Script scene count must be {SCENE_MIN}-{SCENE_MAX}; got {len(scenes) if isinstance(scenes, list) else 0}.")
-'''
-          new = '''    scenes = script.get("scenes")
-    if not isinstance(scenes, list):
-        raise RuntimeError("Script scenes must be a list.")
-    if not allow_short and not (SCENE_MIN <= len(scenes) <= SCENE_MAX):
-        raise RuntimeError(f"Script scene count must be {SCENE_MIN}-{SCENE_MAX}; got {len(scenes)}.")
-    if allow_short and len(scenes) > SCENE_MAX:
-        raise RuntimeError(f"Script scene count must not exceed {SCENE_MAX}; got {len(scenes)}.")
-'''
-          if old not in s:
-              raise SystemExit("scene validation anchor not found")
-          if "Script scenes must be a list." not in s:
-              s = s.replace(old, new, 1)
-
-          marker = '''def _repair_script_length(
-'''
-          if marker not in s:
-              raise SystemExit("scene repair insertion marker not found")
-
-          new_func = r'''def _repair_scene_count(
-    topic: dict[str, Any],
-    research: str,
-    plan: dict[str, Any],
-    script: dict[str, Any],
-) -> dict[str, Any]:
-    """Split an under-segmented script into the required number of useful scenes."""
-    scenes = script.get("scenes") or []
-    if len(scenes) >= SCENE_MIN:
-        return script
-
-    target = min(SCENE_MAX, max(SCENE_MIN, len(scenes) + 4))
-    prompt = f"""
-You are a production editor for Relic Loop.
-
-The writer produced only {len(scenes)} scenes, but the renderer requires {SCENE_MIN}-{SCENE_MAX}.
-Re-segment the EXISTING narration into exactly {target} distinct scenes.
-
-Rules:
-- Preserve every important factual claim and the story order.
-- Do not invent facts, dialogue, motives, events, statistics, or sources.
-- Do not delete meaningful narration.
-- Split at natural visual/story transitions: new mechanism, example, comparison, consequence,
-  evidence, reaction, reversal, or payoff.
-- Keep each scene useful and visually concrete.
-- You may lightly rewrite transitions so the split scenes read naturally.
-- Keep the same title_question, era, and thumbnail.
-- Return the complete script JSON, not a patch.
-
-TOPIC:
-{json.dumps(topic, ensure_ascii=False)}
-
-STORY PLAN:
-{json.dumps(plan, ensure_ascii=False)}
-
-RESEARCH:
-{research}
-
-CURRENT SCRIPT:
-{json.dumps(script, ensure_ascii=False)}
-
-Return JSON only in this shape:
-{{
-  "title_question": "...",
-  "era": "...",
-  "scenes": [
-    {{"id": 1, "narration": "...", "setting": "...", "characters": [], "action": "...", "props": [], "mood": "..."}}
-  ],
-  "thumbnail": {{"headline": "...", "subject": "...", "supporting_prop": "...", "emotion": "...", "composition": "...", "preferred_variant": 1}}
-}}
-""".strip()
-
-    repaired = groq_json(
-        GROQ_WRITER_MODEL,
-        [{"role": "user", "content": prompt}],
-        max_completion_tokens=7200,
-        temperature=0.35,
-        attempts=3,
-    )
-    validate_script(repaired, allow_short=True)
-    if len(repaired.get("scenes", [])) < SCENE_MIN:
-        raise RuntimeError(
-            f"Scene-count repair returned {len(repaired.get('scenes', []))} scenes; need at least {SCENE_MIN}."
-        )
-    atomic_write_json(SCRIPT_PATH, repaired)
-    _save_current_json(CURRENT_SCRIPT_PATH, repaired)
-    print(f"[SCRIPT] scene-count repair: {len(scenes)} -> {len(repaired['scenes'])} scenes")
-    return repaired
-
-
-'''
-          s = s.replace(marker, new_func + marker, 1)
-
-          old = '''    validate_script(script, allow_short=True)
-    atomic_write_json(SCRIPT_PATH, script)
-    _save_current_json(CURRENT_SCRIPT_PATH, script)
-    total_words = _script_word_count(script)
-'''
-          new = '''    validate_script(script, allow_short=True)
-    if len(script.get("scenes", [])) < SCENE_MIN:
-        print(
-            f"[SCRIPT] scene-count repair needed: {len(script.get('scenes', []))} scenes; "
-            f"minimum is {SCENE_MIN}."
-        )
-        script = _repair_scene_count(topic, research, plan, script)
-
-    atomic_write_json(SCRIPT_PATH, script)
-    _save_current_json(CURRENT_SCRIPT_PATH, script)
-    total_words = _script_word_count(script)
-'''
-          if old not in s:
-              raise SystemExit("write_script scene repair anchor not found")
-          if "scene-count repair needed:" not in s:
-              s = s.replace(old, new, 1)
-
           p.write_text(s, encoding="utf-8")
-          print("DIRECT PIPELINE RETENTION + SCENE COUNT FIXES APPLIED")
+          print("DIRECT PIPELINE RETENTION/MINIMUM FIX APPLIED")
           PY
 
       - name: Validate source
@@ -228,5 +109,5 @@ Return JSON only in this shape:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pipeline.py
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix: repair under-segmented scripts before validation"
+          git commit -m "fix: prevent retention from shrinking scripts below minimum"
           git push
