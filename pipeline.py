@@ -1207,7 +1207,27 @@ PREMIUM PRODUCTION RULES:
     retention_issues = _retention_quality_issues(script, topic)
     if retention_issues:
         print(f"[RETENTION] repair pass needed: {retention_issues}")
-        script = _repair_retention_structure(topic, research, plan, script, retention_issues)
+        original_script = json.loads(json.dumps(script, ensure_ascii=False))
+        original_words = _script_word_count(original_script)
+        repaired_script = _repair_retention_structure(
+            topic, research, plan, original_script, retention_issues
+        )
+        repaired_words = _script_word_count(repaired_script)
+
+        # Retention editing must never make an otherwise valid script fail the
+        # hard 1700-word minimum. If it shrinks the script, restore the
+        # original and only use length repair when the original was already short.
+        if repaired_words < SCRIPT_MIN_WORDS:
+            print(
+                f"[RETENTION] repair reduced script to {repaired_words} words; "
+                f"restoring original ({original_words} words)."
+            )
+            script = original_script
+            if original_words < SCRIPT_MIN_WORDS:
+                script = _repair_script_length(topic, research, plan, script)
+        else:
+            script = repaired_script
+
         validate_script(script)
         retention_issues = _retention_quality_issues(script, topic)
         if retention_issues:
@@ -1427,7 +1447,8 @@ Return JSON only:
             raise RuntimeError(f"Retention repair made scene {scene_id} too short.")
         by_id[scene_id]["narration"] = text
 
-    validate_script(repaired)
+    # Scene-level validation only here; the caller enforces the strict total-word minimum.
+    validate_script(repaired, allow_short=True)
     atomic_write_json(SCRIPT_PATH, repaired)
     _save_current_json(CURRENT_SCRIPT_PATH, repaired)
     print(f"[RETENTION] repaired {len(targets)} retention-critical scenes.")
