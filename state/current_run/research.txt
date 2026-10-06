@@ -1,0 +1,42 @@
+{
+  "CORE ANSWER": "Walking through a doorway creates an *event boundary* that forces the brain to update its mental representation of the current situation. This update automatically suppresses information that was relevant only to the just‑ended event – including the intention you were carrying (e.g., ‘I need coffee’). The memory isn’t erased; it becomes temporarily less active until a cue in the new environment (the coffee mug, the smell of coffee, etc.) re‑activates it. This phenomenon is known as the “doorway effect” and is a specific case of a broader event‑boundary‑driven forgetting in prospective memory.",
+  "STORY BEATS": [
+    "1. You form an intention in one location (e.g., at your desk you decide to get coffee).",
+    "2. You move toward a doorway while holding that intention in working memory.",
+    "3. Crossing the doorway registers as an event boundary in the hippocampal‑medial‑temporal system.",
+    "4. The brain creates a new context tag for the new room and tags the old one as inactive.",
+    "5. Dorsolateral prefrontal cortex briefly resets, freeing resources for the new episode.",
+    "6. The cue‑intention link (room → coffee) is down‑regulated, making the intention less accessible.",
+    "7. You experience a momentary feeling of “I forgot why I’m here.”",
+    "8. A salient cue in the new room (a coffee mug, kettle, smell) triggers reinstatement of the intention.",
+    "9. The intention resurfaces, often before you consciously notice the lapse.",
+    "10. If no cue appears, the intention may remain dormant until you later retrieve it or it decays."
+  ],
+  "MECHANISM / CAUSE AND EFFECT": "Event‑boundary processing (hippocampus creates a new context tag; medial temporal lobe encodes spatial layout; dorsolateral PFC holds the prospective intention). Crossing a doorway signals a boundary, causing a brief ‘reset’ that suppresses the old cue‑intention association. The suppression is the cause of the temporary forgetting; the presence of a relevant cue in the new environment is the effect that restores the memory.",
+  "IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Radvansky & Copeland (2006) – virtual‑house experiment showing reduced accuracy after door crossing.",
+    "Radvansky, Tamplin & Krawietz (2010) – real‑room replication, emphasizing event‑model updating.",
+    "Swallow, Zacks & Abrams (2009) – neuro‑cognitive evidence that event boundaries re‑index memory.",
+    "Prospective‑memory literature (Cognitive Research 2020) – cue‑intention pairs weakened by boundary.",
+    "Everyday example: walking from a desk to the kitchen and forgetting you needed coffee."
+  ],
+  "MISCONCEPTIONS OR CONTRADICTIONS": [
+    "“It’s just distraction.” – Forgetting occurs even when attention is explicitly directed to the intention (Radvansky & Copeland 2006).",
+    "“Context‑dependent memory only.” – The effect persists when participants are returned to the original room, showing it’s not merely a mismatch of context (Scientific American 2011 summary).",
+    "“Only doors matter.” – Any salient event boundary (sound, task change) produces a similar dip (Swallow et al. 2009)."
+  ],
+  "DISPUTES OR UNCERTAINTY": [
+    "Whether the purge is an active forgetting process (possible norepinephrine‑mediated suppression) or passive decay of activation remains unresolved.",
+    "Magnitude of forgetting may depend on boundary salience; transparent archways produce smaller effects than closed doors (BMC Psychology 2021).",
+    "Potential for training (implementation intentions) to reduce the effect is suggested by pilot work but lacks large‑scale replication.",
+    "Exact neural circuitry, especially the role of the locus coeruleus‑norepinephrine system, is still speculative."
+  ],
+  "VERIFIED SOURCES": [
+    "Radvansky, G. A., & Copeland, D. (2006). Walking through doorways causes forgetting. *Memory & Cognition*, 34, 1150‑1156. https://pubmed.ncbi.nlm.nih.gov/17128613/",
+    "Radvansky, G. A., Tamplin, A., & Krawietz, S. (2010). Environmental integration. *Psychonomic Bulletin & Review*, 17, 900‑904. https://memorylab.nd.edu/assets/258644/radvansky_tamplin_krawietz_2010_psychonomic_bulletin_review_.pdf",
+    "Swallow, K. M., Zacks, J. M., & Abrams, R. A. (2009). Event boundaries affect memory. *Journal of Experimental Psychology: General*, 138, 236‑257. https://doi.org/10.1037/a0015631",
+    "Scientific American (2011). Why Walking through Doorways Makes You Forget. https://www.scientificamerican.com/article/why-walking-through-doorway-makes-you-forget/",
+    "Cognitive Research: Principles & Implications (2020). Everyday prospective‑memory failures. https://link.springer.com/article/10.1007/s42657-020-00045-x",
+    "BMC Psychology (2021). Doorways do not always cause forgetting. https://link.springer.com/article/10.1186/s40359-021-00657-x"
+  ]
+}

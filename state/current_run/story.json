@@ -1,0 +1,98 @@
+{
+  "central_question": "Why do we sometimes walk into a room and immediately forget why we entered?",
+  "hook": "You’re at your desk, coffee mug in hand, and the next moment you’re standing in the kitchen, staring at the fridge and wondering, ‘What was I supposed to do?’",
+  "aha_moment": "Crossing a doorway triggers an event‑boundary that the brain treats as a fresh context, temporarily suppressing the intention you were carrying; a cue in the new room then re‑activates it.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Introduce the everyday glitch",
+      "reveal": "You decide to get coffee while at your desk.",
+      "required_facts": [
+        "You form an intention in a specific location",
+        "Intention is held in working memory"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Show the transition",
+      "reveal": "You walk toward the kitchen doorway, still holding the coffee plan.",
+      "required_facts": [
+        "Movement toward a doorway while holding intention",
+        "Working memory keeps intention active until boundary"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Explain the event‑boundary",
+      "reveal": "Crossing the doorway signals a new event, creating a fresh context tag in the hippocampus.",
+      "required_facts": [
+        "Doorway acts as a salient event boundary",
+        "Hippocampus updates context representation"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Show the reset",
+      "reveal": "The dorsolateral prefrontal cortex briefly resets, freeing resources for the new room.",
+      "required_facts": [
+        "DLPFC resets during event boundaries",
+        "Resource reallocation is automatic"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Illustrate suppression",
+      "reveal": "The link between the kitchen context and the coffee intention is down‑regulated, making the intention less accessible.",
+      "required_facts": [
+        "Cue‑intention association weakened by boundary",
+        "Temporary suppression of intention"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Create the ‘I forgot’ moment",
+      "reveal": "You stand in the kitchen, staring at the fridge, feeling a sudden blankness about why you’re there.",
+      "required_facts": [
+        "Subjective feeling of forgetting",
+        "Intention is still present but dormant"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Introduce the cue",
+      "reveal": "A coffee mug on the counter or the smell of espresso suddenly pops into view.",
+      "required_facts": [
+        "Salient cue in new environment",
+        "Cue can trigger memory reinstatement"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Show reinstatement",
+      "reveal": "The coffee intention resurfaces automatically, often before you consciously notice it.",
+      "required_facts": [
+        "Cue‑driven reactivation of intention",
+        "Intention returns without effort"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Highlight the reversal",
+      "reveal": "Even when you’re back in the original room, the forgetting can persist—doors aren’t the only boundary, and the effect isn’t just context mismatch.",
+      "required_facts": [
+        "Effect persists after returning to original room",
+        "Other event boundaries (sound, task change) produce similar dips"
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Wrap up with everyday implication",
+      "reveal": "Next time you walk through a doorway, pause for a second or place a small reminder—your brain will do the heavy lifting for you.",
+      "required_facts": [
+        "Implementation intentions can reduce the effect",
+        "Simple cues can mitigate forgetting"
+      ]
+    }
+  ],
+  "ending_payoff": "So the next time you feel that sudden blankness, remember it’s just your brain giving you a quick reset; a simple cue is all you need to bring the forgotten intention back into focus."
+}

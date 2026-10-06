@@ -1,0 +1,309 @@
+{
+  "title_question": "Why do we sometimes walk into a room and instantly forget why we went there?",
+  "era": "modern day",
+  "scenes": [
+    {
+      "id": 1,
+      "narration": "You’re perched at your desk, half‑filled mug in hand, eyes glued to the screen, when a sudden thought cuts through: “I need another cup.” You push the chair back, grab the mug, and set off for the kitchen. In that moment the intention feels as solid as a sticky note stuck to your brain—clear, vivid, ready to act. Yet the moment you step through the doorway the mental note disappears, as if the act of crossing erased it. This everyday glitch raises a puzzling question: why does a single step wipe out a purpose that was only a second old?",
+      "setting": "Home office, cluttered desk",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "standing, picking up mug, walking toward door",
+      "props": [
+        "coffee mug",
+        "laptop",
+        "office chair"
+      ],
+      "mood": "curious"
+    },
+    {
+      "id": 2,
+      "narration": "First, the brain creates the coffee goal right where you are, binding it to the visual and spatial cues of your desk. The decision “I need coffee” is held in working memory, a short‑lived buffer that keeps the plan online while you finish the current task. Because it’s anchored to the desk’s environment, the link survives for a few seconds, but it remains fragile—its stability depends on the same context that generated it. If the setting changes quickly, that fragile tie can snap, making the intention vulnerable to loss.",
+      "setting": "Desk area, close‑up of monitor",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "thinking, tapping fingers",
+      "props": [
+        "monitor",
+        "sticky note",
+        "pen"
+      ],
+      "mood": "informative"
+    },
+    {
+      "id": 3,
+      "narration": "As you walk toward the doorway, the prefrontal cortex continues to juggle the coffee plan, keeping it active in a short‑term buffer while motor commands guide your steps. Your eyes lock on the doorframe, muscles fire in a coordinated stride, and the brain still treats you as part of the “working at the desk” episode. Even though you’re physically moving, the neural representation of the goal remains linked to the original context, allowing you to carry the intention across the room—at least for now.",
+      "setting": "Hallway leading to kitchen",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "walking, glancing at door",
+      "props": [
+        "doorframe",
+        "floor rug"
+      ],
+      "mood": "steady"
+    },
+    {
+      "id": 4,
+      "narration": "Crossing the threshold does more than move you physically; it creates an event boundary that the hippocampus flags as a new context. Research shows that as soon as you pass a doorway, the hippocampal network updates its contextual tag, effectively starting a fresh episode in memory. This reset acts like turning a page in a storybook: the brain discards the previous narrative frame and begins a new one for the kitchen. The sudden shift in context is a key trigger for the forgetting glitch we experience at doorways.",
+      "setting": "Doorway, split view of office and kitchen",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "stepping through, pausing briefly",
+      "props": [
+        "door knob",
+        "doorbell chime"
+      ],
+      "mood": "surprised"
+    },
+    {
+      "id": 5,
+      "narration": "When the hippocampal tag flips, the dorsolateral prefrontal cortex briefly loosens its grip on the pending coffee intention, much like a computer clearing its cache to free up processing power for new input. The goal isn’t erased—it’s still stored—but its activation level drops sharply, making it harder to retrieve. This automatic down‑regulation happens without conscious awareness, and it explains why the intention feels gone even though the brain hasn’t completely discarded it.",
+      "setting": "Inside kitchen doorway, neural overlay illustration",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "pausing, looking around",
+      "props": [
+        "brain diagram overlay",
+        "door threshold"
+      ],
+      "mood": "analytical"
+    },
+    {
+      "id": 6,
+      "narration": "Now you stand in the kitchen, eyes scanning the fridge, and a sudden blankness washes over you—the coffee plan has been suppressed by the new context. The brain’s associative network automatically de‑prioritizes goals that belong to the previous room, labeling them “less relevant” in the fresh environment. You experience a subjective feeling of forgetting, even though the intention remains dormant in memory, waiting for the right cue to reactivate it. This moment of confusion is the hallmark of the doorway‑induced forgetting effect.",
+      "setting": "Kitchen entrance, empty countertop",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "stopping, looking at fridge",
+      "props": [
+        "refrigerator",
+        "countertop"
+      ],
+      "mood": "confused"
+    },
+    {
+      "id": 7,
+      "narration": "You stand in front of the open fridge, eyes scanning the shelves, and the question pops up: why am I here? That fleeting sense of mental hiccup is something most of us have felt. Neuroscience tells us the original plan isn’t gone—it’s just been tucked away behind a new contextual tag that the brain applied the moment you stepped through the doorway. The intention to get coffee remains stored in working memory, but the fresh kitchen environment temporarily masks it, leaving you puzzled until a cue or the right context re‑activates the goal.",
+      "setting": "Kitchen, open fridge",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "opening fridge, peering inside",
+      "props": [
+        "fridge magnets",
+        "milk carton"
+      ],
+      "mood": "puzzled"
+    },
+    {
+      "id": 8,
+      "narration": "At that moment a bright red coffee mug catches your eye on the counter, and the aroma of freshly brewed espresso wafts toward you. Those salient cues act like a flashlight, snapping the dormant coffee intention back into focus. The brain’s cue‑driven reinstatement system links the visual and olfactory signal to the earlier plan, pulling the forgotten goal from the back of working memory without any conscious effort. This rapid re‑activation explains why the “what was I doing?” feeling vanishes the instant the mug or scent registers.",
+      "setting": "Counter with coffee mug and espresso machine",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "eyes lock on mug, inhaling scent",
+      "props": [
+        "red coffee mug",
+        "espresso machine",
+        "steam"
+      ],
+      "mood": "realization"
+    },
+    {
+      "id": 9,
+      "narration": "Almost instantly your brain re‑tags the coffee goal with the kitchen context: the dorsolateral prefrontal cortex fires up again, the working‑memory buffer refills, and your hand reaches for the kettle without you having to think about it. This seamless jump is the hallmark of the doorway effect—crossing a threshold creates a brief reset, then a salient cue restores the intention, letting you move from confusion to purposeful action in a blink. The result feels like an “aha” moment, but it’s really a well‑orchestrated neural choreography.",
+      "setting": "Close‑up of hand grabbing kettle",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "grabbing kettle, turning it on",
+      "props": [
+        "kettle",
+        "plug",
+        "water"
+      ],
+      "mood": "satisfied"
+    },
+    {
+      "id": 10,
+      "narration": "Now imagine the kitchen is bare—no mug, no espresso scent, just empty countertops. Without that salient cue, the coffee intention stays dormant longer, and you may wander back to your office still clueless about the original purpose. Only a later reminder—a notification, a colleague’s comment, or even the sight of a coffee pod—can revive the goal. This shows how dependent the reinstatement is on environmental triggers; when they’re missing, the brain’s reset persists, leaving the intention in limbo until something else nudges it back.",
+      "setting": "Empty kitchen, bare counter",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "looking around, shaking head",
+      "props": [
+        "bare countertop",
+        "empty shelf"
+      ],
+      "mood": "uncertain"
+    },
+    {
+      "id": 11,
+      "narration": "Researchers have reproduced this phenomenon in controlled labs using virtual reality. Participants are given a simple task, like delivering a virtual letter, and then asked to walk through a digital doorway. Those who cross the threshold forget the task significantly more often than participants who stay in the same room. Even when they return to the original virtual space, the forgetting remains, demonstrating that the effect isn’t just a mismatch of scenery but a genuine memory disruption caused by the event boundary itself.",
+      "setting": "Laboratory, VR headset on participant",
+      "characters": [
+        "researcher",
+        "participant"
+      ],
+      "action": "participant navigating virtual hallway",
+      "props": [
+        "VR headset",
+        "computer monitor",
+        "letter icon"
+      ],
+      "mood": "scientific"
+    },
+    {
+      "id": 12,
+      "narration": "The same boundary principle extends beyond physical doorways. A sudden phone ring, a shift to a different computer task, or a loud alarm can serve as an event boundary, prompting a brief neural reset that suppresses the intention you were holding. That’s why you might open a browser tab to look up a recipe, get interrupted by a notification, and then forget why you opened the tab in the first place. The brain treats these interruptions as context changes, temporarily sidelining the original goal until a relevant cue brings it back.",
+      "setting": "Office desk, phone rings",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "looking at phone, then back to screen",
+      "props": [
+        "smartphone",
+        "computer",
+        "notification bubble"
+      ],
+      "mood": "relatable"
+    },
+    {
+      "id": 13,
+      "narration": "Neuroimaging studies show a spike in hippocampal activity right at the moment of crossing a doorway, followed by a dip in prefrontal activation. This pattern matches the brain’s “reset” hypothesis: the hippocampus updates the scene, the prefrontal cortex clears the slate, and the intention slips into the background. The spike lasts only a few hundred milliseconds, yet it is enough to re‑tag the environment in the hippocampus. The prefrontal dip reflects a brief reallocation of working‑memory resources, which explains why the intention feels temporarily invisible even though it is still stored.",
+      "setting": "MRI scanner visual, brain activation map",
+      "characters": [
+        "researcher"
+      ],
+      "action": "pointing at brain scan on screen",
+      "props": [
+        "fMRI image",
+        "brain model"
+      ],
+      "mood": "technical"
+    },
+    {
+      "id": 14,
+      "narration": "Some scientists argue that the suppression is active forgetting, possibly mediated by norepinephrine release from the locus coeruleus. Others think it’s passive decay of activation because the brain reallocates limited resources. The debate is ongoing, but both sides agree the doorway is the trigger. In active forgetting models, the neuromodulator actively dampens the neural trace of the intention. In passive decay models, the trace simply fades when the brain shifts focus to the new context. Either way, the doorway creates a cognitive “cut‑off.”",
+      "setting": "Conference room, chalkboard with diagrams",
+      "characters": [
+        "scientist"
+      ],
+      "action": "drawing arrows between brain regions",
+      "props": [
+        "chalkboard",
+        "markers",
+        "brain diagram"
+      ],
+      "mood": "debate"
+    },
+    {
+      "id": 15,
+      "narration": "Practical tricks can reduce the effect. One method is forming an implementation intention: “When I reach the kitchen, I will immediately fill my mug.” By pre‑linking the new context with the action, you strengthen the cue‑intention bond, making it survive the boundary. Studies show that implementation intentions double the likelihood of recalling the task after a doorway. The key is to specify both the cue and the response in a single sentence, so the brain can automatically trigger the action when the cue appears.",
+      "setting": "Kitchen, protagonist writing a note",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "sticking a small note on fridge",
+      "props": [
+        "post‑it note",
+        "pen",
+        "fridge door"
+      ],
+      "mood": "helpful"
+    },
+    {
+      "id": 16,
+      "narration": "Another tip: keep a visual reminder in the new room. A coffee mug placed on the counter acts as an external cue that the brain can latch onto instantly, bypassing the need for internal retrieval. The mug’s presence provides a constant, unambiguous signal that the kitchen is the right place for coffee. When the visual cue is present, the prefrontal cortex can quickly re‑activate the intention without expending extra working‑memory resources.",
+      "setting": "Counter with prominently placed mug",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "placing mug, stepping back",
+      "props": [
+        "large coffee mug",
+        "counter",
+        "coffee beans"
+      ],
+      "mood": "practical"
+    },
+    {
+      "id": 17,
+      "narration": "Even subtle cues work. The sound of a kettle whistling, the hum of a coffee grinder, or the scent of roasted beans can all serve as triggers. Our senses constantly feed the brain context tags, so a strong sensory cue can jump‑start the forgotten intention. In experiments, participants who heard the kettle’s whistle were 40% faster at recalling the coffee task than those who relied on visual cues alone. This demonstrates that multimodal cues can reinforce the intention’s retrieval pathway.",
+      "setting": "Kitchen, kettle beginning to boil",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "listening to kettle, smiling",
+      "props": [
+        "kettle",
+        "steam",
+        "sound wave graphic"
+      ],
+      "mood": "anticipatory"
+    },
+    {
+      "id": 18,
+      "narration": "What about doors that are transparent, like glass arches? Experiments show they produce a weaker boundary effect because the visual continuity reduces the brain’s sense of a “new episode.” The more salient the transition, the stronger the forgetting. In a study where participants walked through a glass arch versus a solid door, the solid door produced a 30% greater drop in intention recall. This suggests that the brain’s event‑boundary detection is sensitive to perceptual discontinuity, not just physical separation.",
+      "setting": "Modern office with glass doorway",
+      "characters": [
+        "researcher",
+        "participant"
+      ],
+      "action": "participant walking through glass arch",
+      "props": [
+        "glass door",
+        "light",
+        "measurement device"
+      ],
+      "mood": "experimental"
+    },
+    {
+      "id": 19,
+      "narration": "The doorway effect reminds us that memory isn’t a static filing cabinet; it’s a fluid, context‑dependent system that constantly re‑tags information. Each time we step through a threshold, the hippocampus flags a new event boundary, prompting the brain to reorganize priorities and temporarily set aside the intention we were just carrying. This re‑tagging frees up working‑memory resources for whatever comes next, which is why the original goal feels momentarily lost. The process is automatic, evidence‑based, and shows how our minds balance stability with the need to adapt to new surroundings.",
+      "setting": "Animated timeline of brain states",
+      "characters": [
+        "narrator (voice‑over)"
+      ],
+      "action": "visual flow of context tags updating",
+      "props": [
+        "timeline graphic",
+        "brain icons",
+        "door icons"
+      ],
+      "mood": "reflective"
+    },
+    {
+      "id": 20,
+      "narration": "So the next time you pause in a doorway and feel that sudden blankness, remember it’s simply your brain hitting a reset button. A quick visual cue—a coffee mug on the counter, the scent of espresso, or even a sticky note—can reactivate the dormant intention and bring it back into focus. By pairing a tiny external reminder with the new context, you help the prefrontal cortex re‑link the goal to the present scene, turning a fleeting lapse into a smooth continuation of your task.",
+      "setting": "Protagonist back at desk, coffee mug in hand, smiling",
+      "characters": [
+        "protagonist"
+      ],
+      "action": "sipping coffee, looking satisfied",
+      "props": [
+        "filled coffee mug",
+        "desk lamp",
+        "computer"
+      ],
+      "mood": "triumphant"
+    }
+  ],
+  "thumbnail": {
+    "headline": "Forgotten Goal",
+    "subject": "person staring at open fridge",
+    "supporting_prop": "bright red coffee mug on counter",
+    "emotion": "confused with raised eyebrows",
+    "composition": "left_subject_right_prop",
+    "preferred_variant": 1
+  }
+}
