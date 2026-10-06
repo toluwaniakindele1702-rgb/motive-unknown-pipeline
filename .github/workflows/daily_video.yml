@@ -53,12 +53,30 @@ jobs:
       SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '3' }}
       SHORTS_MIN_SECONDS: ${{ vars.SHORTS_MIN_SECONDS || '60' }}
       SHORTS_MAX_SECONDS: ${{ vars.SHORTS_MAX_SECONDS || '180' }}
+      RELIC_LOOP_RESUME: '0'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Clear stale failed-run topic state
+        shell: bash
+        run: |
+          # A new scheduled/manual production is always a new episode.
+          # Never let a previous failed run dictate the next topic or any
+          # topic-dependent artifact. This protects the production entrypoint
+          # even if a runner/worktree contains current_run state.
+          rm -f \
+            state/current_run/topic.json \
+            state/current_run/research.txt \
+            state/current_run/story.json \
+            state/current_run/script.json \
+            state/current_run/seo.json \
+            state/current_run/upload.json \
+            state/current_run/shorts.json
+          mkdir -p state/current_run
 
       - name: Set run mode
         shell: bash
