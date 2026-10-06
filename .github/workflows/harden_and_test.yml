@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - ".github/workflows/harden_and_test.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   patch:
@@ -17,121 +19,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply direct pipeline topic-resume fix
+      - name: Apply reliability patches
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path("pipeline.py")
-          s = p.read_text(encoding="utf-8")
+          import re
+          p=Path('pipeline.py'); s=p.read_text(encoding='utf-8')
+          anchor='CURRENT_SHORTS_PATH = CURRENT_RUN_DIR / "shorts.json"\n'
+          block='''\nPROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"\n\ndef _provider_health() -> dict[str, Any]:\n    data = load_json(PROVIDER_HEALTH_PATH, {})\n    return data if isinstance(data, dict) else {}\n\ndef _provider_blocked(provider: str) -> bool:\n    entry = _provider_health().get(provider)\n    if not isinstance(entry, dict): return False\n    until = str(entry.get("disabled_until", ""))\n    if not until: return False\n    try: return datetime.now(timezone.utc) < datetime.fromisoformat(until)\n    except ValueError: return False\n\ndef _block_provider(provider: str, reason: str) -> None:\n    from datetime import timedelta\n    now=datetime.now(timezone.utc); until=now.replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)\n    data=_provider_health(); data[provider]={"disabled_until":until.isoformat(),"reason":str(reason)[:1200],"updated_at":now.isoformat()}\n    atomic_write_json(PROVIDER_HEALTH_PATH,data)\n    print(f"[PROVIDER HEALTH] {provider} disabled until {until.isoformat()}: {str(reason)[:300]}")\n\ndef _should_block_provider(provider: str, message: str) -> bool:\n    text=str(message).lower()\n    if provider=="cloudflare": return "daily free allocation" in text or "10,000 neurons" in text or "http 429" in text\n    if provider=="puter": return "insufficient credits" in text or "insufficient credit" in text\n    if provider in {"huggingface","replicate"}: return "not configured" in text\n    return False\n\n'''
+          if 'PROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"' not in s:\n              if anchor not in s: raise SystemExit('provider-health anchor missing')\n              s=s.replace(anchor,anchor+block,1)\n          old='''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        attempted='''\n          new='''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        if _provider_blocked(provider):\n            print(f"[IMAGE FALLBACK] skipping {provider}: persistent provider health block")\n            disabled.add(provider)\n            continue\n        attempted='''\n          if old in s: s=s.replace(old,new,1)\n          elif new not in s: raise SystemExit('provider-loop anchor missing')\n          pat=r'(except ImageProviderError as exc:\n\s+print\(f"\\[IMAGE FALLBACK\\] \{provider\} failed: \{exc\}"\)\n)'\n          rep=r'\\1            if _should_block_provider(provider, str(exc)):\n                _block_provider(provider, str(exc))\n'\n          if 'if _should_block_provider(provider, str(exc))' not in s:\n              s,n=re.subn(pat,rep,s,count=1)\n              if n!=1: raise SystemExit('provider-exception anchor missing')\n          p.write_text(s,encoding='utf-8')\n          sc=Path('sitecustomize.py'); t=sc.read_text(encoding='utf-8')\n          marker='if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n'\n          replacement='''if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n            json_schema = response_format.get("json_schema")\n            if isinstance(json_schema, dict) and json_schema.get("name") == "motive_unknown_seo":\n                fallback_kwargs = dict(kwargs)\n                fallback_kwargs["response_format"] = {"type": "json_object"}\n                print("[GROQ COMPAT] SEO schema forced to generic JSON for server compatibility.")\n                return _original_create(self, *args, **fallback_kwargs)\n'''
+          if 'SEO schema forced to generic JSON' not in t:\n              if marker not in t: raise SystemExit('sitecustomize schema marker missing')\n              t=t.replace(marker,replacement,1)\n          sc.write_text(t,encoding='utf-8')\n          print('Reliability patches applied.')\n          PY
 
-          old = '''    checkpoint("starting")
-    history = load_history()
+      - name: Validate source
+        run: python -m py_compile pipeline.py sitecustomize.py local_image_worker.py
 
-    # Reuse small text artifacts saved by a previous failed Actions run.
-    topic = _load_current_json(CURRENT_TOPIC_PATH)
-    topic_resumed = isinstance(topic, dict) and bool(topic.get("question"))
-    if topic_resumed:
-        print("[RESUME] Reusing saved topic.")
-    else:
-        topic = choose_topic(history)
-        _save_current_json(CURRENT_TOPIC_PATH, topic)
-    checkpoint("topic_complete", question=topic["question"], resumed=topic_resumed)
-'''
-
-          new = '''    checkpoint("starting")
-    history = load_history()
-
-    # NEVER resume a stale topic by default. A failed/cancelled run can leave
-    # current-run artifacts behind, but the next production must choose a fresh
-    # topic against the channel history. Explicit stage resume is opt-in only.
-    allow_stage_resume = os.environ.get("RELIC_LOOP_RESUME", "0").strip().lower() in {"1", "true", "yes"}
-    if not allow_stage_resume:
-        for stale_path in (
-            CURRENT_TOPIC_PATH,
-            CURRENT_RESEARCH_PATH,
-            CURRENT_STORY_PATH,
-            CURRENT_SCRIPT_PATH,
-            CURRENT_SEO_PATH,
-            CURRENT_UPLOAD_PATH,
-            CURRENT_SHORTS_PATH,
-        ):
-            try:
-                stale_path.unlink(missing_ok=True)
-            except OSError as exc:
-                print(f"[STATE] Could not clear stale run artifact {stale_path}: {exc}")
-
-    topic = choose_topic(history)
-    _save_current_json(CURRENT_TOPIC_PATH, topic)
-    print(f"[TOPIC] Fresh topic selected: {topic['question']}")
-    checkpoint("topic_complete", question=topic["question"], resumed=False)
-'''
-          if old not in s:
-              raise SystemExit("topic resume block not found")
-          s = s.replace(old, new, 1)
-
-          old = '''    research = _load_current_text(CURRENT_RESEARCH_PATH)
-    research_resumed = bool(research)
-    if research_resumed:
-        print("[RESUME] Reusing saved research.")
-    else:
-        research = research_topic(topic)
-        _save_current_text(CURRENT_RESEARCH_PATH, research)
-'''
-          new = '''    research = _load_current_text(CURRENT_RESEARCH_PATH) if allow_stage_resume else None
-    research_resumed = bool(research) if allow_stage_resume else False
-    if research_resumed:
-        print("[RESUME] Reusing saved research for explicit stage resume.")
-    else:
-        research = research_topic(topic)
-        _save_current_text(CURRENT_RESEARCH_PATH, research)
-'''
-          if old not in s:
-              raise SystemExit("research resume block not found")
-          s = s.replace(old, new, 1)
-
-          old = '''    story = _load_current_json(CURRENT_STORY_PATH)
-    story_resumed = isinstance(story, dict) and bool(story.get("story_arc"))
-'''
-          new = '''    story = _load_current_json(CURRENT_STORY_PATH) if allow_stage_resume else None
-    story_resumed = isinstance(story, dict) and bool(story.get("story_arc")) if allow_stage_resume else False
-'''
-          if old not in s:
-              raise SystemExit("story resume block not found")
-          s = s.replace(old, new, 1)
-
-          old = '''    script = _load_current_json(CURRENT_SCRIPT_PATH)
-    if isinstance(script, dict):
-'''
-          new = '''    script = _load_current_json(CURRENT_SCRIPT_PATH) if allow_stage_resume else None
-    if allow_stage_resume and isinstance(script, dict):
-'''
-          if old not in s:
-              raise SystemExit("script resume block not found")
-          s = s.replace(old, new, 1)
-
-          old = '''    seo = _load_current_json(CURRENT_SEO_PATH)
-    seo_resumed = isinstance(seo, dict) and bool(seo.get("title") and seo.get("description") and seo.get("tags"))
-'''
-          new = '''    seo = _load_current_json(CURRENT_SEO_PATH) if allow_stage_resume else None
-    seo_resumed = isinstance(seo, dict) and bool(seo.get("title") and seo.get("description") and seo.get("tags")) if allow_stage_resume else False
-'''
-          if old not in s:
-              raise SystemExit("SEO resume block not found")
-          s = s.replace(old, new, 1)
-
-          p.write_text(s, encoding="utf-8")
-          print("DIRECT PIPELINE TOPIC RESUME FIX APPLIED")
-          PY
-
-      - name: Validate pipeline
-        run: python -m py_compile pipeline.py
-
-      - name: Commit direct source fix
+      - name: Commit patches
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pipeline.py
-          git diff --cached --quiet && exit 0
-          git commit -m "fix: never resume stale topic state by default"
+          git add pipeline.py sitecustomize.py
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: harden image fallback and SEO recovery"
           git push
+
+# retrigger reliability validation
