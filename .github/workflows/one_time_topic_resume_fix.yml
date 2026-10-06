@@ -1,0 +1,139 @@
+name: one-time topic resume fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one_time_topic_resume_fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch pipeline source
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('pipeline.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''    checkpoint("starting")
+    history = load_history()
+
+    # Reuse small text artifacts saved by a previous failed Actions run.
+    topic = _load_current_json(CURRENT_TOPIC_PATH)
+    topic_resumed = isinstance(topic, dict) and bool(topic.get("question"))
+    if topic_resumed:
+        print("[RESUME] Reusing saved topic.")
+    else:
+        topic = choose_topic(history)
+        _save_current_json(CURRENT_TOPIC_PATH, topic)
+    checkpoint("topic_complete", question=topic["question"], resumed=topic_resumed)
+'''
+
+          new = '''    checkpoint("starting")
+    history = load_history()
+
+    # Topic selection is intentionally NOT resumable. A failed/cancelled run may
+    # leave state/current_run/topic.json behind, but that file must never dictate
+    # the next episode. Start each production with a fresh topic selected against
+    # the permanent channel history, then rebuild every topic-dependent stage from
+    # that same topic. Stage resume can be enabled explicitly later with
+    # RELIC_LOOP_RESUME=1; the default is always a fresh episode.
+    allow_stage_resume = os.environ.get("RELIC_LOOP_RESUME", "0").strip().lower() in {"1", "true", "yes"}
+    if not allow_stage_resume:
+        for stale_path in (
+            CURRENT_TOPIC_PATH,
+            CURRENT_RESEARCH_PATH,
+            CURRENT_STORY_PATH,
+            CURRENT_SCRIPT_PATH,
+            CURRENT_SEO_PATH,
+            CURRENT_UPLOAD_PATH,
+            CURRENT_SHORTS_PATH,
+        ):
+            try:
+                stale_path.unlink(missing_ok=True)
+            except OSError as exc:
+                print(f"[STATE] Could not clear stale run artifact {stale_path}: {exc}")
+
+    topic = choose_topic(history)
+    _save_current_json(CURRENT_TOPIC_PATH, topic)
+    print(f"[TOPIC] Fresh topic selected: {topic['question']}")
+    checkpoint("topic_complete", question=topic["question"], resumed=False)
+'''
+
+          if old not in text:
+              raise SystemExit('Expected topic-resume block was not found; refusing to modify pipeline.py')
+
+          text = text.replace(old, new, 1)
+
+          old_research = '''    research = _load_current_text(CURRENT_RESEARCH_PATH)
+    research_resumed = bool(research)
+    if research_resumed:
+        print("[RESUME] Reusing saved research.")
+    else:
+        research = research_topic(topic)
+        _save_current_text(CURRENT_RESEARCH_PATH, research)
+'''
+          new_research = '''    research = _load_current_text(CURRENT_RESEARCH_PATH) if allow_stage_resume else None
+    research_resumed = bool(research) if allow_stage_resume else False
+    if research_resumed:
+        print("[RESUME] Reusing saved research for the explicitly resumed run.")
+    else:
+        research = research_topic(topic)
+        _save_current_text(CURRENT_RESEARCH_PATH, research)
+'''
+          if old_research not in text:
+              raise SystemExit('Expected research-resume block was not found; refusing to modify pipeline.py')
+          text = text.replace(old_research, new_research, 1)
+
+          old_story = '''    story = _load_current_json(CURRENT_STORY_PATH)
+    story_resumed = isinstance(story, dict) and bool(story.get("story_arc"))
+'''
+          new_story = '''    story = _load_current_json(CURRENT_STORY_PATH) if allow_stage_resume else None
+    story_resumed = isinstance(story, dict) and bool(story.get("story_arc")) if allow_stage_resume else False
+'''
+          if old_story not in text:
+              raise SystemExit('Expected story-resume block was not found; refusing to modify pipeline.py')
+          text = text.replace(old_story, new_story, 1)
+
+          old_script = '''    script = _load_current_json(CURRENT_SCRIPT_PATH)
+    if isinstance(script, dict):
+'''
+          new_script = '''    script = _load_current_json(CURRENT_SCRIPT_PATH) if allow_stage_resume else None
+    if allow_stage_resume and isinstance(script, dict):
+'''
+          if old_script not in text:
+              raise SystemExit('Expected script-resume block was not found; refusing to modify pipeline.py')
+          text = text.replace(old_script, new_script, 1)
+
+          old_seo = '''    seo = _load_current_json(CURRENT_SEO_PATH)
+    seo_resumed = isinstance(seo, dict) and bool(seo.get("title") and seo.get("description") and seo.get("tags"))
+'''
+          new_seo = '''    seo = _load_current_json(CURRENT_SEO_PATH) if allow_stage_resume else None
+    seo_resumed = isinstance(seo, dict) and bool(seo.get("title") and seo.get("description") and seo.get("tags")) if allow_stage_resume else False
+'''
+          if old_seo not in text:
+              raise SystemExit('Expected SEO-resume block was not found; refusing to modify pipeline.py')
+          text = text.replace(old_seo, new_seo, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('pipeline.py topic resume fix applied')
+
+      - name: Validate Python source
+        run: python -m py_compile pipeline.py
+
+      - name: Commit source fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pipeline.py
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: never resume stale topic state by default'
+          git push
