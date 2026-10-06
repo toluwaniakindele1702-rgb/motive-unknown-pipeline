@@ -78,6 +78,31 @@ jobs:
             state/current_run/shorts.json
           mkdir -p state/current_run
 
+      - name: Inject next scheduled Relic Loop topic
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          # The topic is deliberately supplied by the scheduled production
+          # plan. The pipeline researches/builds this exact question instead
+          # of spending Groq quota trying to invent a topic itself.
+          cat > state/current_run/topic.json <<'JSON'
+          {
+            "question": "Why does your voice sound different when you hear a recording?",
+            "topic": "Why Your Recorded Voice Sounds Different",
+            "category": "everyday psychology and human perception",
+            "era": "modern day",
+            "search_angles": [
+              "why bone conduction makes your own voice sound different to you",
+              "how air conduction changes the voice you hear from a recording",
+              "what happens to the vocal tract and perceived pitch when speaking",
+              "whether recordings actually make your voice deeper or higher or simply reveal the version others hear",
+              "common myths about hearing your own voice"
+            ]
+          }
+          JSON
+          cp state/current_run/topic.json run_work/topic.json 2>/dev/null || true
+          echo "[SCHEDULED TOPIC] Why does your voice sound different when you hear a recording?"
+
       - name: Set run mode
         shell: bash
         run: |
