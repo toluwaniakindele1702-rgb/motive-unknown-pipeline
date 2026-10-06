@@ -1,6 +1,7 @@
 name: Relic Loop Hardening And Test
 
 # Validation trigger for production hardening changes, including the curated topic queue.
+# Final validation also covers successful-run queue usage persistence.
 
 on:
   push:
