@@ -97,7 +97,6 @@ try:
 except Exception as exc:
     print(f"[RETENTION PATCH] Could not install retention safety patch: {exc}")
 
-# Hard script minimum: repair passes must reach 1700 words, not merely get within tolerance.
 try:
     _pipeline_path = Path("pipeline.py")
     if _pipeline_path.exists():
@@ -110,9 +109,6 @@ try:
 except Exception as exc:
     print(f"[SCRIPT PATCH] Could not install hard script-length patch: {exc}")
 
-# SEO fail-safe: a malformed/unsupported Groq structured response must never abort a
-# completed production. If the model-side SEO call fails, build valid metadata locally
-# from the already-approved topic instead of losing Cloudflare/TTS/render work.
 try:
     import pipeline as _relic_pipeline
 
@@ -161,11 +157,6 @@ except Exception as exc:
 # ---------------------------------------------------------------------------
 # Relic Loop production hardening
 # ---------------------------------------------------------------------------
-# The topic is now owned by a permanent, assistant-curated queue. The queue lives
-# in state/topic_queue.json so Actions can persist reservations/usage between runs.
-# A topic is reserved before expensive research/visual work; the workflow's existing
-# "git add -A state && git push" step persists the reservation even if production fails.
-# This completely removes Groq from topic selection.
 try:
     _pipeline_path = Path("pipeline.py")
     if _pipeline_path.exists():
@@ -183,24 +174,20 @@ def choose_queued_topic(history: dict[str, Any]) -> dict[str, Any]:
     topics = queue.get("topics") if isinstance(queue, dict) else None
     if not isinstance(topics, list) or not topics:
         raise RuntimeError("Topic queue is empty. Refusing to invent a topic or spend image-generation quota.")
-
     queued = [item for item in topics if isinstance(item, dict) and str(item.get("status", "queued")).lower() == "queued"]
     queued.sort(key=lambda item: int(item.get("id", 10**9)))
     if not queued:
         raise RuntimeError("Topic queue has no unused queued topics. Refusing to invent a topic or spend image-generation quota.")
-
     item = queued[0]
     question = str(item.get("question", "")).strip()
     if not question:
         raise RuntimeError(f"Queued topic {item.get('id')} has no question. Refusing to continue.")
-
     now = datetime.now(timezone.utc).isoformat()
     item["status"] = "reserved"
     item["reserved_at"] = now
     item["reserved_run_id"] = os.environ.get("GITHUB_RUN_ID", "local")
     item["reserved_run_number"] = os.environ.get("GITHUB_RUN_NUMBER", "")
     atomic_write_json(queue_path, queue)
-
     topic = {
         "queue_id": int(item["id"]),
         "question": question,
@@ -224,40 +211,27 @@ def choose_queued_topic(history: dict[str, Any]) -> dict[str, Any]:
                 print("[TOPIC QUEUE] Queue selector injected before legacy AI topic selector.")
                 _source = _pipeline_path.read_text(encoding="utf-8")
 
-        # Ignore the old workflow-injected single topic and always consume the queue.
-        # This also means a manual/scheduled runner can never silently fall back to
-        # the legacy Groq topic selector.
-        import re as _re
-        _topic_block = _re.compile(
-            r'''    # Reuse small text artifacts saved by a previous failed Actions run\.\n'
-            r'''    topic = _load_current_json\(CURRENT_TOPIC_PATH\)\n'
-            r'''    topic_resumed = isinstance\(topic, dict\) and bool\(topic\.get\("question"\)\)\n'
-            r'''    if topic_resumed:\n'
-            r'''        print\("\\\[RESUME\\\] Reusing saved topic\."\)\n'
-            r'''    else:\n'
-            r'''        topic = choose_topic\(history\)\n'
-            r'''        _save_current_json\(CURRENT_TOPIC_PATH, topic\)\n'
-            r'''    checkpoint\("topic_complete", question=topic\["question"\], resumed=topic_resumed\)\n'''
-        )
-        _topic_replacement = '''    # Topic ownership is deterministic: consume the next assistant-curated queue item.\n    # Any workflow-injected legacy topic is deliberately ignored.\n    topic = choose_queued_topic(history)\n    topic_resumed = False\n    _save_current_json(CURRENT_TOPIC_PATH, topic)\n    checkpoint("topic_complete", question=topic["question"], queue_id=topic.get("queue_id"), resumed=False)\n'''
-        _source2, _count = _topic_block.subn(_topic_replacement, _source, count=1)
-        if _count:
-            _pipeline_path.write_text(_source2, encoding="utf-8")
+        start_marker = "    # Reuse small text artifacts saved by a previous failed Actions run."
+        start = _source.find(start_marker)
+        end_marker = '    checkpoint("topic_complete", question=topic["question"], resumed=topic_resumed)'
+        end = _source.find(end_marker, start)
+        if start != -1 and end != -1:
+            end = _source.find("\n", end) + 1
+            _topic_replacement = '''    # Topic ownership is deterministic: consume the next assistant-curated queue item.\n    # Any workflow-injected legacy topic is deliberately ignored.\n    topic = choose_queued_topic(history)\n    topic_resumed = False\n    _save_current_json(CURRENT_TOPIC_PATH, topic)\n    checkpoint("topic_complete", question=topic["question"], queue_id=topic.get("queue_id"), resumed=False)\n'''
+            _source = _source[:start] + _topic_replacement + _source[end:]
+            _pipeline_path.write_text(_source, encoding="utf-8")
             print("[TOPIC QUEUE] Main orchestration patched to consume queue only.")
         elif "topic = choose_queued_topic(history)" not in _source:
             print("[TOPIC QUEUE] WARNING: main orchestration block was not matched; queue selector was not activated.")
 except Exception as exc:
     print(f"[TOPIC QUEUE] Could not install queue hardening patch: {exc}")
 
-# A smaller model occasionally returns 14 scenes even though the production validator
-# requires at least 15. Split the longest valid narration deterministically before any
-# TTS/image generation. This preserves all words and avoids throwing away expensive work.
 try:
     _pipeline_path = Path("pipeline.py")
     if _pipeline_path.exists():
         _source = _pipeline_path.read_text(encoding="utf-8")
         _needle = '''    # Do not kill the run just because the model under-produced. First allow a\n    # lenient structural validation, then repair the same story to target length.\n    validate_script(script, allow_short=True)\n'''
-        _replacement = '''    # Do not kill the run just because the model under-produced. First allow a\n    # lenient structural validation, then repair the same story to target length.\n    validate_script(script, allow_short=True)\n\n    # Some smaller-model responses arrive with 14 scenes. Split a concrete narration\n    # scene at a sentence boundary so the strict 15-scene gate cannot waste the run.\n    while len(script.get("scenes", [])) < SCENE_MIN:\n        scenes = script.get("scenes", [])\n        if not scenes:\n            break\n        candidate_index = max(range(len(scenes)), key=lambda _i: count_words(str(scenes[_i].get("narration", ""))))\n        original = scenes[candidate_index]\n        narration = normalize_spaces(str(original.get("narration", "")))\n        sentences = [x.strip() for x in re.split(r"(?<=[.!?])\\s+", narration) if x.strip()]\n        split_at = None\n        if len(sentences) >= 2:\n            running = 0\n            target = max(1, count_words(narration) // 2)\n            best_gap = 10**9\n            for _i in range(1, len(sentences)):\n                running += count_words(sentences[_i - 1])\n                left_words = count_words(" ".join(sentences[:_i]))\n                right_words = count_words(" ".join(sentences[_i:]))\n                if left_words >= 25 and right_words >= 25:\n                    gap = abs(left_words - target)\n                    if gap < best_gap:\n                        best_gap = gap\n                        split_at = _i\n        if split_at is not None:\n            left = " ".join(sentences[:split_at])\n            right = " ".join(sentences[split_at:])\n        else:\n            words = narration.split()\n            midpoint = len(words) // 2\n            if midpoint < 20 or len(words) - midpoint < 20:\n                break\n            left = " ".join(words[:midpoint])\n            right = " ".join(words[midpoint:])\n        first = dict(original)\n        second = dict(original)\n        first["narration"] = left\n        second["narration"] = right\n        scenes[candidate_index] = first\n        scenes.insert(candidate_index + 1, second)\n        for _number, _scene in enumerate(scenes, 1):\n            _scene["id"] = _number\n        print(f"[SCRIPT SAFETY] Split scene to raise scene count to {len(scenes)} before strict validation.")\n\n'''
+        _replacement = '''    # Do not kill the run just because the model under-produced. First allow a\n    # lenient structural validation, then repair the same story to target length.\n    validate_script(script, allow_short=True)\n\n    # Smaller-model responses can occasionally arrive with 14 scenes. Split the\n    # longest concrete narration at a sentence boundary before strict validation.\n    while len(script.get("scenes", [])) < SCENE_MIN:\n        scenes = script.get("scenes", [])\n        if not scenes:\n            break\n        candidate_index = max(range(len(scenes)), key=lambda _i: count_words(str(scenes[_i].get("narration", ""))))\n        original = scenes[candidate_index]\n        narration = normalize_spaces(str(original.get("narration", "")))\n        sentences = [x.strip() for x in re.split(r"(?<=[.!?])\\s+", narration) if x.strip()]\n        split_at = None\n        if len(sentences) >= 2:\n            target = max(1, count_words(narration) // 2)\n            best_gap = 10**9\n            for _i in range(1, len(sentences)):\n                left_words = count_words(" ".join(sentences[:_i]))\n                right_words = count_words(" ".join(sentences[_i:]))\n                if left_words >= 25 and right_words >= 25:\n                    gap = abs(left_words - target)\n                    if gap < best_gap:\n                        best_gap = gap\n                        split_at = _i\n        if split_at is not None:\n            left = " ".join(sentences[:split_at])\n            right = " ".join(sentences[split_at:])\n        else:\n            words = narration.split()\n            midpoint = len(words) // 2\n            if midpoint < 20 or len(words) - midpoint < 20:\n                break\n            left = " ".join(words[:midpoint])\n            right = " ".join(words[midpoint:])\n        first = dict(original)\n        second = dict(original)\n        first["narration"] = left\n        second["narration"] = right\n        scenes[candidate_index] = first\n        scenes.insert(candidate_index + 1, second)\n        for _number, _scene in enumerate(scenes, 1):\n            _scene["id"] = _number\n        print(f"[SCRIPT SAFETY] Split scene to raise scene count to {len(scenes)} before strict validation.")\n\n'''
         if _needle in _source and "[SCRIPT SAFETY] Split scene" not in _source:
             _pipeline_path.write_text(_source.replace(_needle, _replacement, 1), encoding="utf-8")
             print("[SCRIPT SAFETY] Under-produced scene splitter installed.")
