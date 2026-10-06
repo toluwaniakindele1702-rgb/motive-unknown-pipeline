@@ -103,9 +103,57 @@ try:
     if _pipeline_path.exists():
         _source = _pipeline_path.read_text(encoding="utf-8")
         _needle = '''        final_words = _script_word_count(repaired)\n\n        # The repair target is preferred, but a valid script that is only slightly\n'''
-        _replacement = '''        final_words = _script_word_count(repaired)\n\n        if final_words < SCRIPT_MIN_WORDS:\n            for _hard_pass in range(1, 5):\n                deficit = SCRIPT_MIN_WORDS - final_words\n                if deficit <= 0:\n                    break\n                ranked = sorted(repaired["scenes"], key=lambda _s: count_words(str(_s.get("narration", ""))))\n                made_progress = False\n                for _scene in ranked[:6]:\n                    before = count_words(str(_scene.get("narration", "")))\n                    add_words = max(8, min(28, deficit + 6))\n                    _prompt = f"""\nExpand ONLY this narration by about {add_words} useful words. Preserve all facts and meaning.\nDo not remove existing useful information. Do not add filler, scenery, dialogue, repetition, or unsupported claims.\nKeep the narration natural and below 120 words. Return JSON only: {\\\"narration\\\": \\"updated narration\\\"}.\n\nTOPIC:\n{json.dumps(topic, ensure_ascii=False)}\n\nSCENE:\n{json.dumps({\\\"id\\\": _scene[\\\"id\\\"], \\"narration\\\": _scene[\\\"narration\\\"]}, ensure_ascii=False)}\n""".strip()\n                    try:\n                        _result = groq_json(GROQ_WRITER_MODEL, [{"role": "user", "content": _prompt}], max_completion_tokens=500, temperature=0.25, attempts=2)\n                        _candidate = normalize_spaces(str(_result.get("narration", "")))\n                        if count_words(_candidate) > 120:\n                            _candidate = _fit_narration_to_limit(_candidate, 120)\n                        after = count_words(_candidate)\n                        if 45 <= after <= 120 and after > before:\n                            _scene["narration"] = _candidate\n                            final_words = _script_word_count(repaired)\n                            made_progress = True\n                            atomic_write_json(SCRIPT_PATH, repaired)\n                            _save_current_json(CURRENT_SCRIPT_PATH, repaired)\n                            print(f"[SCRIPT] hard top-up pass {_hard_pass}: scene {_scene['id']} {before}->{after}; total ~{final_words}")\n                            if final_words >= SCRIPT_MIN_WORDS:\n                                break\n                    except Exception as _exc:\n                        print(f"[SCRIPT] hard top-up scene {_scene.get('id')} failed: {_exc}")\n                if final_words >= SCRIPT_MIN_WORDS or not made_progress:\n                    break\n\n        # The repair target is preferred, but a valid script that is only slightly\n'''
+        _replacement = '''        final_words = _script_word_count(repaired)\n\n        if final_words < SCRIPT_MIN_WORDS:\n            for _hard_pass in range(1, 5):\n                deficit = SCRIPT_MIN_WORDS - final_words\n                if deficit <= 0:\n                    break\n                ranked = sorted(repaired["scenes"], key=lambda _s: count_words(str(_s.get("narration", ""))))\n                made_progress = False\n                for _scene in ranked[:6]:\n                    before = count_words(str(_scene.get("narration", "")))\n                    add_words = max(8, min(28, deficit + 6))\n                    _prompt = f"""\nExpand ONLY this narration by about {add_words} useful words. Preserve all facts and meaning.\nDo not remove existing useful information. Do not add filler, scenery, dialogue, repetition, or unsupported claims.\nKeep the narration natural and below 120 words. Return JSON only: {{\\\"narration\\\": \\"updated narration\\\"}}.\n\nTOPIC:\n{json.dumps(topic, ensure_ascii=False)}\n\nSCENE:\n{json.dumps({\\\"id\\\": _scene[\\\"id\\\"], \\"narration\\\": _scene[\\\"narration\\\"]}, ensure_ascii=False)}\n""".strip()\n                    try:\n                        _result = groq_json(GROQ_WRITER_MODEL, [{"role": "user", "content": _prompt}], max_completion_tokens=500, temperature=0.25, attempts=2)\n                        _candidate = normalize_spaces(str(_result.get("narration", "")))\n                        if count_words(_candidate) > 120:\n                            _candidate = _fit_narration_to_limit(_candidate, 120)\n                        after = count_words(_candidate)\n                        if 45 <= after <= 120 and after > before:\n                            _scene["narration"] = _candidate\n                            final_words = _script_word_count(repaired)\n                            made_progress = True\n                            atomic_write_json(SCRIPT_PATH, repaired)\n                            _save_current_json(CURRENT_SCRIPT_PATH, repaired)\n                            print(f"[SCRIPT] hard top-up pass {_hard_pass}: scene {_scene['id']} {before}->{after}; total ~{final_words}")\n                            if final_words >= SCRIPT_MIN_WORDS:\n                                break\n                    except Exception as _exc:\n                        print(f"[SCRIPT] hard top-up scene {_scene.get('id')} failed: {_exc}")\n                if final_words >= SCRIPT_MIN_WORDS or not made_progress:\n                    break\n\n        # The repair target is preferred, but a valid script that is only slightly\n'''
         if _needle in _source and "if final_words < SCRIPT_MIN_WORDS:\n            for _hard_pass" not in _source:
             _pipeline_path.write_text(_source.replace(_needle, _replacement, 1), encoding="utf-8")
             print("[SCRIPT PATCH] Hard 1700-word top-up installed.")
 except Exception as exc:
     print(f"[SCRIPT PATCH] Could not install hard script-length patch: {exc}")
+
+# SEO fail-safe: a malformed/unsupported Groq structured response must never abort a
+# completed production. If the model-side SEO call fails, build valid metadata locally
+# from the already-approved topic instead of losing Cloudflare/TTS/render work.
+try:
+    import pipeline as _relic_pipeline
+
+    _original_build_seo = _relic_pipeline.build_seo
+
+    def _safe_build_seo(topic, script, research):
+        try:
+            return _original_build_seo(topic, script, research)
+        except Exception as exc:
+            question = str(topic.get("question") or "Why Does This Happen?").strip()
+            title = question[:70].rstrip()
+            if len(title) < 18:
+                title = "Why Does This Happen?"
+            words = [w.lower() for w in __import__("re").findall(r"[a-zA-Z]{4,}", question)]
+            tags = []
+            for tag in [*words, "everyday life", "psychology", "human behavior", "curiosity", "Relic Loop"]:
+                tag = " ".join(str(tag).split())
+                if tag and tag.lower() not in {x.lower() for x in tags}:
+                    tags.append(tag)
+            tags = tags[:15]
+            while len(tags) < 12:
+                tags.append(["why", "how things work", "interesting facts", "explained"][len(tags) % 4])
+            keywords = list(dict.fromkeys(words[:6] + ["everyday life", "human behavior"]))[:8]
+            headline = "THE HIDDEN REASON"
+            description = (
+                f"Have you ever wondered {question.rstrip('?').lower()}? This Relic Loop episode explains "
+                "the evidence-backed reason behind this familiar everyday experience, including the "
+                "mechanisms, surprising details, and what we can learn from them.\n\n"
+                "Sources and research notes were used to build the explanation."
+            )
+            print(f"[SEO FAILSAFE] Groq SEO failed after production work; using deterministic metadata: {exc}")
+            return {
+                "title": title,
+                "alternate_titles": [title, f"The Real Reason: {title}"[:70]],
+                "description": description,
+                "tags": tags,
+                "primary_keywords": keywords,
+                "thumbnail_headline": headline,
+            }
+
+    _relic_pipeline.build_seo = _safe_build_seo
+    print("[SEO FAILSAFE] Non-fatal local SEO fallback installed.")
+except Exception as exc:
+    print(f"[SEO FAILSAFE] Could not install SEO fallback: {exc}")
