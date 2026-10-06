@@ -19,28 +19,95 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply reliability patches
+      - name: Apply direct reliability fixes
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
-          p=Path('pipeline.py'); s=p.read_text(encoding='utf-8')
-          anchor='CURRENT_SHORTS_PATH = CURRENT_RUN_DIR / "shorts.json"\n'
-          block='''\nPROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"\n\ndef _provider_health() -> dict[str, Any]:\n    data = load_json(PROVIDER_HEALTH_PATH, {})\n    return data if isinstance(data, dict) else {}\n\ndef _provider_blocked(provider: str) -> bool:\n    entry = _provider_health().get(provider)\n    if not isinstance(entry, dict): return False\n    until = str(entry.get("disabled_until", ""))\n    if not until: return False\n    try: return datetime.now(timezone.utc) < datetime.fromisoformat(until)\n    except ValueError: return False\n\ndef _block_provider(provider: str, reason: str) -> None:\n    from datetime import timedelta\n    now=datetime.now(timezone.utc); until=now.replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)\n    data=_provider_health(); data[provider]={"disabled_until":until.isoformat(),"reason":str(reason)[:1200],"updated_at":now.isoformat()}\n    atomic_write_json(PROVIDER_HEALTH_PATH,data)\n    print(f"[PROVIDER HEALTH] {provider} disabled until {until.isoformat()}: {str(reason)[:300]}")\n\ndef _should_block_provider(provider: str, message: str) -> bool:\n    text=str(message).lower()\n    if provider=="cloudflare": return "daily free allocation" in text or "10,000 neurons" in text or "http 429" in text\n    if provider=="puter": return "insufficient credits" in text or "insufficient credit" in text\n    if provider in {"huggingface","replicate"}: return "not configured" in text\n    return False\n\n'''
-          if 'PROVIDER_HEALTH_PATH = STATE_DIR / "provider_health.json"' not in s:\n              if anchor not in s: raise SystemExit('provider-health anchor missing')\n              s=s.replace(anchor,anchor+block,1)\n          old='''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        attempted='''\n          new='''    for provider in IMAGE_PROVIDER_ORDER:\n        if provider in disabled:\n            continue\n        if _provider_blocked(provider):\n            print(f"[IMAGE FALLBACK] skipping {provider}: persistent provider health block")\n            disabled.add(provider)\n            continue\n        attempted='''\n          if old in s: s=s.replace(old,new,1)\n          elif new not in s: raise SystemExit('provider-loop anchor missing')\n          pat=r'(except ImageProviderError as exc:\n\s+print\(f"\\[IMAGE FALLBACK\\] \{provider\} failed: \{exc\}"\)\n)'\n          rep=r'\\1            if _should_block_provider(provider, str(exc)):\n                _block_provider(provider, str(exc))\n'\n          if 'if _should_block_provider(provider, str(exc))' not in s:\n              s,n=re.subn(pat,rep,s,count=1)\n              if n!=1: raise SystemExit('provider-exception anchor missing')\n          p.write_text(s,encoding='utf-8')\n          sc=Path('sitecustomize.py'); t=sc.read_text(encoding='utf-8')\n          marker='if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n'\n          replacement='''if isinstance(response_format, dict) and response_format.get("type") == "json_schema":\n            json_schema = response_format.get("json_schema")\n            if isinstance(json_schema, dict) and json_schema.get("name") == "motive_unknown_seo":\n                fallback_kwargs = dict(kwargs)\n                fallback_kwargs["response_format"] = {"type": "json_object"}\n                print("[GROQ COMPAT] SEO schema forced to generic JSON for server compatibility.")\n                return _original_create(self, *args, **fallback_kwargs)\n'''
-          if 'SEO schema forced to generic JSON' not in t:\n              if marker not in t: raise SystemExit('sitecustomize schema marker missing')\n              t=t.replace(marker,replacement,1)\n          sc.write_text(t,encoding='utf-8')\n          print('Reliability patches applied.')\n          PY
+
+          p = Path("pipeline.py")
+          s = p.read_text(encoding="utf-8")
+
+          # RETENTION FIX: the previous run had a valid ~1740-word script, then
+          # retention rewrote selected scenes and shrank the whole script to 1575.
+          # Retention is never allowed to reduce a script below the hard 1700-word
+          # production minimum. If it does, restore the pre-retention draft and,
+          # when necessary, run the existing length repair before validation.
+          old = '''    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    by_id = {int(scene.get("id", 0)): scene for scene in repaired.get("scenes", [])}
+'''
+          new = '''    original_word_count = _script_word_count(script)
+    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    by_id = {int(scene.get("id", 0)): scene for scene in repaired.get("scenes", [])}
+'''
+          if old in s and "original_word_count = _script_word_count(script)" not in s:
+              s = s.replace(old, new, 1)
+
+          old = '''        by_id[scene_id]["narration"] = text
+
+    validate_script(repaired)
+'''
+          new = '''        by_id[scene_id]["narration"] = text
+
+    repaired_word_count = _script_word_count(repaired)
+    if repaired_word_count < SCRIPT_MIN_WORDS:
+        print(
+            f"[RETENTION] repair reduced script from ~{original_word_count} to "
+            f"~{repaired_word_count} words; restoring the valid draft before validation."
+        )
+        repaired = json.loads(json.dumps(script, ensure_ascii=False))
+        repaired_word_count = _script_word_count(repaired)
+        if repaired_word_count < SCRIPT_MIN_WORDS:
+            repaired = _repair_script_length(topic, research, plan, repaired)
+            repaired_word_count = _script_word_count(repaired)
+        if repaired_word_count < SCRIPT_MIN_WORDS:
+            raise RuntimeError(
+                f"Retention repair could not preserve the hard script minimum: "
+                f"{repaired_word_count} < {SCRIPT_MIN_WORDS}."
+            )
+
+    validate_script(repaired)
+'''
+          if old not in s:
+              raise SystemExit("retention validation anchor not found")
+          if "repair reduced script from ~" not in s:
+              s = s.replace(old, new, 1)
+
+          # SOURCE-LEVEL script hardening: final repair must not accept the old
+          # 1600-word tolerance. The production contract is exactly 1700-2600.
+          old = '''    # A tiny final shortfall is acceptable when the per-scene narration is valid.
+    # Do not throw away an otherwise production-ready episode because a fallback
+    # model missed the target by a small amount.
+    minimum_acceptable = max(1600, SCRIPT_MIN_WORDS - 150)
+    if not (minimum_acceptable <= final_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(
+            f"Script repair finished at {final_words} words; "
+            f"expected at least {minimum_acceptable} and at most {SCRIPT_MAX_WORDS}."
+        )
+'''
+          new = '''    # Hard production contract: never pass a script below 1700 words.
+    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(
+            f"Script repair finished at {final_words} words; "
+            f"expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
+        )
+'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding="utf-8")
+          print("DIRECT PIPELINE RETENTION/MINIMUM FIX APPLIED")
+          PY
 
       - name: Validate source
         run: python -m py_compile pipeline.py sitecustomize.py local_image_worker.py
 
-      - name: Commit patches
+      - name: Commit source fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pipeline.py sitecustomize.py
+          git add pipeline.py
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix: harden image fallback and SEO recovery"
+          git commit -m "fix: prevent retention from shrinking scripts below minimum"
           git push
-
-# retrigger reliability validation
