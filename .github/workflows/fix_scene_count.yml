@@ -2,8 +2,6 @@ name: Fix script scene-count handling
 
 on:
   push:
-    paths:
-      - '.github/workflows/fix_scene_count.yml'
 
 permissions:
   contents: write
