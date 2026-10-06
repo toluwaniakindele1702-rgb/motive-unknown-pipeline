@@ -1,5 +1,7 @@
 name: Relic Loop Hardening And Test
 
+# Validation trigger for production hardening changes, including the curated topic queue.
+
 on:
   push:
     paths:
