@@ -3,28 +3,118 @@ from pathlib import Path
 path = Path("pipeline.py")
 text = path.read_text(encoding="utf-8")
 
-MARKER = "# RELIC_LOOP_TOPIC_HARDENING_V1"
+MARKER = "# RELIC_LOOP_TOPIC_HARDENING_V2"
 if MARKER in text:
-    print("[TOPIC HARDENING] already applied")
+    print("[TOPIC HARDENING] V2 already applied")
     raise SystemExit(0)
 
+# Keep the model's topic brief focused on the channel's actual curiosity lane.
 old = """Do NOT simply turn these examples into future videos. Generate fresh questions in the same\ncuriosity territory.\n"""
-new = """Do NOT simply turn these examples into future videos. Generate fresh questions in the same\ncuriosity territory.\n\nTRENDING-CURIOSITY QUESTION HUNT:\nThe target is NOT merely a topic that is scientifically interesting. Search for questions that make\nordinary viewers stop and think, \"WAIT, I DO THAT TOO — WHY?\" or \"I HAVE ALWAYS WONDERED ABOUT THAT.\"\nStrong examples include questions like \"Why can't you tickle yourself?\", \"Why do you sometimes\nfeel your phone vibrate when it did not?\", \"Why does your voice sound different in a recording?\",\nor \"Why does time feel faster as you get older?\" These are examples of the FORMAT and viewer\nreaction, not a list to copy.\n\nSEARCH FOR THESE HIGH-CURIOSITY PATTERNS:\n- impossible-to-explain everyday sensations and perceptions\n- things everyone does but almost nobody knows the reason for\n- weird brain predictions, illusions, habits, reflexes, memory glitches and social behaviors\n- ordinary objects or routines with a surprising hidden purpose\n- familiar situations where the obvious explanation is wrong or incomplete\n- everyday questions that have recently attracted strong discussion, articles, searches, or creator interest\n- questions with a strong visual experiment, demonstration, comparison, reveal, or before/after explanation\n\nDo not confuse \"trending\" with celebrity/news gossip. A strong Relic Loop trend can be an evergreen\nquestion that is suddenly getting attention because people are rediscovering it. Search broadly for\ncurrent interest, but prefer evergreen curiosity when it has stronger mass appeal.\n\nREJECT candidates that are merely adjacent to a previous episode. If the new question uses the same\ncore phenomenon, mechanism, object, behavior, or viewer experience as a recent episode, reject it even\nif the wording is different. We want genuinely different video subjects, not rewritten versions of\nold videos.\n"""
-if old not in text:
-    raise SystemExit("[TOPIC HARDENING] topic prompt anchor not found")
-text = text.replace(old, new, 1)
+new = """Do NOT simply turn these examples into future videos. Generate fresh questions in the same\ncuriosity territory.\n\nRELIC LOOP TOPIC LANE:\nThe target is the viewer reaction: \"WAIT, I DO THAT TOO — WHY?\" Strong examples include questions\nlike \"Why can't you tickle yourself?\", \"Why does your voice sound different in a recording?\",\n\"Why do you sometimes feel your phone vibrate when it did not?\", and \"Why does time feel faster\nas you get older?\" These are examples of the FORMAT and curiosity level, not topics to copy.\nPrefer everyday sensations, brain predictions, illusions, habits, reflexes, memory glitches, social\nbehaviors, ordinary routines, and familiar objects with a surprising hidden reason. Prefer questions\nwith a strong visual experiment, demonstration, comparison, reveal, or before/after explanation.\nDo not choose generic object trivia just because it can be phrased as a \"why\" question.\n\nABSOLUTE ORIGINALITY RULE:\nA previous Relic Loop idea is permanently used. Never reuse it, even with different wording, a new\ntitle, a new angle, or a slightly different example. The underlying viewer experience, object,\nmechanism, phenomenon, or behavior must be genuinely different.\n"""
+if old in text:
+    text = text.replace(old, new, 1)
 
 anchor = """        if all(data.get(k) for k in required) and isinstance(data.get(\"search_angles\"), list) and score >= 8:\n            return data\n"""
-replacement = """        if all(data.get(k) for k in required) and isinstance(data.get(\"search_angles\"), list) and score >= 8:\n            # RELIC_LOOP_TOPIC_HARDENING_V1\n            # Block exact and near-duplicate topics before they can reach scripting.\n            import re\n            from difflib import SequenceMatcher\n            candidate = str(data.get(\"question\") or data.get(\"topic\") or \"\").lower()\n            stop = {\"why\", \"what\", \"how\", \"does\", \"do\", \"can\", \"you\", \"your\", \"the\", \"a\", \"an\", \"is\", \"are\", \"to\", \"of\", \"in\", \"on\", \"for\", \"we\", \"our\", \"it\", \"this\", \"that\"}\n            def _topic_tokens(value):\n                return {w for w in re.findall(r\"[a-z0-9]+\", value.lower()) if len(w) > 2 and w not in stop}\n            cand_tokens = _topic_tokens(candidate)\n            duplicate = False\n            duplicate_reason = \"\"\n            for previous_q in previous:\n                prev = str(previous_q)\n                if candidate == prev.lower().strip():\n                    duplicate = True\n                    duplicate_reason = f\"exact match: {prev}\"\n                    break\n                ratio = SequenceMatcher(None, candidate, prev.lower()).ratio()\n                prev_tokens = _topic_tokens(prev)\n                overlap = (len(cand_tokens & prev_tokens) / max(1, len(cand_tokens | prev_tokens)))\n                if ratio >= 0.78 or overlap >= 0.68:\n                    duplicate = True\n                    duplicate_reason = f\"near duplicate: {prev}\"\n                    break\n            if duplicate:\n                print(f\"[TOPIC] rejected duplicate candidate: {duplicate_reason}\")\n                continue\n            return data\n"""
+replacement = r'''        if all(data.get(k) for k in required) and isinstance(data.get("search_angles"), list) and score >= 8:
+            # RELIC_LOOP_TOPIC_HARDENING_V2
+            # Deterministic gate: history + permanent reservations + explicit known repeat families.
+            import json
+            import re
+            from difflib import SequenceMatcher
+            from pathlib import Path
+
+            def _canon(value):
+                s = str(value or "").lower()
+                aliases = {
+                    "mugs": "cup", "mug": "cup", "cups": "cup",
+                    "warm": "hot", "heating": "hot", "heated": "hot",
+                    "stuck": "snag", "snags": "snag", "snagged": "snag",
+                    "fabrics": "fabric", "seams": "seam",
+                    "zippers": "zipper", "zip": "zipper",
+                    "liquids": "liquid",
+                }
+                words = re.findall(r"[a-z0-9]+", s)
+                words = [aliases.get(w, w) for w in words]
+                stop = {"why","what","how","does","do","did","can","could","would","you","your","the","a","an","is","are","was","were","to","of","in","on","for","we","our","it","this","that","after","before","even","really","often","sometimes","with","when"}
+                return {w for w in words if len(w) > 2 and w not in stop}
+
+            candidate = str(data.get("question") or data.get("topic") or data.get("title") or "").strip()
+            cand = _canon(candidate)
+
+            # Explicit permanent blocks requested after repeated production failures.
+            forbidden_families = (
+                {"zipper", "fabric"},
+                {"zipper", "snag"},
+                {"zipper", "stuck"},
+                {"coffee", "cup"},
+                {"coffee", "hot"},
+                {"coffee", "liquid"},
+            )
+            blocked = False
+            reason = ""
+            for family in forbidden_families:
+                if family.issubset(cand):
+                    blocked = True
+                    reason = "permanently blocked repeat family: " + ", ".join(sorted(family))
+                    break
+
+            # Load successful episodes AND previously reserved/attempted topics.
+            history_path = Path("state/content_history.json")
+            reserve_path = Path("state/topic_history.json")
+            try:
+                history_data = json.loads(history_path.read_text(encoding="utf-8")) if history_path.exists() else {"videos": []}
+            except Exception:
+                history_data = {"videos": []}
+            try:
+                reserve_data = json.loads(reserve_path.read_text(encoding="utf-8")) if reserve_path.exists() else {"topics": []}
+            except Exception:
+                reserve_data = {"topics": []}
+
+            previous = []
+            for row in history_data.get("videos", []) if isinstance(history_data, dict) else []:
+                if isinstance(row, dict):
+                    previous.append(" | ".join(str(row.get(k, "")) for k in ("question", "topic", "title")))
+            for row in reserve_data.get("topics", []) if isinstance(reserve_data, dict) else []:
+                if isinstance(row, dict):
+                    previous.append(str(row.get("question") or row.get("topic") or row.get("title") or ""))
+
+            if not blocked:
+                for prev in previous:
+                    prev = str(prev).strip()
+                    if not prev:
+                        continue
+                    p = _canon(prev)
+                    shared = cand & p
+                    union = cand | p
+                    ratio = SequenceMatcher(None, candidate.lower(), prev.lower()).ratio()
+                    overlap = len(shared) / max(1, len(union))
+                    # Err on the side of rejection. Two+ meaningful shared tokens or a strong
+                    # wording match means the same underlying episode is too likely.
+                    if candidate.lower() == prev.lower() or ratio >= 0.70 or overlap >= 0.50 or len(shared) >= 2:
+                        blocked = True
+                        reason = f"previous/ reserved episode overlap: {prev}"
+                        break
+
+            if blocked:
+                print(f"[TOPIC HARD GATE] REJECTED: {reason}")
+                continue
+
+            # Reserve the accepted idea BEFORE research/script generation. A failed run therefore
+            # cannot recycle the same idea tomorrow. Reservations are permanent by design.
+            reserve_path.parent.mkdir(parents=True, exist_ok=True)
+            if not isinstance(reserve_data, dict):
+                reserve_data = {"topics": []}
+            topics = reserve_data.setdefault("topics", [])
+            if not any(str(r.get("question", "")).strip().lower() == candidate.lower() for r in topics if isinstance(r, dict)):
+                topics.append({"date": __import__("datetime").datetime.utcnow().isoformat() + "Z", "question": candidate, "topic": str(data.get("topic") or ""), "title": str(data.get("title") or ""), "reserved": True})
+                reserve_path.write_text(json.dumps(reserve_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            print(f"[TOPIC HARD GATE] PASS + PERMANENT RESERVATION: {candidate}")
+            return data
+'''
 if anchor not in text:
     raise SystemExit("[TOPIC HARDENING] selector anchor not found")
 text = text.replace(anchor, replacement, 1)
 
-# Also expand the selector's own instructions so the model is rewarded for the desired question shape.
-selector_anchor = """The strongest lane is: \"WAIT... I experience that all the time. Why does that happen?\"\n"""
-selector_add = selector_anchor + """\nQUESTION-SHAPE PRIORITY:\nPrefer a short, instantly understandable question about a familiar experience, sensation, behavior,\nor object. The best candidate should feel like a question a normal person could ask while sitting on\nthe couch, using a phone, eating, travelling, getting ready, sleeping, talking to friends, or doing\na routine task. Give extra weight to \"Why can't I...\", \"Why does my brain/body...\", \"Why do we...\",\nand \"Why is X designed this way?\" patterns when the explanation contains a genuine surprising reveal.\n"""
-if selector_anchor in text:
-    text = text.replace(selector_anchor, selector_add, 1)
-
 path.write_text(text, encoding="utf-8")
-print("[TOPIC HARDENING] applied duplicate guard + high-curiosity search rules")
+print("[TOPIC HARDENING] V2 installed: deterministic duplicate rejection + permanent reservations")
