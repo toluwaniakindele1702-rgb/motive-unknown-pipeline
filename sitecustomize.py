@@ -111,7 +111,6 @@ except Exception as exc:
 
 try:
     import pipeline as _relic_pipeline
-
     _original_build_seo = _relic_pipeline.build_seo
 
     def _safe_build_seo(topic, script, research):
@@ -119,9 +118,7 @@ try:
             return _original_build_seo(topic, script, research)
         except Exception as exc:
             question = str(topic.get("question") or "Why Does This Happen?").strip()
-            title = question[:70].rstrip()
-            if len(title) < 18:
-                title = "Why Does This Happen?"
+            title = question[:70].rstrip() or "Why Does This Happen?"
             words = [w.lower() for w in __import__("re").findall(r"[a-zA-Z]{4,}", question)]
             tags = []
             for tag in [*words, "everyday life", "psychology", "human behavior", "curiosity", "Relic Loop"]:
@@ -132,7 +129,6 @@ try:
             while len(tags) < 12:
                 tags.append(["why", "how things work", "interesting facts", "explained"][len(tags) % 4])
             keywords = list(dict.fromkeys(words[:6] + ["everyday life", "human behavior"]))[:8]
-            headline = "THE HIDDEN REASON"
             description = (
                 f"Have you ever wondered {question.rstrip('?').lower()}? This Relic Loop episode explains "
                 "the evidence-backed reason behind this familiar everyday experience, including the "
@@ -146,7 +142,7 @@ try:
                 "description": description,
                 "tags": tags,
                 "primary_keywords": keywords,
-                "thumbnail_headline": headline,
+                "thumbnail_headline": "THE HIDDEN REASON",
             }
 
     _relic_pipeline.build_seo = _safe_build_seo
@@ -226,6 +222,26 @@ def choose_queued_topic(history: dict[str, Any]) -> dict[str, Any]:
 except Exception as exc:
     print(f"[TOPIC QUEUE] Could not install queue hardening patch: {exc}")
 
+# Mark the reserved queue entry used only after the normal successful history update.
+try:
+    _pipeline_path = Path("pipeline.py")
+    if _pipeline_path.exists():
+        _source = _pipeline_path.read_text(encoding="utf-8")
+        start_marker = "def update_history(topic: dict[str, Any], seo: dict[str, Any], video_id: str | None) -> None:"
+        start = _source.find(start_marker)
+        save_pos = _source.find("    save_history(history)", start)
+        if start != -1 and save_pos != -1 and "[TOPIC QUEUE] Marked Topic" not in _source:
+            insert_at = save_pos + len("    save_history(history)")
+            _used_patch = '''\n\n    # Successful upload/history update is the commit point for the queue entry.\n    queue_id = topic.get("queue_id")\n    if queue_id is not None:\n        queue_path = STATE_DIR / "topic_queue.json"\n        try:\n            queue_data = load_json(queue_path, {})\n            for queued_item in queue_data.get("topics", []):\n                if isinstance(queued_item, dict) and int(queued_item.get("id", -1)) == int(queue_id):\n                    queued_item["status"] = "used"\n                    queued_item["used_date"] = datetime.now(timezone.utc).date().isoformat()\n                    queued_item["used_at"] = datetime.now(timezone.utc).isoformat()\n                    queued_item["used_run_id"] = os.environ.get("GITHUB_RUN_ID", "")\n                    queued_item["used_video_id"] = video_id\n                    break\n            atomic_write_json(queue_path, queue_data)\n            print(f"[TOPIC QUEUE] Marked Topic {queue_id} as used.")\n        except Exception as exc:\n            raise RuntimeError(f"Could not persist successful topic queue usage for Topic {queue_id}: {exc}") from exc'''
+            _source = _source[:insert_at] + _used_patch + _source[insert_at:]
+            _pipeline_path.write_text(_source, encoding="utf-8")
+            print("[TOPIC QUEUE] Successful-run used-date persistence installed.")
+except Exception as exc:
+    print(f"[TOPIC QUEUE] Could not install used-status persistence: {exc}")
+
+# A smaller model occasionally returns 14 scenes even though the production validator
+# requires at least 15. Split the longest valid narration deterministically before any
+# TTS/image generation. This preserves all words and avoids throwing away expensive work.
 try:
     _pipeline_path = Path("pipeline.py")
     if _pipeline_path.exists():
