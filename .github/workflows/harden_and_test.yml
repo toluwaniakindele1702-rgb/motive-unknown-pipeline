@@ -24,6 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path("pipeline.py")
           s = p.read_text(encoding="utf-8")
@@ -40,7 +41,7 @@ jobs:
 
           old = '''        by_id[scene_id]["narration"] = text
 
-    validate_script(repaired, allow_short=True)
+    validate_script(repaired)
 '''
           new = '''        by_id[scene_id]["narration"] = text
 
@@ -71,23 +72,7 @@ jobs:
             f"expected at least {minimum_acceptable} and at most {SCRIPT_MAX_WORDS}."
         )
 '''
-          new = '''    if final_words < SCRIPT_MIN_WORDS:
-        # Never fail a production over a tiny fallback-model shortfall. Add one
-        # concise, topic-linked closing sentence without another API call.
-        shortfall = SCRIPT_MIN_WORDS - final_words
-        if shortfall <= 24 and repaired.get("scenes"):
-            topic_question = normalize_spaces(str(topic.get("question", ""))).rstrip("?").strip()
-            closing = f"That hidden detail is the key to why {topic_question}."
-            needed = SCRIPT_MIN_WORDS - final_words
-            words = closing.split()
-            if len(words) > needed:
-                closing = " ".join(words[:needed]).rstrip(".,!? ") + "."
-            repaired["scenes"][-1]["narration"] = normalize_spaces(
-                str(repaired["scenes"][-1].get("narration", "")) + " " + closing
-            )
-            final_words = _script_word_count(repaired)
-
-    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
+          new = '''    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
         raise RuntimeError(
             f"Script repair finished at {final_words} words; expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
         )
@@ -95,21 +80,8 @@ jobs:
           if old in s:
               s = s.replace(old, new, 1)
 
-          # The retention gate must validate the final repaired script, not an
-          # earlier snapshot, so a small length correction cannot be lost.
-          old = '''        validate_script(script)
-        retention_issues = _retention_quality_issues(script, topic)
-'''
-          new = '''        validate_script(script)
-        retention_issues = _retention_quality_issues(script, topic)
-'''
-          # Keep this replacement intentionally explicit/no-op: it documents the
-          # source-level final-validation boundary without changing unrelated code.
-          if old in s:
-              s = s.replace(old, new, 1)
-
           p.write_text(s, encoding="utf-8")
-          print("DIRECT PIPELINE SCRIPT-LENGTH FIX APPLIED")
+          print("DIRECT PIPELINE RETENTION/MINIMUM FIX APPLIED")
           PY
 
       - name: Validate source
@@ -121,5 +93,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pipeline.py
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix: enforce hard script minimum after repair"
+          git commit -m "fix: preserve script minimum during retention repair"
           git push
