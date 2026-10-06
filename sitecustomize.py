@@ -47,7 +47,6 @@ try:
 except Exception as exc:
     print(f"[GROQ COMPAT] Could not install compatibility patch: {exc}")
 
-# Apply topic-selection hardening before pipeline.py is imported.
 try:
     from pathlib import Path
     import runpy
@@ -61,7 +60,6 @@ try:
 except Exception as exc:
     print(f"[TOPIC HARDENING] Could not apply runtime topic patch: {exc}")
 
-# Keep Shorts captions compact without changing long-form rendering.
 try:
     import subprocess
     _original_subprocess_run = subprocess.run
@@ -71,18 +69,12 @@ try:
         if patched_args:
             command = patched_args[0]
             if isinstance(command, (list, tuple)):
-                patched_args[0] = [
-                    str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
-                    if isinstance(item, str) else item for item in command
-                ]
+                patched_args[0] = [str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2") if isinstance(item, str) else item for item in command]
             elif isinstance(command, str):
                 patched_args[0] = command.replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
         elif isinstance(kwargs.get("args"), (list, tuple)):
             kwargs = dict(kwargs)
-            kwargs["args"] = [
-                str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
-                if isinstance(item, str) else item for item in kwargs["args"]
-            ]
+            kwargs["args"] = [str(item).replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2") if isinstance(item, str) else item for item in kwargs["args"]]
         elif isinstance(kwargs.get("args"), str):
             kwargs = dict(kwargs)
             kwargs["args"] = kwargs["args"].replace("FontSize=22", "FontSize=18").replace("Outline=3", "Outline=2")
@@ -93,27 +85,27 @@ try:
 except Exception as exc:
     print(f"[SHORTS CAPTIONS] Could not install caption-size patch: {exc}")
 
-# Retention safety: if the LLM's retention rewrite makes a selected scene too
-# short, keep the original validated narration instead of aborting production.
 try:
     _pipeline_path = Path("pipeline.py")
     if _pipeline_path.exists():
         _source = _pipeline_path.read_text(encoding="utf-8")
-        _old = '''        if count_words(text) < 25:
-            raise RuntimeError(f"Retention repair made scene {scene_id} too short.")
-        by_id[scene_id]["narration"] = text
-'''
-        _new = '''        if count_words(text) < 25:
-            fallback_text = normalize_spaces(str(original.get("narration", "")))
-            if count_words(fallback_text) >= 18:
-                print(f"[RETENTION] scene {scene_id} rewrite was too short; keeping original narration.")
-                text = fallback_text
-            else:
-                raise RuntimeError(f"Retention repair made scene {scene_id} too short and no valid fallback exists.")
-        by_id[scene_id]["narration"] = text
-'''
+        _old = '''        if count_words(text) < 25:\n            raise RuntimeError(f"Retention repair made scene {scene_id} too short.")\n        by_id[scene_id]["narration"] = text\n'''
+        _new = '''        if count_words(text) < 25:\n            fallback_text = normalize_spaces(str(original.get("narration", "")))\n            if count_words(fallback_text) >= 18:\n                print(f"[RETENTION] scene {scene_id} rewrite was too short; keeping original narration.")\n                text = fallback_text\n            else:\n                raise RuntimeError(f"Retention repair made scene {scene_id} too short and no valid fallback exists.")\n        by_id[scene_id]["narration"] = text\n'''
         if _old in _source and _new not in _source:
             _pipeline_path.write_text(_source.replace(_old, _new, 1), encoding="utf-8")
             print("[RETENTION PATCH] Short retention rewrites now fall back to the original valid scene.")
 except Exception as exc:
     print(f"[RETENTION PATCH] Could not install retention safety patch: {exc}")
+
+# Hard script minimum: repair passes must reach 1700 words, not merely get within tolerance.
+try:
+    _pipeline_path = Path("pipeline.py")
+    if _pipeline_path.exists():
+        _source = _pipeline_path.read_text(encoding="utf-8")
+        _needle = '''        final_words = _script_word_count(repaired)\n\n        # The repair target is preferred, but a valid script that is only slightly\n'''
+        _replacement = '''        final_words = _script_word_count(repaired)\n\n        if final_words < SCRIPT_MIN_WORDS:\n            for _hard_pass in range(1, 5):\n                deficit = SCRIPT_MIN_WORDS - final_words\n                if deficit <= 0:\n                    break\n                ranked = sorted(repaired["scenes"], key=lambda _s: count_words(str(_s.get("narration", ""))))\n                made_progress = False\n                for _scene in ranked[:6]:\n                    before = count_words(str(_scene.get("narration", "")))\n                    add_words = max(8, min(28, deficit + 6))\n                    _prompt = f"""\nExpand ONLY this narration by about {add_words} useful words. Preserve all facts and meaning.\nDo not remove existing useful information. Do not add filler, scenery, dialogue, repetition, or unsupported claims.\nKeep the narration natural and below 120 words. Return JSON only: {\\\"narration\\\": \\"updated narration\\\"}.\n\nTOPIC:\n{json.dumps(topic, ensure_ascii=False)}\n\nSCENE:\n{json.dumps({\\\"id\\\": _scene[\\\"id\\\"], \\"narration\\\": _scene[\\\"narration\\\"]}, ensure_ascii=False)}\n""".strip()\n                    try:\n                        _result = groq_json(GROQ_WRITER_MODEL, [{"role": "user", "content": _prompt}], max_completion_tokens=500, temperature=0.25, attempts=2)\n                        _candidate = normalize_spaces(str(_result.get("narration", "")))\n                        if count_words(_candidate) > 120:\n                            _candidate = _fit_narration_to_limit(_candidate, 120)\n                        after = count_words(_candidate)\n                        if 45 <= after <= 120 and after > before:\n                            _scene["narration"] = _candidate\n                            final_words = _script_word_count(repaired)\n                            made_progress = True\n                            atomic_write_json(SCRIPT_PATH, repaired)\n                            _save_current_json(CURRENT_SCRIPT_PATH, repaired)\n                            print(f"[SCRIPT] hard top-up pass {_hard_pass}: scene {_scene['id']} {before}->{after}; total ~{final_words}")\n                            if final_words >= SCRIPT_MIN_WORDS:\n                                break\n                    except Exception as _exc:\n                        print(f"[SCRIPT] hard top-up scene {_scene.get('id')} failed: {_exc}")\n                if final_words >= SCRIPT_MIN_WORDS or not made_progress:\n                    break\n\n        # The repair target is preferred, but a valid script that is only slightly\n'''
+        if _needle in _source and "if final_words < SCRIPT_MIN_WORDS:\n            for _hard_pass" not in _source:
+            _pipeline_path.write_text(_source.replace(_needle, _replacement, 1), encoding="utf-8")
+            print("[SCRIPT PATCH] Hard 1700-word top-up installed.")
+except Exception as exc:
+    print(f"[SCRIPT PATCH] Could not install hard script-length patch: {exc}")
