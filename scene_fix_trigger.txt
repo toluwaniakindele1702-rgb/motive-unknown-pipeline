@@ -1,0 +1,1 @@
+trigger source scene-count repair 2026-10-06
