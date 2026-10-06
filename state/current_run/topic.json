@@ -1,15 +1,15 @@
 {
-  "question": "Why does a coffee mug stay hot even after the liquid is gone?",
-  "topic": "Coffee Mug Heat Retention",
-  "category": "technology",
+  "question": "Why Do You Sometimes Walk Into a Room and Immediately Forget Why?",
+  "topic": "Walking Into a Room and Forgetting Why",
+  "category": "human mind",
   "era": "modern day",
-  "why_curious": "When you finish a cup, the mug still feels warm to the touch. The ceramic walls seem to keep the heat for minutes after the liquid evaporates, and we often wonder if the mug itself is somehow storing energy. Understanding the physics behind this can reveal how everyday materials manage heat and even explain why astronauts use ceramic mugs in space.",
-  "curiosity_gap": "People assume the mug stays hot because the coffee inside is still warm, but the liquid is gone—so why does the mug feel hot?",
-  "curiosity_score": 8,
+  "why_curious": "Almost everyone has walked into a room and suddenly forgotten what they meant to do. The strange part is that the intention can feel completely obvious a few seconds earlier, then seem to vanish the moment the setting changes. The explanation reveals how attention, working memory, context, and interruptions interact in an everyday mental glitch.",
+  "curiosity_gap": "You feel like the reason for entering the room simply disappeared, but the intention may still be recoverable once the right context returns.",
+  "curiosity_score": 10,
   "search_angles": [
-    "Thermal mass and low conductivity of ceramic",
-    "Evaporative cooling and trapped warm air",
-    "Heat transfer from mug walls to hand",
-    "Comparing ceramic vs. glass mug heat retention"
+    "context-dependent memory and environmental context changes",
+    "working memory and prospective memory during everyday tasks",
+    "attention shifts and event boundaries when moving between rooms",
+    "interruptions, distraction, and recovering the forgotten intention"
   ]
 }
