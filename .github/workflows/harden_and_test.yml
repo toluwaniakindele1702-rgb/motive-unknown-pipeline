@@ -24,13 +24,64 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path("pipeline.py")
           s = p.read_text(encoding="utf-8")
-          s2 = s.replace("SCENE_MIN = 18", "SCENE_MIN = 15", 1)
-          if s2 == s:
-              raise SystemExit("SCENE_MIN anchor not found")
-          p.write_text(s2, encoding="utf-8")
-          print("SOURCE FIX: lowered minimum accepted script scenes from 18 to 15")
+
+          old = '''    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    by_id = {int(scene.get("id", 0)): scene for scene in repaired.get("scenes", [])}
+'''
+          new = '''    original_word_count = _script_word_count(script)
+    repaired = json.loads(json.dumps(script, ensure_ascii=False))
+    by_id = {int(scene.get("id", 0)): scene for scene in repaired.get("scenes", [])}
+'''
+          if old in s and "original_word_count = _script_word_count(script)" not in s:
+              s = s.replace(old, new, 1)
+
+          old = '''        by_id[scene_id]["narration"] = text
+
+    validate_script(repaired)
+'''
+          new = '''        by_id[scene_id]["narration"] = text
+
+    repaired_word_count = _script_word_count(repaired)
+    if repaired_word_count < SCRIPT_MIN_WORDS:
+        repaired = json.loads(json.dumps(script, ensure_ascii=False))
+        repaired_word_count = _script_word_count(repaired)
+        if repaired_word_count < SCRIPT_MIN_WORDS:
+            repaired = _repair_script_length(topic, research, plan, repaired)
+            repaired_word_count = _script_word_count(repaired)
+        if repaired_word_count < SCRIPT_MIN_WORDS:
+            raise RuntimeError(
+                f"Retention repair could not preserve the hard script minimum: {repaired_word_count} < {SCRIPT_MIN_WORDS}."
+            )
+
+    validate_script(repaired)
+'''
+          if old in s and "repaired_word_count = _script_word_count(repaired)" not in s:
+              s = s.replace(old, new, 1)
+
+          old = '''    # A tiny final shortfall is acceptable when the per-scene narration is valid.
+    # Do not throw away an otherwise production-ready episode because a fallback
+    # model missed the target by a small amount.
+    minimum_acceptable = max(1600, SCRIPT_MIN_WORDS - 150)
+    if not (minimum_acceptable <= final_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(
+            f"Script repair finished at {final_words} words; "
+            f"expected at least {minimum_acceptable} and at most {SCRIPT_MAX_WORDS}."
+        )
+'''
+          new = '''    if not (SCRIPT_MIN_WORDS <= final_words <= SCRIPT_MAX_WORDS):
+        raise RuntimeError(
+            f"Script repair finished at {final_words} words; expected {SCRIPT_MIN_WORDS}-{SCRIPT_MAX_WORDS}."
+        )
+'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding="utf-8")
+          print("DIRECT PIPELINE RETENTION/MINIMUM FIX APPLIED")
           PY
 
       - name: Validate source
@@ -42,5 +93,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pipeline.py
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix: accept shorter valid scene segmentation"
+          git commit -m "fix: preserve script minimum during retention repair"
           git push
