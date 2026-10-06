@@ -157,3 +157,28 @@ try:
     print("[SEO FAILSAFE] Non-fatal local SEO fallback installed.")
 except Exception as exc:
     print(f"[SEO FAILSAFE] Could not install SEO fallback: {exc}")
+
+# Groq quota hardening: the previous production died before topic selection because
+# the lightweight 20B model had exhausted its daily token quota. Keep the agreed
+# AI topic engine, but automatically retry a rate-limited model on a smaller model
+# with a separate quota instead of aborting the whole production.
+try:
+    _groq_rate_limit_original = Completions.create
+    _GROQ_RATE_LIMIT_FALLBACK = "llama-3.1-8b-instant"
+
+    def _groq_rate_limit_fallback(self, *args, **kwargs):
+        try:
+            return _groq_rate_limit_original(self, *args, **kwargs)
+        except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            if status == 429 and str(kwargs.get("model", "")) != _GROQ_RATE_LIMIT_FALLBACK:
+                fallback_kwargs = dict(kwargs)
+                fallback_kwargs["model"] = _GROQ_RATE_LIMIT_FALLBACK
+                print(f"[GROQ QUOTA FALLBACK] {kwargs.get('model')} was rate-limited; retrying with {_GROQ_RATE_LIMIT_FALLBACK}.")
+                return _groq_rate_limit_original(self, *args, **fallback_kwargs)
+            raise
+
+    Completions.create = _groq_rate_limit_fallback
+    print(f"[GROQ QUOTA FALLBACK] Enabled: rate-limited Groq calls retry on {_GROQ_RATE_LIMIT_FALLBACK}.")
+except Exception as exc:
+    print(f"[GROQ QUOTA FALLBACK] Could not install model fallback: {exc}")
