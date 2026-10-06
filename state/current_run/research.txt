@@ -1,0 +1,54 @@
+```json
+{
+  "CORE ANSWER": "A coffee mug stays warm after the coffee is gone because the mug itself absorbs a substantial amount of heat (its thermal mass) and then releases that heat slowly. The slow release is due to the low thermal conductivity of ceramic (or glass) walls, which makes heat flow by conduction from the interior to the outer surface a bottleneck. Once at the surface, heat is removed only by convection of surrounding air and infrared radiation, both of which are relatively weak compared with the evaporative cooling that dominates while liquid is present. Consequently, the empty mug remains noticeably warm for many minutes, even though the coffee has already been removed.",
+  "STORY BEATS": [
+    "1. Pour hot coffee into a ceramic mug.",
+    "2. Heat transfers from coffee to mug walls, raising the mug’s temperature.",
+    "3. The mug’s thermal mass stores this heat, acting like a heat sponge.",
+    "4. Ceramic’s low thermal conductivity slows conduction through the wall.",
+    "5. The outer surface remains above room temperature for minutes.",
+    "6. Heat leaves the surface by convection of air and infrared radiation.",
+    "7. Evaporative cooling dominates while liquid is present; it disappears when the coffee is gone.",
+    "8. Without evaporation, the remaining heat‑loss channels are slower, keeping the mug warm.",
+    "9. The mug’s temperature decays gradually, measurable with a thermometer or IR camera.",
+    "10. A lid or thicker wall further reduces cooling by blocking evaporation or increasing resistance."
+  ],
+  "MECHANISM / CAUSE AND EFFECT": {
+    "Cause": [
+      "Heat transfer to mug walls (thermal mass)",
+      "Low thermal conductivity of ceramic",
+      "Conduction‑convection‑radiation heat‑loss pathway",
+      "Loss of evaporative cooling after liquid removal"
+    ],
+    "Effect": [
+      "Mug remains noticeably hot for 10–20 minutes after coffee is gone",
+      "Outer surface stays above room temperature",
+      "Cooling rate is slower than simple conduction models predict"
+    ]
+  },
+  "IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Ceramic mug (typical stoneware)",
+    "Glass or metal mugs (for comparison)",
+    "MySimulator.uk (simulation of heat loss)",
+    "Waterloo‑University analysis (conduction model critique)",
+    "Ratio Coffee “Hot Water, Cold Mug” article (thermal sponge concept)"
+  ],
+  "MISCONCEPTIONS OR CONTRADICTIONS": [
+    "Misconception: Mug stays hot because coffee is still inside – actually the mug’s own heat is the source.",
+    "Misconception: Metal mugs cool faster because metal conducts heat – thin metal mugs have little thermal mass, so they heat and cool quickly.",
+    "Misconception: Outer wall is at room temperature while coffee is hot – conduction‑only models ignore the warm outer wall."
+  ],
+  "DISPUTES OR UNCERTAINTY": [
+    "Exact quantitative contribution of radiation for typical kitchen‑temperature mugs.",
+    "Effect of surface finish (glazed vs. unglazed ceramic) on convective heat‑transfer coefficient.",
+    "Transient thermal shock in very thin porcelain cups and its impact on long‑term thermal performance."
+  ],
+  "VERIFIED SOURCES": [
+    "Ratio Coffee “Hot Water, Cold Mug” explains the cup acting like a “heat sponge”【2†L19-L23】.",
+    "MySimulator.uk notes ceramic’s “mediocre thermal insulator” and the resulting slower heat loss through the walls【1†L36-L40】.",
+    "MySimulator.uk quantifies evaporation as a major heat‑loss channel and shows that covering the cup (removing the evaporative surface) dramatically slows cooling【1†L52-L60】.",
+    "Waterloo‑University analysis points out that assuming the outside surface equals room temperature over‑estimates heat loss【6†L30-L38】.",
+    "Experimental cooling curves for a polypropylene cup (similar thermal inertia) show a slow temperature drop; the outer surface stays well above ambient for many minutes【6†L119-L127】."
+  ]
+}
+```

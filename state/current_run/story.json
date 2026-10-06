@@ -1,0 +1,80 @@
+{
+  "central_question": "Why does a coffee cup stay hot even after the liquid is gone?",
+  "hook": "You just poured a steaming cup of coffee, then you finish it and the mug still feels warm. How can an empty cup keep that heat?",
+  "aha_moment": "The mug itself acts as a heat sponge: it absorbs a lot of the coffee’s warmth, then slowly releases it through its low‑conductivity walls, so the outer surface stays hot long after the liquid is gone.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – immediate mystery",
+      "reveal": "A steaming mug is finished, yet the empty cup still feels warm.",
+      "required_facts": [
+        "Mug feels warm after coffee is gone"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Opening promise – hint at hidden mechanism",
+      "reveal": "The heat isn’t coming from the coffee anymore; something in the cup is keeping the warmth.",
+      "required_facts": [
+        "Heat source shifts from liquid to mug"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Context – why this matters",
+      "reveal": "Everyday objects use thermal inertia to keep us comfortable and save energy.",
+      "required_facts": [
+        "Thermal inertia affects comfort and energy use"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "First reveal – heat transfer to walls",
+      "reveal": "When hot coffee touches the ceramic, the mug’s walls absorb a huge amount of heat, like a sponge soaking up water.",
+      "required_facts": [
+        "Heat transfer from coffee to mug walls"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Second reveal – low thermal conductivity",
+      "reveal": "Ceramic is a poor conductor, so the heat moves slowly from the inside to the outside surface.",
+      "required_facts": [
+        "Ceramic’s low thermal conductivity slows conduction"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint reversal – evaporative cooling gone",
+      "reveal": "While coffee is present, evaporation dumps heat fast; once the liquid is gone, that fast channel disappears, leaving only slow convection and radiation.",
+      "required_facts": [
+        "Evaporative cooling dominates while liquid is present; it stops after removal"
+      ]
+    },
+    {
+      "section": "7",
+      "purpose": "Third reveal – slow release mechanisms",
+      "reveal": "Heat leaves the mug by gentle convection of air and infrared radiation—both weak compared to evaporation—so the surface stays warm for minutes.",
+      "required_facts": [
+        "Convection and radiation are weak heat‑loss channels"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Final reveal – measurable decay",
+      "reveal": "If you watch a thermometer or IR camera, the mug’s temperature drops gradually, confirming the slow release.",
+      "required_facts": [
+        "Temperature decay is measurable over 10–20 minutes"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Payoff – answer the question",
+      "reveal": "The mug’s thermal mass and ceramic’s insulation keep the heat trapped, so an empty cup remains warm because it’s the mug, not the coffee, that’s still hot.",
+      "required_facts": [
+        "Mug’s thermal mass stores heat; ceramic insulates it"
+      ]
+    }
+  ],
+  "ending_payoff": "Next time you finish your coffee, feel the mug’s warmth and remember: the cup itself is the real heat‑keeper, quietly keeping you cozy long after the last sip."
+}
