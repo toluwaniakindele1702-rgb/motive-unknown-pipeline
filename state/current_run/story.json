@@ -1,79 +1,72 @@
 {
-  "central_question": "Why do elevator doors start opening before the car actually reaches the floor?",
-  "hook": "Ever stepped into an elevator and felt the doors begin to slide open a heartbeat before the car even touches the landing? It’s not a glitch—there’s a clever prediction at play.",
-  "aha_moment": "Elevators predict the car will be almost level and moving slowly enough that the doors can safely start moving in advance, shaving off time while keeping passengers safe.",
+  "central_question": "Why does your phone screen get smudged even when you never touch it?",
+  "hook": "A spotless phone screen suddenly turns greasy in seconds—no touch, no dirt, just a slick film that looks like a fingerprint. How can a glass surface become oily without anyone ever touching it?",
+  "aha_moment": "The screen’s protective oleophobic coating wears thin over time, letting airborne skin‑oil droplets and static charge pull oily particles onto the glass, so smudges form even without touch.",
   "story_arc": [
     {
       "section": 1,
-      "purpose": "Cold open: immediate mystery",
-      "reveal": "Doors begin to move before the car arrives",
+      "purpose": "Introduce the mystery",
+      "reveal": "A clean phone instantly looks greasy",
       "required_facts": [
-        "Passengers notice early door motion"
+        "Phone screen appears oily after a quick wipe"
       ]
     },
     {
       "section": 2,
-      "purpose": "Opening promise: hint at a hidden system",
-      "reveal": "A sensor on the landing tells the controller the car is close enough to start the doors",
+      "purpose": "Explain the oleophobic coating",
+      "reveal": "Thin fluoropolymer repels oil, keeping screens clear",
       "required_facts": [
-        "Landing sensor exists",
-        "Controller can act on sensor data"
+        "Oleophobic coating is a low‑surface‑energy fluoropolymer"
       ]
     },
     {
       "section": 3,
-      "purpose": "Context: why this matters",
-      "reveal": "Early opening reduces total travel time and smooths the final stop",
+      "purpose": "Show coating degradation",
+      "reveal": "Each swipe, wipe, or heat exposure removes nanometres of polymer",
       "required_facts": [
-        "Travel efficiency",
-        "Passenger comfort"
+        "100‑200 k touches thin the coating enough for oil to wet glass"
       ]
     },
     {
       "section": 4,
-      "purpose": "First reveal: the sensor mechanism",
-      "reveal": "Infrared/optical strip detects the car’s proximity within ~20 mm",
+      "purpose": "Introduce airborne skin‑oil",
+      "reveal": "Humans emit 0.5–2 mg h⁻¹ of sebum that condenses into sub‑micron droplets",
       "required_facts": [
-        "Sensor type",
-        "Detection range"
+        "Skin‑oil aerosols settle on surfaces even without touch"
       ]
     },
     {
       "section": 5,
-      "purpose": "Second reveal: speed check",
-      "reveal": "Controller also measures car velocity; only if below ~0.1 m/s does it allow door motion",
+      "purpose": "Add electrostatic attraction",
+      "reveal": "Phones acquire static charge in dry air, pulling oily particles",
       "required_facts": [
-        "Speed threshold",
-        "Safety limit"
+        "Low relative humidity increases surface charge, attracting oil"
       ]
     },
     {
       "section": 6,
-      "purpose": "Midpoint reversal: the car still stops",
-      "reveal": "Even though doors start moving, the car’s brake holds it in place until fully level",
+      "purpose": "Midpoint reversal",
+      "reveal": "People think only fingerprints cause smudges, but airborne oil and static do the job",
       "required_facts": [
-        "Brake system",
-        "Fine‑adjustment mechanism"
+        "Myth: only fingers create fingerprints – reality: airborne skin‑oil can deposit smudges"
       ]
     },
     {
-      "section": "7",
-      "purpose": "Third reveal: safety circuit",
-      "reveal": "Once doors open, the hoist motor is disabled, preventing any movement with doors open",
+      "section": 7,
+      "purpose": "Combine mechanisms",
+      "reveal": "Coating wear, airborne oil, and static together explain smudges without contact",
       "required_facts": [
-        "Safety circuit design",
-        "Standard compliance"
+        "All three mechanisms act simultaneously"
       ]
     },
     {
-      "section": "8",
-      "purpose": "Final reveal: overall benefit",
-      "reveal": "Advance opening cuts stop time by a few seconds, especially in high‑rise buildings",
+      "section": 8,
+      "purpose": "Address myths & give advice",
+      "reveal": "Cleaning can accelerate coating loss; gentle wipes and protective films help",
       "required_facts": [
-        "Time savings data",
-        "High‑rise example"
+        "Harsh cleaning accelerates coating loss; protective films may attract static"
       ]
     }
   ],
-  "ending_payoff": "So the next time you feel those doors creep open early, remember: the elevator’s brain is already predicting your arrival, making the whole ride faster and safer—an invisible choreography you just didn’t see coming."
+  "ending_payoff": "Now you’ll know that every time you glance at your phone, unseen skin‑oil particles and a thinning protective film are silently turning your screen greasy—so the next time it looks slick, you’ll see the hidden chemistry at work."
 }

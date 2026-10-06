@@ -1,15 +1,15 @@
 {
-  "question": "Why do elevator doors start opening before the car actually reaches the floor?",
-  "topic": "Elevator Door Pre-Opening",
+  "question": "Why does your phone screen get smudged even when you never touch it?",
+  "topic": "Phone Screen Smudges",
   "category": "technology",
   "era": "modern day",
-  "why_curious": "We all notice elevators that seem to open a fraction of a second before the car arrives, and we wonder if it’s just a quirk or a safety feature. Behind the curtain is a clever sensor system that predicts the car’s position and reacts to people in the doorway, balancing speed, safety, and comfort.",
-  "curiosity_gap": "Most people think the doors wait until the car stops, but in reality the doors begin moving in anticipation, guided by sensors that detect both the car’s proximity and people’s presence.",
+  "why_curious": "We all marvel at how clean our phones can look after a quick wipe, yet almost immediately fingerprints and smudges appear as if by magic. The culprit is not just dirt or sweat but a microscopic oleophobic coating that wears away with everyday use, allowing oils from our skin to seep through and cling to the glass. It’s a hidden battle between surface chemistry and our daily habits that keeps our screens looking dirty despite our best efforts.",
+  "curiosity_gap": "People think smudges happen only when we touch the screen, but in reality they can appear without any contact, driven by the gradual breakdown of the protective film.",
   "curiosity_score": 8,
   "search_angles": [
-    "Sensor strip and motion‑gap detection on the landing",
-    "Control logic that predicts car position and starts door motor",
-    "Safety role of early door opening in preventing collisions",
-    "User experience: how the timing feels smooth and intuitive"
+    "Oleophobic coating wear and tear",
+    "How skin oils penetrate glass",
+    "Time‑lapse of screen cleaning vs. smudging",
+    "Design choices behind screen protectors"
   ]
 }
