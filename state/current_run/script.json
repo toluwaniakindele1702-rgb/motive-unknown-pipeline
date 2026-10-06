@@ -75,7 +75,7 @@
     },
     {
       "id": 7,
-      "narration": "Ceramic’s thermal conductivity is low—about 0.8 W m⁻¹ K⁻¹—so heat moves through the wall at a leisurely pace, like a slow river through stone. That means the energy stored in the ceramic wall during the coffee’s presence doesn’t rush out; it diffuses only gradually. In contrast, a metal mug with a conductivity around 200 W m⁻¹ K⁻¹ would spread the same amount of heat across its surface almost instantly, leaving the exterior cooler. The slow heat flow in ceramic keeps the wall warm for minutes, giving the mug its lingering heat even after the liquid has evaporated.",
+      "narration": "Ceramic’s thermal conductivity is only about 0.8 W·m⁻¹·K⁻¹, which means heat drifts through the wall like water seeping slowly through stone. When the coffee pours its energy into the mug, that heat gets locked into the ceramic’s bulk and can only escape at this sluggish rate. By contrast, a metal mug conducts roughly 200 W·m⁻¹·K⁻¹, so the same amount of stored energy rushes to the surface and radiates away almost instantly, leaving the exterior feeling cool. The ceramic’s low conductivity therefore acts as a natural bottleneck, letting the mug stay noticeably warm for several minutes after the liquid disappears.",
       "setting": "Side‑by‑side comparison of ceramic vs. metal",
       "characters": [],
       "action": "Heat arrows travel slowly through ceramic, fast through metal",
@@ -86,7 +86,7 @@
     },
     {
       "id": 8,
-      "narration": "Inside the empty cup, a thin film of air remains. Air’s conductivity is even lower—just 0.024 W m⁻¹ K⁻¹—so it acts like a blanket, keeping the inner wall warm for a while. This trapped air layer reduces the conductive heat loss from the hot ceramic to the cooler room air, effectively insulating the inner surface. The result is that the wall’s temperature stays higher for a longer period, contributing to the mug’s perceived warmth when you touch it.",
+      "narration": "Even after you finish the drink, a thin layer of air clings to the inner surface of the empty cup. Air conducts heat at just 0.024 W·m⁻¹·K⁻¹—orders of magnitude less than ceramic—so this invisible blanket slows the flow of heat from the hot wall to the surrounding room. The trapped air essentially creates a micro‑insulation zone, reducing the temperature gradient that drives conductive loss. As a result, the inner wall remains hotter for longer, and that retained warmth is what you feel when you touch the mug’s exterior.",
       "setting": "Cross‑section of empty mug",
       "characters": [],
       "action": "Air bubble shown, heat arrows blocked",
@@ -97,7 +97,7 @@
     },
     {
       "id": 9,
-      "narration": "While coffee is present, evaporation steals a huge chunk of heat—up to 80 % of the total loss. The liquid’s surface area and temperature drive a rapid phase change that removes energy efficiently. Once the liquid is gone, that fast channel disappears, leaving only the slower conduction through the ceramic, convection to the surrounding air, and radiation from the mug’s surface. The cooling rate therefore drops dramatically, and the mug’s temperature decreases more slowly.",
+      "narration": "When coffee sits in the mug, evaporation acts like a heat‑sucking vacuum, carrying away up to 80 % of the total thermal loss. The liquid’s large surface area and high temperature cause rapid phase change, whisking energy out of the system. Once the coffee is gone, that fast‑acting pathway vanishes, leaving only the slower processes of conduction through the ceramic, convection to the room air, and radiation. Consequently, the cooling rate drops sharply, and the mug’s temperature declines far more gradually than it did while the liquid was present.",
       "setting": "Evaporation animation",
       "characters": [],
       "action": "Water molecules escape, heat arrows vanish",
@@ -108,7 +108,7 @@
     },
     {
       "id": 10,
-      "narration": "Without evaporation, the mug’s cooling rate drops to about 10 W. That’s like a gentle breeze, not a storm, so the surface temperature falls only a few degrees each minute. The heat transfer is governed by the combined effects of conduction through the ceramic, convection with the room air (typically a few watts per square meter), and a modest radiative component. Together, these slow processes keep the outer surface above ambient temperature for several minutes after the coffee is gone.",
+      "narration": "With evaporation eliminated, the mug’s net heat loss settles around 10 W—a gentle, steady drain rather than a sudden plunge. This modest power translates to only a few degrees of temperature drop per minute, because the heat must travel through the low‑conductivity ceramic, then convect into the surrounding air (typically a few watts per square meter), and finally radiate a small amount. The combined effect is a slow, almost linear cooling curve that keeps the outer surface comfortably above room temperature for several minutes after the coffee disappears.",
       "setting": "Temperature curve graph",
       "characters": [],
       "action": "Graph shows slow slope",
@@ -119,7 +119,7 @@
     },
     {
       "id": 11,
-      "narration": "Radiation is the quietest of the trio. In a 10 cm mug at 80 °C, it emits roughly 15 W, cooling the surface by just one degree in five minutes. The radiative heat loss follows the Stefan–Boltzmann law, which scales with the fourth power of absolute temperature. Because the temperature difference between the mug and the room is modest, the radiative term remains small compared to conduction and convection, but it still contributes to the gradual cooling over time.",
+      "narration": "Radiation is the quietest contributor to the mug’s cooling. At 80 °C, a 10 cm ceramic cup emits roughly 15 W of infrared energy, which would lower its temperature by about one degree every five minutes. This loss follows the Stefan–Boltzmann law, scaling with the fourth power of absolute temperature, but because the temperature difference between the mug and the room is modest, the radiative term remains small compared to conduction and convection. Still, over time it adds up, providing a steady, low‑rate drain that nudges the mug toward ambient temperature.",
       "setting": "Radiation heat diagram",
       "characters": [],
       "action": "Infrared arrows radiate from surface",
@@ -130,7 +130,7 @@
     },
     {
       "id": 12,
-      "narration": "Combine all three, and the mug’s outer surface stays above 40 °C for several minutes after the coffee is gone. That’s why your hand still feels a gentle heat. The ceramic wall’s high heat capacity stores the energy, its low conductivity slows conduction, the trapped air layer limits convection, and radiation provides a steady, low‑rate loss. Together, they create a persistent, measurable warmth that can be felt even when the liquid has evaporated.",
+      "narration": "When you add up conduction, convection, and radiation, the mug’s outer surface stays above 40 °C for several minutes after the coffee is gone. The ceramic’s high heat capacity stores the bulk of the energy, its low conductivity throttles the conductive pathway, the thin air layer inside limits convective loss, and radiation offers a slow, steady bleed. This combination creates a persistent, measurable warmth that you can feel on your hand, illustrating how ordinary materials manage heat through a balance of storage and insulated release.",
       "setting": "Hand touching mug",
       "characters": [
         "Narrator"
@@ -143,7 +143,7 @@
     },
     {
       "id": 13,
-      "narration": "Contrast that with a metal mug. Because metal has a thermal conductivity on the order of 200 W/(m·K), any heat stored in the walls is instantly spread across the entire surface. The result is a rapid temperature drop at the outer skin, so when you set the empty cup down it feels noticeably cooler than a ceramic counterpart. This quick redistribution also means the metal loses its stored energy to the surrounding air faster, because a larger area is exposed to convection. In short, the high conductivity that makes metal great for quick heating also makes it poor at holding warmth after the coffee is gone.",
+      "narration": "Now compare that to a metal mug. Metals conduct heat on the order of 200 W/(m·K), so any thermal energy stored in the walls instantly spreads across the whole surface. That rapid redistribution causes the outer skin to cool quickly, making an empty metal cup feel noticeably cooler than a ceramic one. Because the heat is spread over a larger area, convection to the surrounding air also accelerates, draining the stored energy faster. In short, the very property that lets metal heat up in a flash—high thermal conductivity—makes it a poor keeper of warmth once the coffee is gone.",
       "setting": "Side‑by‑side metal vs. ceramic mug",
       "characters": [],
       "action": "Heat arrows burst through metal, slow through ceramic",
@@ -154,7 +154,7 @@
     },
     {
       "id": 14,
-      "narration": "If you hook a thermocouple to the side of each mug right after the last sip, the data is striking: the ceramic wall stays above 50 °C for roughly ten minutes, while the metal wall falls below 30 °C in the same span. Those numbers come from the ceramic’s low thermal diffusivity (≈ 1 mm²/s) and its relatively high heat capacity, which together slow heat flow. The metal’s high diffusivity (≈ 100 mm²/s) lets heat sprint out, so the probe reads a rapid decline. This experiment quantifies exactly how material properties translate into the tactile feeling of “still warm.”",
+      "narration": "If you attach a thermocouple to the side of each mug right after the last sip, the contrast is striking: the ceramic wall stays above 50 °C for roughly ten minutes, while the metal wall drops below 30 °C in the same period. Those numbers stem from ceramic’s low thermal diffusivity (about 1 mm²/s) and its relatively high heat capacity, which together slow heat flow. By contrast, metal’s high diffusivity (≈ 100 mm²/s) lets heat sprint out, so the probe records a rapid decline. This simple experiment quantifies exactly how material properties turn into the tactile feeling of “still warm.”",
       "setting": "Thermocouple experiment",
       "characters": [],
       "action": "Probe inserted, temperature readouts shown",
@@ -165,7 +165,7 @@
     },
     {
       "id": 15,
-      "narration": "Even in microgravity, astronauts reach for ceramic mugs for the same reason they do on Earth. The mug’s low‑conductivity, high‑thermal‑mass walls store the drink’s heat, while the surrounding vacuum eliminates convection entirely. With only radiation to carry energy away, the mug cools at a glacial pace, keeping the coffee sip‑warm for minutes. NASA’s ISS experiments confirmed that a simple porcelain cup retains heat longer than a stainless‑steel one under identical conditions, demonstrating that the same physics—slow conduction and minimal heat‑loss pathways—works even when there’s no air to convect heat away.",
+      "narration": "Even in microgravity, astronauts reach for ceramic mugs for the same reason they do on Earth. The mug’s low‑conductivity, high‑thermal‑mass walls soak up the drink’s heat, and the surrounding vacuum eliminates convection entirely. With only radiation to carry energy away, the mug cools at a glacial pace, keeping the coffee sip‑warm for minutes. NASA’s ISS experiments confirmed that a simple porcelain cup retains heat longer than a stainless‑steel one under identical conditions, demonstrating that slow conduction and minimal heat‑loss pathways work even when there’s no air to convect heat away.",
       "setting": "Space station mock‑up",
       "characters": [],
       "action": "Astronaut uses ceramic mug, heat arrows show only radiation",
@@ -187,7 +187,7 @@
     },
     {
       "id": 17,
-      "narration": "Next time you touch an empty mug and feel that gentle heat, remember: it’s the ceramic’s thermal memory, not the coffee, that’s keeping the warmth alive. The wall’s high specific heat capacity let it soak up hundreds of joules, and its insulating properties let that energy linger, slowly diffusing out. That’s why the mug feels warm even after the liquid evaporates. It’s a tiny, everyday illustration of energy storage and gradual release—proof that even simple kitchenware follows the same physical rules that govern massive engineering systems.",
+      "narration": "Next time you touch an empty mug and feel that gentle heat, remember: it’s the ceramic’s thermal memory, not the coffee, that’s keeping the warmth alive. The wall’s high specific heat capacity lets it soak up hundreds of joules, and its insulating properties let that energy linger, diffusing out slowly. That’s why the mug feels warm even after the liquid evaporates. It’s a tiny, everyday illustration of energy storage and gradual release—proof that even simple kitchenware follows the same physical rules that govern massive engineering systems.",
       "setting": "Hand on mug, close‑up of heat glow",
       "characters": [
         "Narrator"
