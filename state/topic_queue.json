@@ -37,7 +37,10 @@
         "why intentions disappear during interruptions",
         "when the doorway effect is weaker"
       ],
-      "status": "queued"
+      "status": "reserved",
+      "reserved_at": "2026-10-07T12:04:12.427601+00:00",
+      "reserved_run_id": "37618138162",
+      "reserved_run_number": "187"
     },
     {
       "id": 3,
