@@ -51,7 +51,7 @@ jobs:
       MAX_VISUAL_BEATS_PER_VIDEO: ${{ vars.MAX_VISUAL_BEATS_PER_VIDEO || '110' }}
       BACKGROUND_MUSIC_VOLUME: ${{ vars.BACKGROUND_MUSIC_VOLUME || '0.055' }}
       SHORTS_ENABLED: ${{ vars.SHORTS_ENABLED || '1' }}
-      SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '3' }}
+      SHORTS_COUNT: ${{ vars.SHORTS_COUNT || '4' }}
       SHORTS_MIN_SECONDS: ${{ vars.SHORTS_MIN_SECONDS || '60' }}
       SHORTS_MAX_SECONDS: ${{ vars.SHORTS_MAX_SECONDS || '180' }}
       RELIC_LOOP_RESUME: '0'
@@ -114,7 +114,7 @@ jobs:
           }
           JSON
           cp state/current_run/topic.json run_work/topic.json 2>/dev/null || true
-          echo "[SCHEDULED TOPIC] Why does your voice sound different when you hear a recording?"
+          echo "[SCHEDULED TOPIC] Legacy file only; queue selector remains authoritative."
 
       - name: Set run mode
         shell: bash
@@ -192,7 +192,7 @@ jobs:
       - name: Preflight checks
         shell: bash
         run: |
-          python -m py_compile pipeline.py local_image_worker.py sitecustomize.py
+          python -m py_compile pipeline.py local_image_worker.py sitecustomize.py run_pipeline.py
           python - <<'PY'
           import os
           import torch
@@ -232,7 +232,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python pipeline.py --mode "$PIPELINE_MODE" 2>&1 | tee pipeline.log
+          python run_pipeline.py --mode "$PIPELINE_MODE" 2>&1 | tee pipeline.log
 
       - name: Mark run result
         if: always()
