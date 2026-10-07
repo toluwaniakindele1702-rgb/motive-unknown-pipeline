@@ -715,141 +715,93 @@ Return exactly:
 """.strip()
 
 def choose_topic(history: dict[str, Any]) -> dict[str, Any]:
-    previous = []
-    for item in history.get("videos", [])[-60:]:
-        q = item.get("question") or item.get("topic") or item.get("title")
-        if q:
-            previous.append(q)
-    history_text = "\n".join(f"- {x}" for x in previous) or "(no previous videos recorded)"
+    """Return only an assistant-curated queue topic. Never ask an AI to invent one."""
+    queue_path = STATE_DIR / "topic_queue.json"
+    if not queue_path.exists():
+        raise RuntimeError("Topic queue is missing: state/topic_queue.json. Refusing to invent a topic.")
+    try:
+        queue = json.loads(queue_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Topic queue is invalid JSON: {exc}") from exc
 
-    search_prompt = f"""
-Search the web for fresh curiosity-first YouTube topic ideas for Relic Loop.
+    topics = queue.get("topics") if isinstance(queue, dict) else None
+    if not isinstance(topics, list) or not topics:
+        raise RuntimeError("Topic queue is empty. Refusing to invent a topic or spend image-generation quota.")
 
-Prioritize everyday life, familiar objects, routines, places, habits, technology, food,
-transport, social behavior, customs, and things people encounter without thinking about them.
-Also collect some relatable history, animals/nature, and science ideas for variety.
+    def canon(value: str) -> set[str]:
+        words = re.findall(r"[a-z0-9]+", str(value or "").lower())
+        stop = {"why","what","how","does","do","did","can","could","would","you","your","the","a","an","is","are","was","were","to","of","in","on","for","we","our","it","this","that","when","sometimes","really"}
+        return {w for w in words if len(w) > 2 and w not in stop}
 
-Use the kinds of curiosity patterns common to large explainer channels:
-a familiar thing -> a weird detail -> a "why/how?" -> an evidence-backed explanation -> a
-surprising consequence or deeper reveal.
+    previous: list[str] = []
+    for row in history.get("videos", []) if isinstance(history, dict) else []:
+        if isinstance(row, dict):
+            for key in ("question", "topic", "title"):
+                value = str(row.get(key) or "").strip()
+                if value:
+                    previous.append(value)
 
-Do NOT return a list of generic science questions. We want topics that feel like things happening
-around the viewer's life. Avoid conspiracies, paranormal claims, medical diagnosis/advice,
-appearance-ideal content, generic biographies, listicles, and broad topics with no natural question.
+    # Permanent queue history also protects against repeats if content_history.json
+    # is temporarily incomplete on a fresh runner.
+    for row in topics:
+        if isinstance(row, dict) and str(row.get("status", "")).lower() in {"used", "reserved", "skipped_duplicate"}:
+            for key in ("question", "topic"):
+                value = str(row.get(key) or "").strip()
+                if value:
+                    previous.append(value)
 
-Do not repeat these recent channel questions:
-{history_text}
+    candidates = [
+        item for item in topics
+        if isinstance(item, dict) and str(item.get("status", "queued")).lower() == "queued"
+    ]
+    candidates.sort(key=lambda item: int(item.get("id", 10**9)))
+    if not candidates:
+        raise RuntimeError("Topic queue has no unused queued topics. Refusing to invent a topic.")
 
-Return search findings with the subject, suggested question, evidence, and useful visual angles.
-""".strip()
+    for item in candidates:
+        question = str(item.get("question") or "").strip()
+        if not question:
+            raise RuntimeError(f"Queued topic {item.get('id')} has no question. Refusing to continue.")
+        candidate_tokens = canon(question)
+        duplicate = False
+        duplicate_reason = ""
+        for prior in previous:
+            prior_tokens = canon(prior)
+            shared = candidate_tokens & prior_tokens
+            union = candidate_tokens | prior_tokens
+            overlap = len(shared) / max(1, len(union))
+            if question.casefold() == prior.casefold() or overlap >= 0.60 or len(shared) >= 3:
+                duplicate = True
+                duplicate_reason = prior
+                break
+        if duplicate:
+            item["status"] = "skipped_duplicate"
+            item["skip_reason"] = f"matches previously made/reserved topic: {duplicate_reason}"
+            atomic_write_json(queue_path, queue)
+            print(f"[TOPIC LOCK] Skipping duplicate queued topic {item.get('id')}: {question}")
+            continue
 
-    search_findings = groq_browser_search(
-        GROQ_LIGHT_MODEL,
-        search_prompt,
-        max_completion_tokens=2800,
-        attempts=3,
-    )
+        now = datetime.now(timezone.utc).isoformat()
+        item["status"] = "reserved"
+        item["reserved_at"] = now
+        item["reserved_run_id"] = os.environ.get("GITHUB_RUN_ID", "local")
+        item["reserved_run_number"] = os.environ.get("GITHUB_RUN_NUMBER", "")
+        atomic_write_json(queue_path, queue)
+        topic = {
+            "queue_id": int(item["id"]),
+            "question": question,
+            "topic": str(item.get("topic") or question).strip(),
+            "category": str(item.get("category") or "everyday curiosity").strip(),
+            "era": str(item.get("era") or "modern day").strip(),
+            "why_curious": str(item.get("why_curious") or "").strip(),
+            "curiosity_gap": str(item.get("curiosity_gap") or "").strip(),
+            "curiosity_score": int(item.get("curiosity_score", 9) or 9),
+            "search_angles": list(item.get("search_angles") or []),
+        }
+        print(f"[TOPIC LOCK] Reserved assistant topic {topic['queue_id']}: {question}")
+        return topic
 
-    selection_base = f"""
-You are the final topic selector for Relic Loop, a curiosity-first explainer channel.
-
-Choose ONE topic from the findings below.
-
-Everyday life and familiar human experiences should be the default center of gravity.
-History, animals, and science are supporting categories, not the channel's identity.
-
-Select something familiar enough to recognize in the first few seconds, but with a non-obvious
-reason, consequence, origin, design choice, behavior, or chain of events.
-
-Strong patterns:
-- ordinary object/place/routine + hidden reason
-- everyday behavior + surprising explanation
-- common technology/design + overlooked reason
-- familiar food/transport/custom + unexpected origin or function
-- ordinary situation + surprising chain of events
-- human behavior + contradiction between what people assume and what happens
-- famous historical subject + relatable question
-- animal/nature/science + a real-world curiosity people can picture
-
-Reject broad subjects, generic biographies, simple event summaries, fake mysteries,
-conspiracies/paranormal claims presented as fact, medical diagnosis/advice,
-body-comparison/appearance-ideal framing, and claims the sources cannot support.
-
-VIRAL-REACH IDEA FILTER:
-0. The topic must be understandable to someone who has never heard of Relic Loop.
-1. Run the "I HAVE EXPERIENCED THAT" test: prefer something millions of people have personally
-experienced, felt, thought, noticed, used, heard, or done.
-2. Give the highest priority to brain, memory, attention, perception, habits, sensations, and
-everyday human behavior.
-3. There must be a strong curiosity gap: the obvious explanation should be incomplete, misleading,
-or surprisingly different from the real mechanism.
-4. The title should make a viewer think "WAIT... WHY DO I DO/FEEL/NOTICE THAT?"
-5. The thumbnail should have one instantly readable visual mystery, reaction, contrast, or transformation.
-6. The answer must contain multiple escalating reveals rather than one fact stretched into a video.
-7. Favor topics that can produce a satisfying "OH, THAT'S WHY" moment and a memorable final reveal.
-8. Prefer ideas that can naturally produce at least one excellent Short.
-9. Prefer evergreen topics with broad appeal, but allow timely/trending angles when they genuinely fit.
-10. Reject topics that need specialist knowledge before the viewer can care.
-11. Reject generic object trivia unless its mystery is much stronger than a human-experience idea.
-12. Avoid repetitive mundane mechanical questions unless the mechanism itself is extraordinary.
-13. Reject ideas that are merely "interesting facts" with no strong personal recognition.
-
-Quality checks:
-0. Familiar subject.
-1. Immediate curiosity gap.
-2. Satisfying evidence-backed answer.
-3. Strong visual explanation potential.
-4. At least 8 useful reveals/steps without filler.
-5. Strong title + thumbnail pairing.
-6. A memorable final payoff.
-
-Do not repeat or closely imitate previous questions:
-{history_text}
-
-WEB FINDINGS:
-{search_findings}
-
-Return exactly:
-{{
-  "question": "one specific curiosity-first question",
-  "topic": "short topic label",
-  "category": "everyday / animals / science / human mind / technology / culture & society / history",
-  "era": "time/setting label, or modern day",
-  "why_curious": "2-4 sentences explaining the curiosity",
-  "curiosity_gap": "one sentence describing the viewer's assumption versus the hidden explanation",
-  "curiosity_score": 8,
-  "search_angles": ["angle 1", "angle 2", "angle 3", "angle 4"]
-}}
-""".strip()
-
-    last_data = None
-    for attempt in range(1, 4):
-        extra = (
-            "\n\nRETRY: reject anything generic. Pick a more familiar subject with a sharper "
-            "why/how question, stronger explanation, and better visual payoff."
-            if attempt > 1 else ""
-        )
-        data = groq_json(
-            GROQ_LIGHT_MODEL,
-            [{"role": "user", "content": selection_base + extra}],
-            max_completion_tokens=1400,
-            temperature=0.72,
-            attempts=2,
-        )
-        last_data = data
-        required = ("question","topic","category","era","why_curious","curiosity_gap","search_angles")
-        try:
-            score = int(data.get("curiosity_score",0))
-        except (TypeError,ValueError):
-            score = 0
-        if all(data.get(k) for k in required) and isinstance(data.get("search_angles"), list) and score >= 8:
-            return data
-        print(f"[TOPIC] rejected weak candidate on selector attempt {attempt}.")
-    raise RuntimeError(
-        "Topic selector could not produce a sufficiently curiosity-driven topic after 3 attempts. "
-        f"Last keys: {sorted(last_data.keys()) if isinstance(last_data, dict) else []}"
-    )
-
+    raise RuntimeError("Every queued topic was rejected as a previous/duplicate topic. No AI topic generation is allowed.")
 
 def research_topic(topic: dict[str, Any]) -> str:
     search_prompt = f"""
@@ -4065,15 +4017,11 @@ def main(mode: str = "full") -> None:
     checkpoint("starting")
     history = load_history()
 
-    # Reuse small text artifacts saved by a previous failed Actions run.
-    topic = _load_current_json(CURRENT_TOPIC_PATH)
-    topic_resumed = isinstance(topic, dict) and bool(topic.get("question"))
-    if topic_resumed:
-        print("[RESUME] Reusing saved topic.")
-    else:
-        topic = choose_topic(history)
-        _save_current_json(CURRENT_TOPIC_PATH, topic)
-    checkpoint("topic_complete", question=topic["question"], resumed=topic_resumed)
+    # Topic ownership is deterministic. A stale current-run topic can never override the queue.
+    topic = choose_topic(history)
+    topic_resumed = False
+    _save_current_json(CURRENT_TOPIC_PATH, topic)
+    checkpoint("topic_complete", question=topic["question"], queue_id=topic.get("queue_id"), resumed=False)
 
     research = _load_current_text(CURRENT_RESEARCH_PATH)
     research_resumed = bool(research)
