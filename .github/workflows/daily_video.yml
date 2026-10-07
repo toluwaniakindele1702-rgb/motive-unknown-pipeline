@@ -1,4 +1,5 @@
 name: Relic Loop Daily Video
+run-name: Relic Loop #${{ github.run_number }} — Run ID ${{ github.run_id }} — ${{ github.event_name }}
 
 on:
   schedule:
@@ -61,13 +62,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Announce run ID immediately
+        shell: bash
+        run: |
+          echo "=============================================="
+          echo "RELIC LOOP PRODUCTION RUN STARTED"
+          echo "RUN NUMBER: ${{ github.run_number }}"
+          echo "RUN ID:     ${{ github.run_id }}"
+          echo "EVENT:      ${{ github.event_name }}"
+          echo "SHA:        ${{ github.sha }}"
+          echo "RUN URL:    https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "=============================================="
+          {
+            echo "## Relic Loop production run"
+            echo "- **Run number:** ${{ github.run_number }}"
+            echo "- **Run ID:** ${{ github.run_id }}"
+            echo "- **Event:** ${{ github.event_name }}"
+            echo "- **Run URL:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Clear stale failed-run topic state
         shell: bash
         run: |
-          # A new scheduled/manual production is always a new episode.
-          # Never let a previous failed run dictate the next topic or any
-          # topic-dependent artifact. This protects the production entrypoint
-          # even if a runner/worktree contains current_run state.
           rm -f \
             state/current_run/topic.json \
             state/current_run/research.txt \
@@ -82,9 +98,6 @@ jobs:
         if: github.event_name == 'schedule'
         shell: bash
         run: |
-          # The topic is deliberately supplied by the scheduled production
-          # plan. The pipeline researches/builds this exact question instead
-          # of spending Groq quota trying to invent a topic itself.
           cat > state/current_run/topic.json <<'JSON'
           {
             "question": "Why does your voice sound different when you hear a recording?",
