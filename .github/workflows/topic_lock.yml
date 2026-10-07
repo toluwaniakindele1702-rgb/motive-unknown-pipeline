@@ -1,0 +1,58 @@
+name: Relic Loop Topic Lock
+
+on:
+  push:
+    paths:
+      - "topic_lock.py"
+      - ".github/workflows/topic_lock.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Apply hard topic lock
+        run: python topic_lock.py
+
+      - name: Verify topic lock
+        shell: bash
+        run: |
+          python -m py_compile pipeline.py topic_lock.py sitecustomize.py
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path("pipeline.py").read_text(encoding="utf-8")
+          m = re.search(r"(?ms)^def choose_topic\(.*?(?=^def [A-Za-z_]\w*\(|\Z)", s)
+          if not m:
+              raise SystemExit("choose_topic was not found")
+          body = m.group(0)
+          forbidden = ("groq_json(", "client.chat", "chat.completions", "Generate a fresh", "Generate a new topic")
+          hits = [x for x in forbidden if x in body]
+          if hits:
+              raise SystemExit(f"AI topic generation still exists in choose_topic: {hits}")
+          if "state/topic_queue.json" not in body:
+              raise SystemExit("choose_topic does not read the persistent assistant topic queue")
+          if "skipped_duplicate" not in body:
+              raise SystemExit("duplicate-topic protection is missing")
+          print("TOPIC LOCK VERIFIED: assistant queue only; no AI topic generation; duplicate protection active")
+          PY
+
+      - name: Commit locked pipeline
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline.py
+          if git diff --cached --quiet; then
+            echo "pipeline.py already locked"
+            exit 0
+          fi
+          git commit -m "fix: permanently remove AI topic selection path"
+          git push
