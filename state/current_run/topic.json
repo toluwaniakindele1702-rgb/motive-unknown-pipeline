@@ -1,0 +1,17 @@
+{
+  "queue_id": 1,
+  "question": "Why does your voice sound different when you hear a recording?",
+  "topic": "Why Your Recorded Voice Sounds Different",
+  "category": "human perception",
+  "era": "modern day",
+  "why_curious": "Almost everyone has heard a recording of their own voice and thought it sounded strangely different. The answer reveals how your brain normally hears you and why a recording exposes a version other people hear.",
+  "curiosity_gap": "You expect a recording to reproduce the voice you hear while speaking, but your brain normally hears your voice through more than one path.",
+  "curiosity_score": 9,
+  "search_angles": [
+    "bone conduction and self-voice perception",
+    "air conduction and recorded voice",
+    "vocal tract resonance and perceived pitch",
+    "why other people hear a different version of your voice",
+    "common myths about recorded voices"
+  ]
+}

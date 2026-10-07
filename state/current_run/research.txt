@@ -1,0 +1,65 @@
+**1. CORE ANSWER**  
+When you speak you hear yourself through two pathways: (1) air‑conduction of the sound that leaves your mouth and travels through the environment to your outer ear, and (2) bone‑conduction of vibrations from your vocal folds, larynx, jaw and skull that reach the cochlea directly. The skull acts as a low‑pass filter and adds vibrotactile cues, giving your self‑voice a richer, deeper quality. A recording captures only the airborne component; playback therefore lacks the low‑frequency boost and the tactile component, making the voice sound brighter, higher‑pitched, and “foreign” compared with the voice you normally hear while speaking.
+
+---
+
+**2. STORY BEATS**  
+1. You begin to speak → sound leaves the mouth.  
+2. Air‑conducted waves travel through the room to your outer ear.  
+3. Simultaneously, vibrations travel through the bones of the skull (bone‑conduction).  
+4. The skull’s tissue filters these vibrations, emphasizing low frequencies (low‑pass effect).  
+5. Your inner ear receives a mixed signal: air‑plus‑bone, plus subtle skin/jaw vibrations.  
+6. The brain integrates the acoustic and somatosensory cues into a “self‑voice” representation.  
+7. A microphone records only the airborne sound, missing bone‑conduction.  
+8. Playback delivers the recorded signal via air‑conduction alone.  
+9. Without the low‑frequency boost and tactile feedback, the brain detects a mismatch.  
+10. You perceive the playback as higher‑pitched, lighter, and “not how I sound”.  
+11. Repeated listening can reduce the surprise but does not alter the underlying acoustic difference.  
+12. Experiments show people recognize their own voice better when bone‑conduction cues are present.  
+13. Individual skull differences cause variation in how pronounced the effect is.  
+14. Ongoing research seeks to model the exact skull transfer function and the weight of tactile vs. acoustic cues.  
+15. Clinical work explores links between altered self‑voice perception and auditory‑verbal hallucinations.  
+16. Emerging bone‑conduction headsets aim to recreate the missing cues for more natural self‑voice playback.
+
+---
+
+**3. MECHANISM / CAUSE AND EFFECT**  
+- **Cause:** Dual transmission (air + bone) during speech.  
+- **Effect 1 (Acoustic filtering):** Skull low‑pass filter → boosts low frequencies, attenuates high frequencies → self‑voice sounds deeper.  
+- **Effect 2 (Somatosensory feedback):** Vibrations felt in skin/jaw → integrated with auditory signal → richer perception.  
+- **Cause of difference on playback:** Recording captures only air‑conducted sound; playback lacks bone‑conduction filtering and tactile cues.  
+- **Resulting perception:** Recorded voice appears higher‑pitched, brighter, and unfamiliar.
+
+---
+
+**4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES**  
+- **University of Tokyo** – PR article explaining air vs. bone conduction.  
+- **Royal Society Open Science (2023)** – Study “Bone conduction facilitates self‑other voice discrimination” showing experimental evidence.  
+- **Reinfeldt et al., JASA 2010** – Acoustic measurements of air and bone components of self‑voice.  
+- **Békésy (1949)** – Classic description of bone‑conduction pathways.  
+- **Bone‑conduction headsets** – Example devices that can reproduce missing low‑frequency and vibrotactile cues.
+
+---
+
+**5. MISCONCEPTIONS OR CONTRADICTIONS**  
+| Myth | Reality |
+|------|----------|
+| “The microphone adds noise, making the voice sound higher.” | The primary factor is the loss of bone‑conduction, not microphone noise. |
+| “Everyone hears their recorded voice the same way.” | Individual skull thickness, tissue composition, and hearing sensitivity cause personal variation in the perceived discrepancy. |
+| “Listening enough will make the recorded voice sound normal.” | Familiarity reduces surprise but does not change the physical acoustic difference. |
+
+---
+
+**6. DISPUTES OR UNCERTAINTY**  
+- **Exact skull transfer function:** Known to be low‑pass, but precise frequency response varies per individual and is still being modeled.  
+- **Weight of tactile vs. acoustic cues:** Both contribute to the self‑voice feeling, yet their relative importance is not yet quantified.  
+- **Clinical implications:** Links between altered self‑voice perception and auditory‑verbal hallucinations in schizophrenia are observed, but causal mechanisms remain under investigation.
+
+---
+
+**7. VERIFIED SOURCES**  
+1. University of Tokyo “Why do recordings of one’s own voice sound so strange?” – explains air‑ vs. bone‑conduction and the missing bone component【2†L34-L42】.  
+2. *Bone conduction facilitates self‑other voice discrimination* (Royal Society Open Science, 2023) – experimental evidence of bone‑conduction effects, acoustic & tactile mechanisms, self‑voice discrimination data【3†L70‑L78】【3†L456‑L463】【3†L727‑L734】.  
+3. Reinfeldt et al., “Hearing one’s own voice during phoneme vocalization” (JASA 2010) – acoustic measurements confirming low‑pass filtering of bone‑conduction【3†L118‑L124】.  
+4. Békésy (1949) “The structure of the middle ear and the hearing of one’s own voice by bone conduction” – classic description of bone‑conduction pathways.  
+5. Scientific American (2009) “Why does my voice sound different when it is recorded?” – popular‑science summary citing primary research.
