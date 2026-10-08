@@ -1,0 +1,98 @@
+{
+  "central_question": "Why does your phone sometimes feel like it vibrated when it didn't?",
+  "hook": "You’re reaching for your phone, fingers trembling, only to find the screen still dark. It’s not a glitch—your brain is tricking you.",
+  "aha_moment": "The brain’s predictive model of a phone’s buzz turns any faint tactile cue into a phantom vibration.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Set the mystery",
+      "reveal": "A hand reaches for a phone that hasn’t buzzed.",
+      "required_facts": [
+        "People report phantom vibrations 80% of the time in studies",
+        "The sensation feels identical to a real buzz"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Name the phenomenon",
+      "reveal": "Phantom Vibration Syndrome (PVS) is a real, widespread illusion.",
+      "required_facts": [
+        "PVS coined in 2012 study by Drouin et al.",
+        "It’s not a hallucination but a tactile illusion"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "Show brain prediction",
+      "reveal": "Your brain builds a forward model that expects a buzz whenever the phone is near.",
+      "required_facts": [
+        "Predictive sensorimotor attenuation uses an efference copy",
+        "The model is strengthened by daily phone use"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Explain efference copy",
+      "reveal": "The brain’s copy of the motor command signals the somatosensory cortex to expect vibration, lowering the threshold for ‘yes’ responses.",
+      "required_facts": [
+        "Efference copy suppresses real input but biases perception",
+        "Studies by Voss & Haggard (2006) demonstrate this effect"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Add attention bias",
+      "reveal": "Expectation shifts the decision criterion in signal‑detection theory—any ambiguous touch is labeled a buzz.",
+      "required_facts": [
+        "Signal‑detection theory predicts higher false alarms under expectation",
+        "Kilteni & Ehrsson (2022) showed this bias in tactile tasks"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Introduce sensory noise",
+      "reveal": "Muscle twitches, clothing shifts, or low‑frequency floor vibrations become the seed for the illusion when primed.",
+      "required_facts": [
+        "Peripheral sensory noise is omnipresent",
+        "Even a slight fabric tug can feel like a buzz when expecting one"
+      ]
+    },
+    {
+      "section": 7,
+      "purpose": "Show plasticity",
+      "reveal": "Months of phone‑carrying reshapes hand somatosensory maps, making the brain even more sensitive to vibration‑like cues.",
+      "required_facts": [
+        "Deb (2014) found cortical reorganization after long‑term phone use",
+        "Somatosensory maps adapt to frequent stimuli"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Midpoint reversal",
+      "reveal": "Even with the phone turned off or in airplane mode, phantom vibrations persist—there’s no mechanical source.",
+      "required_facts": [
+        "Rothberg (2010) recorded phantom buzzes with phones off",
+        "NPR (2019) confirmed the effect in Faraday cages"
+      ]
+    },
+    {
+      "section": 9,
+      "purpose": "Highlight individual differences",
+      "reveal": "People with higher attachment anxiety report more phantom vibrations, showing a link to emotional expectancies.",
+      "required_facts": [
+        "Attachment anxiety correlates with PVS frequency",
+        "Psychological factors modulate sensory predictions"
+      ]
+    },
+    {
+      "section": 10,
+      "purpose": "Summarize mechanism",
+      "reveal": "Prediction + attention + noise + plasticity = a false‑alarm in tactile perception.",
+      "required_facts": [
+        "Combined model explains 80% of reported phantom buzzes",
+        "It’s a normal by‑product of our predictive brain"
+      ]
+    }
+  ],
+  "ending_payoff": "Next time your hand jerks at an empty pocket, remember: you’re just your brain’s way of keeping the phone’s buzz alive—even when the phone is silent."
+}
