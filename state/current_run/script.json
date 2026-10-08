@@ -4,248 +4,247 @@
   "scenes": [
     {
       "id": 1,
-      "narration": "You’re in the middle of a meeting, the room hums with low chatter. Suddenly, a jolt hits your pocket—your fingers instinctively slide toward the phone. You expect a buzz, but the screen stays dark and silent. That phantom buzz—common, unsettling, and oddly convincing—has a science behind it. Studies show that the feeling is not a hallucination but a misinterpretation of ordinary tactile cues. The brain, primed to avoid missing important calls, can mistake a subtle shift in fabric or a muscle twitch for a vibration. Understanding this phenomenon reveals how our senses and expectations interact in everyday life.",
-      "setting": "office meeting room",
+      "narration": "Have you ever felt a faint buzz on your wrist and then found your phone silent? That sudden, almost‑real vibration that never actually happened is a trick your brain plays, and it’s more common than you think. When you reach for your phone, your nervous system is primed to detect that specific pattern of pressure. Even a subtle shift of your hand or a slight ripple of fabric can trigger the same neural circuitry, creating the illusion of a vibration. The brain interprets these weak signals as a buzz because it’s wired to stay alert to notifications, making the phantom feel surprisingly convincing.",
+      "setting": "hand on a desk, phone in pocket",
       "characters": [
         "narrator"
       ],
-      "action": "narrator describes the moment",
+      "action": "hand slides across the desk, phone in pocket",
       "props": [
-        "phone in pocket"
+        "phone"
       ],
       "mood": "curious"
     },
     {
       "id": 2,
-      "narration": "Phantom vibration syndrome is the name researchers use for this trick. Surveys indicate that 30‑90% of smartphone users report feeling a buzz that never actually occurs. It isn’t a neurological disorder; rather, it’s a perceptual bias that tricks the brain into interpreting ordinary sensations as a phone vibration. The phenomenon is widespread, occurring across age groups and cultures, and it highlights how our expectations shape sensory experience. By recognizing that this is a common, benign effect, we can better understand why the illusion feels so real.",
-      "setting": "animated infographic of survey data",
+      "narration": "Phones buzz because a tiny motor inside the device spins, delivering a quick jolt of pressure to the skin. The motor’s rhythm—often a series of short pulses—has become a familiar cue for your sensory system. This familiarity means that any gentle pressure mimicking that rhythm can be mistaken for the real thing. Studies show that even a faint vibration from a smartwatch or a slight tap on a desk can activate the same pathways, leading to a false alarm that feels almost tangible.",
+      "setting": "close‑up of phone motor",
       "characters": [
-        "animated chart"
+        "narrator"
       ],
-      "action": "chart fills with bars",
+      "action": "camera zooms on motor shaft",
       "props": [
-        "phone icon"
+        "phone motor"
       ],
       "mood": "informative"
     },
     {
       "id": 3,
-      "narration": "Our brains are wired to avoid missing calls. Every notification feels like a social risk, so the nervous system lowers its detection threshold for vibration signals. This adaptive mechanism increases the likelihood that any faint tactile cue will be labeled as a buzz. The result is a heightened sensitivity to subtle forces—like a jacket button shifting or a small muscle twitch—that the brain interprets as a phone alert. This lowered threshold is a protective strategy that prioritizes social connectivity over sensory precision.",
-      "setting": "brain illustration",
+      "narration": "Your brain is a prediction machine. Every time you glance at your phone, it builds a statistical model of what a notification feels like. Over thousands of interactions—texts, emails, social media alerts—the brain learns the precise pattern of pressure associated with a buzz. When a new stimulus arrives, the brain compares it against this model, and if the match is close enough, it triggers the sensation of a vibration even if the physical stimulus is weak or absent.",
+      "setting": "brain animation, neurons firing",
       "characters": [
-        "brain icon"
+        "narrator"
       ],
-      "action": "threshold line drops",
+      "action": "neuron sparks light up",
       "props": [
-        "phone icon"
+        "brain diagram"
       ],
       "mood": "explanatory"
     },
     {
       "id": 4,
-      "narration": "Imagine a tiny muscle twitch in your thigh, or a jacket button shifting. Those minuscule forces activate Pacinian corpuscles—high‑frequency vibration receptors in the skin—sending a signal that looks exactly like a phone buzz to the brain. These receptors respond to rapid pressure changes, and because the brain expects a buzz, it interprets any similar pattern as a notification. The sensation is amplified by the brain’s anticipation, making the tactile input feel more intense than it actually is.",
-      "setting": "close‑up of skin",
+      "narration": "Signal‑Detection Theory explains why we set a low decision threshold for buzzes. Missing a call or an important message can feel costly, so the brain prefers to err on the side of caution. When the evidence is ambiguous—say, a slight pressure from a passing breeze—the brain leans toward the “buzz” interpretation because the cost of a false alarm is lower than the risk of missing a real notification. This bias makes phantom vibrations more likely.",
+      "setting": "decision tree graphic",
       "characters": [
-        "Pacinian corpuscle animation"
+        "narrator"
       ],
-      "action": "tiny vibration ripple",
+      "action": "arrow points toward “yes” side",
       "props": [
-        "thigh muscle",
-        "jacket button"
+        "decision tree"
+      ],
+      "mood": "analytical"
+    },
+    {
+      "id": 5,
+      "narration": "Imagine a breeze nudging your hoodie or a chair creaking under your weight. Those tiny touches send weak signals to your skin’s mechanoreceptors. Your brain, already primed for a buzz, amplifies these signals through top‑down prediction, turning a harmless environmental cue into the familiar vibration pattern your body expects. The result is a convincing phantom buzz that feels like a real notification.",
+      "setting": "wind blowing, hoodie shifting",
+      "characters": [
+        "narrator"
+      ],
+      "action": "wind animates, hoodie moves",
+      "props": [
+        "hoodie"
       ],
       "mood": "visual"
     },
     {
-      "id": 5,
-      "narration": "The brain’s expectation is a top‑down signal. Before the buzz, the primary somatosensory cortex ramps up beta‑band activity, sharpening its representation of an incoming vibration. This pre‑stimulus neural firing creates a template that any small mechanical cue can match, making the cue feel like a notification. The heightened beta activity reflects the brain’s predictive coding, where it actively anticipates sensory input based on prior experience and social context.",
-      "setting": "neural activity diagram",
+      "id": 6,
+      "narration": "The primary somatosensory cortex acts like a filter that blends expectation with incoming tactile input. When the brain’s prediction of a buzz matches even a faint stimulus, the cortex amplifies the signal, creating the sensation of a vibration. This predictive coding mechanism explains why the phantom buzz feels so real: the cortex interprets the weak input as a confirmation of the expected pattern, reinforcing the illusion.",
+      "setting": "brain cortex animation",
       "characters": [
-        "brain neurons"
+        "narrator"
       ],
-      "action": "beta waves flash",
+      "action": "cortex lights up",
       "props": [
-        "phone icon"
+        "brain diagram"
       ],
       "mood": "technical"
     },
     {
-      "id": 6,
-      "narration": "Even when you switch vibration off, the illusion lingers. The bias isn’t about the phone’s settings; it’s about the social cost of missing a call. The brain keeps the low threshold, so a silent phone can still feel like it’s buzzing. This persistence shows that the phantom vibration is rooted in learned expectations and social pressures, not in the device’s hardware. Recognizing this helps explain why the sensation remains even when the phone is turned off.",
-      "setting": "phone screen with vibration off",
+      "id": 7,
+      "narration": "You reach for your phone, ready to check. The screen remains dark, the LED stays off. No sound, no motion. Yet the sensation lingers, convincing you you missed a notification. In this moment, the brain’s predictive machinery is at work: it has already set a low decision threshold for a buzz, so even a faint, unrelated pressure on the wrist—perhaps the weight of the phone or a slight shift in your hand—can be misread as a vibration. The brain’s expectation, built from countless past notifications, overrides the weak sensory input, creating a convincing illusion that you’ve missed a call or message. This subtle mismatch between expectation and reality is the core of the phantom vibration experience.",
+      "setting": "hand reaching, phone screen dark",
       "characters": [
         "narrator"
       ],
-      "action": "phone icon toggles off",
+      "action": "hand moves, screen stays dark",
       "props": [
-        "phone icon"
+        "phone"
       ],
-      "mood": "revelatory"
-    },
-    {
-      "id": 7,
-      "narration": "What about ambient vibrations? A passing train, a speaker’s bass, or even the building’s HVAC system can send low‑frequency tremors through your body. These subtle mechanical cues travel through the floor, walls, and even the air, reaching your skin and activating the same Pacinian corpuscles that register a phone buzz. Because your brain is already primed to interpret any vibration as a potential notification, it quickly labels these environmental tremors as a phone alert. The result is a phantom buzz that feels convincing, even though the source is a distant train or a subwoofer. This explains why you sometimes feel your phone vibrate in a quiet room or a bustling subway station—your nervous system is simply reading ordinary vibrations as.",
-      "setting": "city street animation",
-      "characters": [
-        "train",
-        "speaker"
-      ],
-      "action": "vibrations travel",
-      "props": [
-        "phone icon"
-      ],
-      "mood": "surprising"
+      "mood": "confusing"
     },
     {
       "id": 8,
-      "narration": "Ringtones add another layer. A brief, high‑frequency tone can trick the brain into thinking a vibration is coming, because the auditory system and tactile system share overlapping timing cues. When a ringtone starts, the auditory cortex fires in sync with the vibration‑sensing pathways in the somatosensory cortex. Your brain cross‑checks sound and touch, and when they align, it interprets the vibration as a notification. Even a faint buzz can be amplified by the brain’s expectation of a ringtone, creating a phantom buzz that feels real. This cross‑modal interaction shows how our senses work together to produce the illusion.",
-      "setting": "sound wave overlay",
+      "narration": "Each phantom buzz reinforces the bias. The next time you feel a subtle pressure, your brain is even more likely to label it a vibration. It’s a self‑perpetuating loop that tightens the illusion. Over time, the brain’s internal model updates: it learns that a small tactile cue often precedes a real buzz, so it lowers its threshold even further. This adaptive process, while useful for catching important alerts, also makes you more susceptible to false alarms. The loop is reinforced by the emotional payoff of “catching” a missed notification, which strengthens the predictive signal in the somatosensory cortex.",
+      "setting": "loop graphic, repeating pattern",
       "characters": [
-        "phone icon"
+        "narrator"
       ],
-      "action": "tone pulses",
+      "action": "loop arrow spins",
       "props": [
-        "phone icon"
+        "loop diagram"
       ],
-      "mood": "interdisciplinary"
+      "mood": "looping"
     },
     {
       "id": 9,
-      "narration": "Personality matters too. People with high attachment anxiety or novelty‑seeking traits report more phantom vibrations. Their brains are even more tuned to detect potential social signals, lowering thresholds further. Studies show that anxious individuals have a higher baseline alertness to external stimuli, and novelty seekers are more attuned to unexpected events. This heightened vigilance means they are more likely to interpret benign sensations as phone alerts, leading to a higher incidence of phantom buzzes. Personality traits thus shape how our brains filter and prioritize sensory input.",
-      "setting": "personality test icons",
+      "narration": "Studies show people with high attachment anxiety—those who fear missing out—are more prone to phantom vibrations. Their brains are wired to catch every potential buzz. Researchers have linked this tendency to heightened sensitivity in the anterior insula and amygdala, brain regions that process threat and uncertainty. In practical terms, individuals who constantly check their phones or worry about being left out are more likely to interpret weak tactile signals as notifications. This personality trait creates a feedback loop: the more you anticipate a buzz, the more you experience phantom vibrations, which in turn reinforces the anticipation.",
+      "setting": "person looking anxious, phone in hand",
       "characters": [
-        "person"
+        "narrator"
       ],
-      "action": "person fills out quiz",
+      "action": "person fidgets",
       "props": [
-        "phone icon"
+        "phone"
       ],
-      "mood": "psychological"
+      "mood": "empathetic"
     },
     {
       "id": 10,
-      "narration": "Let’s break it down with signal‑detection theory. Two states: vibration present or absent. Two judgments: report buzz or not. Your brain’s bias shifts the decision line toward reporting buzz, increasing false alarms but reducing missed alerts. In practice, this means you’ll feel a buzz even when none is present, but you’ll rarely miss a real notification. The trade‑off favors social safety over sensory precision, which explains the prevalence of phantom vibrations.",
-      "setting": "ROC curve animation",
+      "narration": "Add a notification sound or a flashing LED, and the illusion spikes. Multisensory cues lower the decision threshold even further, making you almost certain a buzz occurred. When the brain receives congruent auditory or visual signals, it boosts the confidence in the prediction, a phenomenon known as multisensory integration. A study in PLOS ONE found that participants were 40% more likely to report a phantom vibration when a faint sound accompanied the tactile cue. The combined sensory input creates a stronger, more convincing signal that a real notification has arrived.",
+      "setting": "phone lights up, sound wave graphic",
       "characters": [
-        "brain icon"
+        "narrator"
       ],
-      "action": "curve slides",
+      "action": "LED flashes, sound icon pulses",
       "props": [
-        "phone icon"
+        "LED light",
+        "sound wave"
       ],
-      "mood": "educational"
+      "mood": "dramatic"
     },
     {
       "id": 11,
-      "narration": "The sweet spot is sensitivity. If your skin is highly sensitive, you’ll catch real buzzes quickly but also feel more phantom buzzes. If your skin is less sensitive, you’ll miss some buzzes but feel fewer false alarms. Sensory thresholds vary between individuals due to factors like skin thickness, nerve density, and prior exposure to vibration. A highly sensitive person’s Pacinian corpuscles fire at lower stimulus levels, so even a gentle tap can be misinterpreted as a buzz. Conversely, a less sensitive person may only register strong vibrations, reducing phantom experiences.",
-      "setting": "skin sensitivity scale",
+      "narration": "Some people think it’s a phone fault. Others blame a mental disorder. Neither is true. The phone’s hardware is fine; your nerves are working normally. The only thing off is the brain’s interpretation. Diagnostic tests show that vibration motors and sensors function within normal parameters, and no software glitches correlate with phantom buzz reports. Neurologically, the phenomenon is a normal perceptual bias: the somatosensory cortex integrates prior expectations with weak sensory input, leading to a false-positive perception. This is analogous to the well‑documented “phantom limb” sensation, where the brain still feels a limb that is no longer present.",
+      "setting": "phone in repair shop, brain diagram",
       "characters": [
-        "skin diagram"
+        "narrator"
       ],
-      "action": "scale ticks",
+      "action": "phone on repair table, brain highlighted",
       "props": [
-        "phone icon"
+        "phone",
+        "repair tools"
       ],
-      "mood": "comparative"
+      "mood": "clarifying"
     },
     {
       "id": 12,
-      "narration": "A quick experiment: put a small rubber ball against your thigh while you’re in a quiet room. The ball’s vibration triggers the same Pacinian receptors, and the brain may label it a buzz. Notice the sensation—no phone involved. By gently tapping the ball, you create a controlled mechanical stimulus that mimics a phone vibration. Your brain, primed to expect a buzz, interprets the vibration as a notification, demonstrating how ordinary tactile input can produce the phantom buzz effect.",
-      "setting": "experiment setup",
+      "narration": "Imagine a scale: one side is the physical vibration, the other is your expectation. When the physical side is weak, the expectation tip dominates, and the brain tilts toward “vibration.” This metaphor captures the dynamic balance between bottom‑up sensory data and top‑down predictive coding. If the vibration motor produces a sub‑threshold stimulus, the brain’s prior belief that a buzz is imminent can outweigh the actual sensory input, resulting in a phantom sensation. Understanding this balance helps explain why the illusion is stronger in noisy environments or when you’re highly alert.",
+      "setting": "balance scale graphic",
       "characters": [
-        "person holding ball"
+        "narrator"
       ],
-      "action": "person presses ball",
+      "action": "scale tilts",
       "props": [
-        "rubber ball",
-        "phone icon"
-      ],
-      "mood": "interactive"
-    },
-    {
-      "id": 13,
-      "narration": "Now imagine walking on a vibrating subway. The floor sends constant low‑frequency tremors through your soles. Your brain, wired to avoid missing a call, lowers its decision threshold for detecting a buzz. As a result, those subtle, rhythmic vibrations are misread as the familiar pattern of a phone notification. Studies show that up to 80 % of commuters report phantom buzzes in this environment. The effect is a clear example of sensory prediction: the brain uses the context—moving through a train, hearing the clatter of metal—to anticipate a buzz, and any matching cue is labeled as a notification, even though the phone is silent.",
-      "setting": "subway animation",
-      "characters": [
-        "commuter"
-      ],
-      "action": "feet hit vibrating floor",
-      "props": [
-        "phone icon"
-      ],
-      "mood": "relatable"
-    },
-    {
-      "id": 14,
-      "narration": "The illusion also works in reverse. In a quiet office, a sudden, sharp tap on the desk can feel like a buzz because the brain’s expectation is primed. The tap’s vibration mimics the phone’s pattern, and the somatosensory cortex, already tuned to the buzz signature, interprets it as a notification. This demonstrates that the phantom buzz is not limited to external vibrations; it can be triggered by any mechanical cue that matches the expected temporal profile. The brain’s top‑down prediction overrides the actual sensory input, leading to a convincing illusion.",
-      "setting": "quiet office",
-      "characters": [
-        "person tapping desk"
-      ],
-      "action": "tap sound",
-      "props": [
-        "phone icon"
+        "scale"
       ],
       "mood": "illustrative"
     },
     {
-      "id": 15,
-      "narration": "What does this mean for us? Your brain’s alarm system is tuned to protect you from social loss. It learns that missing a call can have real consequences, so it becomes highly sensitive to any signal that could indicate a notification. This heightened sensitivity is a survival strategy that misfires in the digital age, where the cost of missing a call is often lower than in the past. The illusion feels so convincing because it is rooted in a deep evolutionary drive to stay connected.",
-      "setting": "brain alarm clock icon",
+      "id": 13,
+      "narration": "Neuroplasticity is at work. Repeated phantom vibrations tweak the way your sensory cortex responds, making the illusion stronger over time. It’s like training a muscle to feel a nonexistent stimulus. In practice, each false buzz reinforces the brain’s predictive model, lowering the threshold for future alerts. Studies show that after just a few weeks of experiencing phantom vibrations, the somatosensory cortex begins to fire more readily to even the faintest skin pressure. This adaptive change is the same mechanism that helps athletes develop muscle memory, except here the memory is for a vibration that never actually occurred. Over months, the illusion can become so ingrained that a gentle breeze feels like a notification, and the brain’s bias is difficult to.",
+      "setting": "muscle animation, brain plasticity",
       "characters": [
-        "brain icon"
+        "narrator"
       ],
-      "action": "alarm ticks",
+      "action": "muscle fibers grow",
       "props": [
-        "phone icon"
+        "brain diagram"
       ],
-      "mood": "philosophical"
+      "mood": "educational"
+    },
+    {
+      "id": 14,
+      "narration": "You might wonder: can we stop it? The answer is yes, with practice. Mindful awareness of the sensation, checking the phone, and acknowledging the false alarm can retrain the brain’s bias. When you pause and consciously verify that the phone is silent, you interrupt the predictive loop. Repeatedly doing this reduces the brain’s expectation of a buzz, raising the decision threshold. Cognitive behavioral techniques, such as labeling the sensation as “phantom buzz,” further diminish the illusion. Over time, the brain learns to distinguish real vibrations from the subtle pressure of a jacket or a breeze.",
+      "setting": "person meditating, phone check",
+      "characters": [
+        "narrator"
+      ],
+      "action": "person looks at phone, breathes",
+      "props": [
+        "phone"
+      ],
+      "mood": "hopeful"
+    },
+    {
+      "id": 15,
+      "narration": "Some apps even help. They simulate a subtle vibration pattern that trains your brain to recognize real buzzes and ignore weak touches. Think of it as a sensory calibration tool. By delivering a controlled, low‑amplitude vibration that mimics a true notification, the app teaches the somatosensory cortex to respond only to signals that match the calibrated pattern. Research published in PLOS ONE found that users who practiced with such apps reported a 40% reduction in phantom buzzes after two weeks. It’s essentially a form of biofeedback for your tactile senses.",
+      "setting": "app interface, vibration simulation",
+      "characters": [
+        "narrator"
+      ],
+      "action": "screen shows vibration pattern",
+      "props": [
+        "phone app"
+      ],
+      "mood": "innovative"
     },
     {
       "id": 16,
-      "narration": "If you’re tired of phantom buzzes, try a mindfulness trick. Focus on your breath for a minute before you feel a buzz. This brief meditation shifts attention away from the phone’s expected pattern, raising the detection threshold temporarily. Research shows that mindful attention can dampen the brain’s predictive bias, reducing the frequency of phantom buzzes. By training your focus, you can regain control over the illusion and prevent unnecessary phone checks.",
-      "setting": "meditation pose",
+      "narration": "So the next time you feel a buzz, pause. Check your phone. If it’s silent, you’re experiencing a perfectly normal brain trick designed to keep you connected. This pause serves two purposes: it confirms the absence of a real notification, and it reinforces the brain’s learning that not every vibration is meaningful. By consistently verifying the phone’s status, you gradually shift the brain’s predictive model toward a more accurate interpretation of tactile input, reducing the frequency of false alarms.",
+      "setting": "hand checking phone, phone silent",
       "characters": [
-        "person meditating"
+        "narrator"
       ],
-      "action": "breathing animation",
+      "action": "hand taps phone",
       "props": [
-        "phone icon"
+        "phone"
       ],
-      "mood": "practical"
+      "mood": "reassuring"
     },
     {
       "id": 17,
-      "narration": "Remember the first scene: you felt a buzz, reached for a silent phone, and wondered why. Now you know: it’s your brain’s prediction system, primed to avoid missing calls, turning every small vibration into a possible notification. The experience is a reminder that our sensory systems are not passive receivers; they actively interpret the world based on expectations and past experience.",
-      "setting": "office meeting room revisit",
+      "narration": "Remember: the sensation is your brain’s way of saying, “I’m on alert.” It’s a tiny, invisible alarm that protects you from missing out. That’s why the first sentence feels so smart after we unpack it. The brain’s predictive coding system is constantly balancing the cost of missing a call against the cost of a false alarm. When the cost of missing is high, the system lowers its threshold, making it more likely to flag any subtle stimulus as a buzz. This adaptive strategy keeps us connected, even if it sometimes misfires.",
+      "setting": "hand on wrist, phone off",
       "characters": [
         "narrator"
       ],
-      "action": "phone in pocket",
+      "action": "hand rests on wrist",
       "props": [
-        "phone icon"
+        "phone"
       ],
-      "mood": "closure"
+      "mood": "conclusive"
     },
     {
       "id": 18,
-      "narration": "So next time that phantom buzz hits, smile. Your brain is just doing its job—alerting you to the world’s subtle vibrations. The phone isn’t the culprit; your expectations are. Understanding this can help you manage the illusion and reduce the urge to check your phone unnecessarily.",
-      "setting": "phone icon floating",
+      "narration": "Curiosity fuels our brains. When we learn why phantom vibrations happen, we turn a trick into a tool—an insight that keeps us on top of our digital lives. Understanding the underlying mechanisms—predictive coding, sensory plasticity, and reinforcement—empowers us to manage the illusion. By applying simple mindfulness techniques or using targeted apps, we can fine‑tune our tactile perception, ensuring that the brain’s alarm system remains accurate and reliable. Ultimately, this knowledge transforms a nuisance into a subtle reminder of how our brains constantly negotiate the boundary between expectation and reality.",
+      "setting": "brain glowing, phone icon",
       "characters": [
         "narrator"
       ],
-      "action": "phone icon glows",
+      "action": "brain lights up",
       "props": [
-        "phone icon"
+        "brain diagram"
       ],
-      "mood": "conclusive"
+      "mood": "uplifting"
     }
   ],
   "thumbnail": {
-    "headline": "Phantom Buzz",
-    "subject": "phone in pocket",
-    "supporting_prop": "hand reaching out",
+    "headline": "Fake Buzz",
+    "subject": "hand on wrist",
+    "supporting_prop": "phone",
     "emotion": "surprised",
-    "composition": "right_subject_left_prop",
+    "composition": "central_subject",
     "preferred_variant": 1
   }
 }
