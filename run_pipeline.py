@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import pipeline as p
 import runtime_script_repair
+import production_hardening
 
 
 # Permanent Relic Loop production policy.
