@@ -1,12 +1,7 @@
 name: Relic Loop Hardening And Test
 
-# Validation trigger for production hardening changes, including the curated topic queue.
-# Final validation also covers successful-run queue usage persistence.
-
+# Manual validation workflow only. Production triggers must never be blocked by this test workflow.
 on:
-  push:
-    paths:
-      - ".github/workflows/harden_and_test.yml"
   workflow_dispatch:
 
 permissions:
@@ -27,7 +22,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
+          import json
 
           p = Path("pipeline.py")
           s = p.read_text(encoding="utf-8")
