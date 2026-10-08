@@ -1,81 +1,73 @@
 {
-  "central_question": "Why does your phone sometimes feel like it vibrated when it didn't?",
-  "hook": "You’re scrolling through a text, suddenly your phone buzzes—no notification, no sound. You reach for it, only to find it’s still silent. What’s tricking your brain?",
-  "aha_moment": "Your brain’s predictive system lowers its threshold for detecting a vibration, so the expectation of a buzz overrides the lack of a real tactile signal, creating a phantom vibration.",
+  "central_question": "Why does your phone sometimes feel like it vibrated when it didn’t?",
+  "hook": "You’re in a quiet room, your phone’s on silent, and suddenly a tingling in your pocket makes you reach for it. The phone is dead, yet you swear it buzzed. What’s really happening?",
+  "aha_moment": "Your brain was *expecting* a buzz, so it pre‑activates the tactile cortex and mislabels any tiny skin cue as a phone vibration.",
   "story_arc": [
     {
       "section": 1,
-      "purpose": "Introduce the everyday mystery",
-      "reveal": "A common experience: reaching for a phone that never buzzed.",
+      "purpose": "Instant mystery",
+      "reveal": "A sudden tingling in the pocket feels like a buzz even though the phone is silent",
       "required_facts": [
-        "People often feel a buzz that isn’t there"
+        "phone off",
+        "tingling sensation"
       ]
     },
     {
       "section": 2,
-      "purpose": "Show how widespread it is",
-      "reveal": "70‑80 % of users report at least one phantom buzz per month; in high‑stress jobs it climbs above 95 %.",
+      "purpose": "Promise of explanation",
+      "reveal": "We’ll uncover why the brain tricks you into thinking the phone buzzed",
       "required_facts": [
-        "Prevalence data from Biallas & Paice 2024, Lin et al. 2013"
+        "habitual vibration use"
       ]
     },
     {
       "section": 3,
-      "purpose": "Explain the brain’s predictive machinery",
-      "reveal": "Repeated pairing of vibration with a rewarding notification trains the brain to expect a buzz whenever it sees a subtle cue.",
+      "purpose": "Context",
+      "reveal": "Every time a phone vibrates, the brain learns a pattern—buzz = notification—creating a strong prediction",
       "required_facts": [
-        "Predictive coding theory",
-        "Reward association"
+        "predictive coding"
       ]
     },
     {
       "section": 4,
-      "purpose": "Introduce signal‑detection theory",
-      "reveal": "To avoid missing a real buzz, the brain lowers its decision threshold, turning even a faint or absent signal into a false alarm.",
+      "purpose": "First mechanism",
+      "reveal": "Before a buzz, the brain sends a top‑down signal to the primary somatosensory cortex, lowering the threshold for any skin input",
       "required_facts": [
-        "Signal‑detection theory, low criterion"
+        "S1 pre‑activation 100‑200 ms before buzz"
       ]
     },
     {
       "section": 5,
-      "purpose": "Show top‑down prediction overriding bottom‑up input",
-      "reveal": "Somatosensory cortex receives a strong top‑down prediction of vibration; when the actual tactile input is weak or absent, the prediction dominates, producing the phantom sensation.",
+      "purpose": "New question",
+      "reveal": "So what happens when there’s no buzz? Any tiny twitch, clothing shift, or even random neural noise can cross that lowered threshold",
       "required_facts": [
-        "Predictive coding, top‑down vs bottom‑up"
+        "sensory mis‑attribution"
       ]
     },
     {
       "section": 6,
-      "purpose": "Highlight stress and dopamine’s role",
-      "reveal": "High stress and dopamine levels sharpen expectations, making the brain even more prone to false alarms.",
+      "purpose": "Midpoint reversal",
+      "reveal": "You might think only anxious, phone‑addicted people get this, but studies show even casual users report phantom buzzes—up to 20% false alarms when vibration is predictable",
       "required_facts": [
-        "Stress, anxiety, dopamine effect"
+        "false‑alarm rates rise with predictability"
       ]
     },
     {
       "section": 7,
-      "purpose": "Explain why modern phones amplify the effect",
-      "reveal": "Social‑media likes and low‑importance alerts flood the system, constantly training the brain to expect a buzz.",
+      "purpose": "Deepening reveal",
+      "reveal": "The longer you wait, the more your brain’s hazard‑rate bias pushes the expectation, making the phantom buzz feel inevitable",
       "required_facts": [
-        "Modern phone notification patterns"
+        "hazard‑rate effect"
       ]
     },
     {
       "section": 8,
-      "purpose": "Debunk myths",
-      "reveal": "It’s not a hallucination or a phone fault—just a normal, healthy perceptual illusion.",
+      "purpose": "Core explanation",
+      "reveal": "The illusion isn’t a hidden vibration; it’s the brain’s predictive coding misreading ordinary skin signals as a phone buzz",
       "required_facts": [
-        "Misconceptions clarified"
-      ]
-    },
-    {
-      "section": 9,
-      "purpose": "Acknowledge uncertainties",
-      "reveal": "We don’t yet know the exact neural circuitry or long‑term consequences, and individual differences remain a mystery.",
-      "required_facts": [
-        "Neural locus unknown, long‑term effects preliminary"
+        "predictive coding, sensory mis‑attribution"
       ]
     }
   ],
-  "ending_payoff": "Now you’ll know that when you feel a buzz that isn’t there, it’s your brain’s expectation doing a quick mental check—an everyday reminder that our senses are more constructive than passive."
+  "ending_payoff": "So next time you reach for your phone in silence, remember: you’re not chasing a phantom buzz—you’re chasing a brain‑made expectation that turns the ordinary feel like a notification."
 }

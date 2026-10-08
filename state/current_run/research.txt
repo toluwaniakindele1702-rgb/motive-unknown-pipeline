@@ -1,1 +1,62 @@
-{"1. CORE ANSWER":"The feeling that a phone vibrates when it hasn’t is a normal perceptual illusion called phantom‑vibration syndrome (PVS). It arises when the brain’s predictive systems, honed by frequent, socially important alerts, bias the decision to report a vibration even in the absence of any tactile input.","2. STORY BEATS":[{"1":"Introduce the everyday experience of a phantom vibration."},{"2":"Show prevalence: 70‑80 % of users report at least one per month; >95 % in high‑stress groups."},{"3":"Explain the brain’s predictive machinery: repeated pairing of vibration with reward creates a strong expectation."},{"4":"Describe signal‑detection theory: a low decision criterion leads to false alarms."},{"5":"Illustrate predictive coding: top‑down predictions can override weak/no bottom‑up input."},{"6":"Highlight the role of stress, anxiety, and dopamine in sharpening expectations."},{"7":"Show why modern phones amplify the effect: many low‑importance alerts train the system."},{"8":"Address common myths: it’s not hallucination or a phone fault."},{"9":"Mention uncertainties: exact neural locus, long‑term effects, individual differences."},{"10":"Conclude with a takeaway: perception is constructive, not passive."}],"3. MECHANISM / CAUSE AND EFFECT":"PVS results from a bias in the perceptual decision process. Signal‑detection theory predicts that to avoid missing a real vibration the brain lowers its criterion, increasing false alarms. Predictive coding adds that the somatosensory cortex receives a strong top‑down prediction of vibration; when the actual tactile signal is weak or absent, the prediction dominates, producing the phantom sensation. Stress and dopamine further lower the criterion and amplify the prediction, especially in high‑alert environments.","4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES":["Biallas & Paice (IEEE Xplore, 2024) – large‑scale survey and app study." ,"Hsu et al. (2022) – prevalence data." ,"Medical interns in hospital wards – >95 % prevalence (Lin et al., 2013)." ,"Smartphones with frequent low‑importance alerts (social‑media likes, app notifications)."],"5. MISCONCEPTIONS OR CONTRADICTIONS":["Not a psychiatric disorder; a normal, healthy brain function." ,"Not caused by faulty phone hardware; the phone is silent."],"6. DISPUTES OR UNCERTAINTY":["Exact neural circuitry generating the phantom sensation is not fully mapped." ,"Long‑term consequences (attentional fatigue, anxiety) are still preliminary." ,"Reasons for individual variability (genetics, skin‑receptor sensitivity, habit strength) are under investigation."],"7. VERIFIED SOURCES":["Biallas & Paice, *Rethinking research on phantom‑vibration syndrome through citizen science* (IEEE Xplore, 2024) – prevalence data and app method." ,"BBC Future, *Why you think your phone is vibrating when it is not* (2013) – signal‑detection theory explanation." ,"BrainFacts.org (Society for Neuroscience), *Phantom phone signals show how smartphones shape our perception* (2024) – predictive‑coding, stress, dopamine, prevalence in medical interns." ,"PLOS ONE, Lin et al., “Prevalent hallucinations during medical internships: phantom vibration and ringing syndromes” (2013) – 78 %–96 % prevalence in interns." ,"Aleksandrowicz et al., *Psychiatry Research* 2023 – meta‑analysis confirming 27‑89 % prevalence in the general population (cited in BrainFacts article)."]}
+```json
+{
+  "1. CORE ANSWER": "Your phone feels like it vibrated because your brain was *expecting* a vibration. Habitual use of a vibrating phone builds a strong prediction that a buzz will arrive at any moment. This prediction pre‑activates the tactile cortex, lowering the threshold for any tiny skin stimulus (muscle twitch, clothing pressure, or random neural noise) to be interpreted as a phone buzz. The result is a phantom vibration – a normal, perception‑driven illusion rather than a hidden mechanical signal.",
+  "2. STORY BEATS (10-16 numbered beats)": [
+    "1. You notice a sudden tingling in your pocket and think your phone buzzed.",
+    "2. Your phone is actually silent and turned off.",
+    "3. The sensation feels real because your brain had been primed by previous vibrations.",
+    "4. The brain’s predictive coding system activates the tactile cortex in anticipation of a buzz.",
+    "5. Any ambiguous somatic cue (muscle twitch, clothing shift) is mis‑attributed as a phone vibration.",
+    "6. This mis‑attribution is amplified by the hazard‑rate effect: the longer you wait, the more likely you think a buzz will occur.",
+    "7. Personality traits like attachment anxiety and phone‑dependence increase the frequency of these false alarms.",
+    "8. Studies show false‑alarm rates rise from ~1 % to ~20 % when the vibration is highly predictable.",
+    "9. fMRI/EEG evidence demonstrates anticipatory activity in primary somatosensory cortex 100‑200 ms before the expected touch.",
+    "10. The illusion is not caused by any hardware malfunction or nerve damage.",
+    "11. Even users who rarely use their phone can experience occasional phantom vibrations.",
+    "12. The phenomenon is widespread, with prevalence estimates ranging from 29 % to 90 % in different samples.",
+    "13. The effect is a normal perceptual error, not a medical syndrome.",
+    "14. Long‑term consequences are still unknown, but chronic PVS could potentially alter somatosensory maps.",
+    "15. Cross‑modal effects (e.g., phantom ringing) are suggested but not yet systematically studied."
+  ],
+  "3. MECHANISM / CAUSE AND EFFECT": {
+    "cause": [
+      "Predictive coding: top‑down expectation from frontal/parietal areas to S1.",
+      "Hazard‑rate bias: increased probability of expecting a buzz the longer you wait.",
+      "Sensory mis‑attribution: weak cutaneous signals mis‑labelled as phone vibration."
+    ],
+    "effect": [
+      "Pre‑activation of S1 100‑200 ms before the expected stimulus.",
+      "Higher false‑alarm rates when vibration is predictable.",
+      "Perceived vibration without any physical stimulus."
+    ]
+  },
+  "4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Phantom‑vibration syndrome (PVS) – the term used in the literature.",
+    "Primary somatosensory cortex (S1) – the brain region showing anticipatory activity.",
+    "Attachment anxiety – personality trait linked to higher PVS frequency.",
+    "Predictive coding framework – theoretical model explaining the illusion.",
+    "Tactile temporal‑prediction experiments – key empirical studies.",
+    "Phone on vibrate mode – everyday object that triggers the expectation."
+  ],
+  "5. MISCONCEPTIONS OR CONTRADICTIONS": [
+    "It’s a disease or ‘syndrome’ – actually a normal perceptual error, not a medical disorder.",
+    "Only ‘addicted’ people get it – even low‑usage users report occasional phantom vibrations.",
+    "Caused by a malfunctioning phone – no evidence of invisible vibrations; the brain generates the sensation.",
+    "Only happens when the phone is in a pocket – can occur with the phone off or on a table.",
+    "Sign of neurological disease – reported in healthy populations; extreme cases may need evaluation."
+  ],
+  "6. DISPUTES OR UNCERTAINTY": [
+    "Exact neural circuitry – how frontal/parietal feedback interacts with S1 at millisecond resolution.",
+    "Individual differences – genetic vs. learning contributions to PVS frequency.",
+    "Long‑term consequences – whether chronic PVS alters somatosensory maps or increases anxiety.",
+    "Cross‑modal effects – systematic investigation of phantom ringing or visual analogues."
+  ],
+  "7. VERIFIED SOURCES": [
+    "Wikipedia overview of PVS – provides prevalence estimates and basic definition.",
+    "Tactile temporal predictions: the influence of conditional probability – i‑Perception, 2024 (free PMC).",
+    "Layer‑specific activation in human primary somatosensory cortex during tactile prediction error – NeuroImage, 2022 (free PMC).",
+    "Phantom vibration among undergraduates – Computers in Human Behavior, 2012.",
+    "Attachment anxiety predicts phantom ringing – Cyberpsychology, Behavior & Social Networking, 2016."
+  ]
+}
+```
