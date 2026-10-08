@@ -1,65 +1,68 @@
-**1. CORE ANSWER**  
-Your phone “feels” like it vibrated because your brain is predicting that a vibration will occur.  Habitual phone‑carrying creates a forward model that expects the characteristic buzz of an incoming alert.  This expectation biases attention and lowers the decision threshold for reporting a vibration, so any weak tactile cue (muscle twitch, fabric shift, low‑frequency vibration) is mis‑attributed to the phone.  Predictive sensorimotor attenuation, attentional expectancy, peripheral sensory noise, and long‑term somatosensory plasticity together generate the illusion of a phantom vibration.  The device itself is not vibrating; the sensation is internally generated.  (Sources: [0], [2])
-
----
-
-**2. STORY BEATS**  
-1. Introduce the everyday “I thought my phone buzzed, but it didn’t” moment.  
-2. Name the phenomenon: Phantom Vibration (Ring) Syndrome (PVS).  
-3. Explain that the brain constantly predicts tactile feedback when a phone is nearby.  
-4. Describe predictive sensorimotor attenuation (efference copy) and how it creates a bias toward “yes” responses.  
-5. Show how attention and expectation shift the decision criterion (signal‑detection theory).  
-6. Illustrate the role of ordinary sensory noise (muscle twitches, clothing movement).  
-7. Note that the brain can fill in the missing stimulus—tactile pareidolia.  
-8. Mention habituation: months of frequent vibrations reshape hand somatosensory maps.  
-9. Cite prevalence data (≈80 % of students report weekly phantom vibrations).  
-10. Highlight individual differences (attachment anxiety predicts higher rates).  
-11. Dispel the myth of hidden hardware or illness‑related hallucination.  
-12. Point out that the effect occurs even with the phone off or in silent/airplane mode.  
-13. Acknowledge unresolved questions (neural locus, device design effects, long‑term consequences).  
-14. Summarize the integrated mechanism (prediction + attention + noise + plasticity).  
-15. Offer a practical takeaway: reducing expectancy (e.g., turning off non‑essential alerts) can lower phantom reports.  
-16. Close with a reminder that the sensation is a normal by‑product of our predictive brain, not a malfunction.
-
----
-
-**3. MECHANISM / CAUSE AND EFFECT**  
-- **Predictive sensorimotor attenuation** → brain generates an efference copy → predicts vibration → suppresses real input but creates a bias → false “yes” reports.  
-- **Attention & expectation** → heightened vigilance shifts decision criterion → more likely to label ambiguous sensations as vibrations.  
-- **Sensory noise** → weak peripheral cues become the seed for the illusion when the brain is primed.  
-- **Habituation / plasticity** → repeated exposure reshapes cortical maps → increased sensitivity to vibration‑like inputs → higher phantom frequency.  
-
-The combined effect is a false‑alarm in tactile perception: the brain’s prediction fills in the absent stimulus.
-
----
-
-**4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES**  
-- **Drouin et al., 2012** – survey of university students showing > 80 % weekly phantom vibrations.  
-- **Voss & Haggard, 2006; Fuehrer et al., 2022** – studies on efference copy and tactile suppression.  
-- **Kilteni & Ehrsson, 2022** – work on top‑down bias in signal‑detection tasks.  
-- **Deb 2014 (systematic review)** – evidence of somatosensory cortical changes after months of phone use.  
-- **Rothberg 2010; NPR 2019** – popular‑science reports confirming phantom vibrations with phones off or in airplane mode.  
-
-Objects: typical smartphones with vibration motors, pockets or bags where phones are carried.
-
----
-
-**5. MISCONCEPTIONS OR CONTRADICTIONS**  
-- *Hidden hardware vibrates*: No detectable mechanical source; phantom sensations persist with phones in Faraday cages or turned off.  
-- *Hallucination due to mental illness*: PVS is a common tactile illusion in the general population, not a psychotic symptom.  
-- *Only strong‑vibration phones cause it*: Frequency of reports is similar across vibration intensities; prediction, not motor strength, drives the effect.  
-- *Only pocket placement matters*: Phantom vibrations also occur when the phone is on a table or absent, because expectation alone can trigger the illusion.
-
----
-
-**6. DISPUTES OR UNCERTAINTY**  
-- **Neural locus**: Debate whether primary suppression occurs cortically (somatosensory cortex) or subcortically (spinal gating).  
-- **Individual differences**: Attachment anxiety correlates with frequency, but causal mechanisms are not fully mapped.  
-- **Device design impact**: No systematic comparison of classic motors vs. “taptic engine” haptics on phantom rates.  
-- **Long‑term consequences**: Unknown whether chronic phantom vibrations alter tactile perception or attentional habits over years.
-
----
-
-**7. VERIFIED SOURCES**  
-- [0] Primary overview of Phantom Vibration Syndrome (definition, prevalence, attachment anxiety, misconceptions).  
-- [2] Experimental evidence on predictive sensorimotor attenuation and tactile suppression (efference copy studies).
+```json
+{
+  "CORE ANSWER": "When you’re waiting for a message, your brain builds a strong expectation that a brief, patterned vibration will occur. The predictive motor system (forward model/efference copy) then attenuates any tactile input that matches that expectation. Even a tiny, unrelated skin sensation—such as a shirt rubbing or a muscle twitch—gets interpreted through this expectation filter as the expected phone buzz, producing a genuine perception of a vibration that never actually happened.",
+  "STORY BEATS": [
+    "1. You check your phone or sit in a noisy room, expecting a notification.",
+    "2. Your brain assigns a high prior probability to a vibration in the next few seconds.",
+    "3. A forward‑model generates an efference‑copy‑like template of the expected vibration pattern.",
+    "4. The brain predicts the sensory feedback and attenuates it to avoid overload.",
+    "5. A weak, unrelated tactile cue (e.g., a shirt rubbing) arrives at the skin.",
+    "6. Because the brain expects a vibration, it biases perception toward that pattern.",
+    "7. The weak cue is interpreted as the expected phone buzz, creating a phantom vibration.",
+    "8. The sensation feels real and is reported as a buzz even though the phone is silent.",
+    "9. This loop can repeat many times a day, especially under stress or high phone‑use.",
+    "10. The phenomenon is measurable: apps show that ~30 % of reported events are false positives.",
+    "11. It is not a hardware glitch; accelerometer data confirm no real vibration.",
+    "12. People with higher stress, anxiety, or phone‑addiction scores report it more often.",
+    "13. The effect is stronger for self‑initiated movements (checking the phone) than passive ones.",
+    "14. Expectation alone, without movement, can also cause attenuation and phantom sensations.",
+    "15. The phenomenon is a low‑level tactile hallucination, similar to phantom ringing or limb sensations.",
+    "16. Current research is exploring neural loci, individual differences, and potential interventions."
+  ],
+  "MECHANISM / CAUSE AND EFFECT": {
+    "Cause": [
+      "Strong expectation of a phone vibration (high prior probability).",
+      "Predictive motor system (forward model/efference copy) creates a template of the expected tactile input.",
+      "Predictive attenuation of sensory feedback that matches the template."
+    ],
+    "Effect": [
+      "Weak, unrelated tactile cues are interpreted as the expected vibration.",
+      "A genuine percept of a buzz occurs even when no vibration is present.",
+      "Perception is amplified by attention, stress, and habitual phone use."
+    ]
+  },
+  "IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Biallas & Paice, *Rethinking research on phantom vibration syndrome* (2024) – prevalence and associated factors.",
+    "Arikan et al., 2024, iScience – tactile suppression during active vs. passive movement.",
+    "Voss et al., 2006, Nature Neuroscience – attenuation by anticipation.",
+    "Kilteni & Ehrsson, 2022, iScience – stimulus‑specific predictive attenuation.",
+    "Press & Kok, 2020, Trends in Cognitive Sciences – expectation sharpening perception.",
+    "Hughes et al., 2013, Psychological Bulletin – intentional binding and sensory attenuation.",
+    "Rothberg et al., 2010, BMJ – coined “phantom vibration syndrome” and linked it to broader phantom phone signals.",
+    "Citizen‑science app study (22 volunteers) – ~70 % experienced phantom vibrations in 7 days.",
+    "Medical‑staff survey – similar rates to students, indicating it’s not just a youth phenomenon."
+  ],
+  "MISCONCEPTIONS OR CONTRADICTIONS": [
+    "It’s not a hardware glitch; accelerometer data confirm no vibration at reported times.",
+    "While stress and anxiety increase frequency, most healthy adults report occasional phantom vibrations.",
+    "It’s not a memory illusion; the sensation occurs in real time while the phone is silent.",
+    "It’s not exclusive to young people; medical professionals report similar rates.",
+    "It’s not a sign of neurological disease; it’s a benign perceptual phenomenon."
+  ],
+  "DISPUTES OR UNCERTAINTY": [
+    "Exact neural locus of predictive attenuation (spinal cord vs. cortex).",
+    "Why some individuals experience PVS more frequently than others.",
+    "Long‑term adaptation to frequent notifications and its effect on PVS.",
+    "Effectiveness of interventions (mindfulness, digital detox) in reducing phantom vibrations."
+  ],
+  "VERIFIED SOURCES": [
+    "Biallas & Paice, *Rethinking research on phantom vibration syndrome* (2024) – prevalence, triggers, associated factors, hardware check.",
+    "Arikan et al., 2024, iScience – tactile suppression during active vs. passive movement.",
+    "Voss et al., 2006, Nature Neuroscience – attenuation by anticipation.",
+    "Kilteni & Ehrsson, 2022, iScience – stimulus‑specific predictive attenuation.",
+    "Press & Kok, 2020, Trends in Cognitive Sciences – expectation sharpening perception.",
+    "Hughes et al., 2013, Psychological Bulletin – intentional binding and sensory attenuation.",
+    "Rothberg et al., 2010, BMJ – coined “phantom vibration syndrome”."
+  ]
+}
+```

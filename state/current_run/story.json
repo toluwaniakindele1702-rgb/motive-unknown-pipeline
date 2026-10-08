@@ -1,98 +1,94 @@
 {
-  "central_question": "Why does your phone sometimes feel like it vibrated when it didn't?",
-  "hook": "You’re reaching for your phone, fingers trembling, only to find the screen still dark. It’s not a glitch—your brain is tricking you.",
-  "aha_moment": "The brain’s predictive model of a phone’s buzz turns any faint tactile cue into a phantom vibration.",
+  "central_question": "Why does your phone sometimes feel like it vibrated when it didn’t?",
+  "hook": "You’re in a quiet room, scrolling, and suddenly you feel that familiar buzz. You reach for your phone—nothing’s on. How can your brain trick you into feeling a vibration that never happened?",
+  "aha_moment": "Your brain’s predictive system builds a template of the expected phone buzz and then filters out matching sensations, so a tiny, unrelated touch is misread as a vibration.",
   "story_arc": [
     {
       "section": 1,
-      "purpose": "Set the mystery",
-      "reveal": "A hand reaches for a phone that hasn’t buzzed.",
+      "purpose": "Cold open – instant mystery",
+      "reveal": "You feel a buzz, but the phone is silent.",
       "required_facts": [
-        "People report phantom vibrations 80% of the time in studies",
-        "The sensation feels identical to a real buzz"
+        "phone is off",
+        "no notification"
       ]
     },
     {
       "section": 2,
-      "purpose": "Name the phenomenon",
-      "reveal": "Phantom Vibration Syndrome (PVS) is a real, widespread illusion.",
+      "purpose": "Opening promise – hint of answer",
+      "reveal": "It’s not a glitch; it’s your brain’s expectation playing tricks.",
       "required_facts": [
-        "PVS coined in 2012 study by Drouin et al.",
-        "It’s not a hallucination but a tactile illusion"
+        "brain predicts buzz"
       ]
     },
     {
       "section": 3,
-      "purpose": "Show brain prediction",
-      "reveal": "Your brain builds a forward model that expects a buzz whenever the phone is near.",
+      "purpose": "Set context – why it matters",
+      "reveal": "We’re wired to anticipate phone alerts; the brain uses a forward model to stay efficient.",
       "required_facts": [
-        "Predictive sensorimotor attenuation uses an efference copy",
-        "The model is strengthened by daily phone use"
+        "predictive motor system",
+        "effortful attention"
       ]
     },
     {
       "section": 4,
-      "purpose": "Explain efference copy",
-      "reveal": "The brain’s copy of the motor command signals the somatosensory cortex to expect vibration, lowering the threshold for ‘yes’ responses.",
+      "purpose": "First reveal – high prior probability",
+      "reveal": "When you’re waiting for a message, your brain assigns a 90‑% chance a vibration will happen in the next few seconds.",
       "required_facts": [
-        "Efference copy suppresses real input but biases perception",
-        "Studies by Voss & Haggard (2006) demonstrate this effect"
+        "high prior probability"
       ]
     },
     {
       "section": 5,
-      "purpose": "Add attention bias",
-      "reveal": "Expectation shifts the decision criterion in signal‑detection theory—any ambiguous touch is labeled a buzz.",
+      "purpose": "Second reveal – forward‑model template",
+      "reveal": "The brain creates an efference‑copy‑like pattern of the expected buzz, ready to match incoming touch.",
       "required_facts": [
-        "Signal‑detection theory predicts higher false alarms under expectation",
-        "Kilteni & Ehrsson (2022) showed this bias in tactile tasks"
+        "forward model",
+        "template"
       ]
     },
     {
       "section": 6,
-      "purpose": "Introduce sensory noise",
-      "reveal": "Muscle twitches, clothing shifts, or low‑frequency floor vibrations become the seed for the illusion when primed.",
+      "purpose": "Third reveal – sensory attenuation",
+      "reveal": "It then dampens any real tactile input that fits that pattern to avoid overload.",
       "required_facts": [
-        "Peripheral sensory noise is omnipresent",
-        "Even a slight fabric tug can feel like a buzz when expecting one"
+        "predictive attenuation"
       ]
     },
     {
       "section": 7,
-      "purpose": "Show plasticity",
-      "reveal": "Months of phone‑carrying reshapes hand somatosensory maps, making the brain even more sensitive to vibration‑like cues.",
+      "purpose": "Midpoint reversal – the trick",
+      "reveal": "A harmless shirt rub or muscle twitch arrives at the skin, and because the brain is primed for a buzz, it mislabels it as a phone vibration.",
       "required_facts": [
-        "Deb (2014) found cortical reorganization after long‑term phone use",
-        "Somatosensory maps adapt to frequent stimuli"
+        "unrelated tactile cue",
+        "mislabeling"
       ]
     },
     {
       "section": 8,
-      "purpose": "Midpoint reversal",
-      "reveal": "Even with the phone turned off or in airplane mode, phantom vibrations persist—there’s no mechanical source.",
+      "purpose": "Consequence – why it feels real",
+      "reveal": "The mislabeling feels as vivid as a real buzz, so you reach for a phone that’s not there.",
       "required_facts": [
-        "Rothberg (2010) recorded phantom buzzes with phones off",
-        "NPR (2019) confirmed the effect in Faraday cages"
+        "perception feels real"
       ]
     },
     {
       "section": 9,
-      "purpose": "Highlight individual differences",
-      "reveal": "People with higher attachment anxiety report more phantom vibrations, showing a link to emotional expectancies.",
+      "purpose": "Broader impact – how often it happens",
+      "reveal": "Studies show about 30 % of reported phantom buzzes are false positives, especially under stress or heavy phone use.",
       "required_facts": [
-        "Attachment anxiety correlates with PVS frequency",
-        "Psychological factors modulate sensory predictions"
+        "30 % false positives",
+        "stress link"
       ]
     },
     {
       "section": 10,
-      "purpose": "Summarize mechanism",
-      "reveal": "Prediction + attention + noise + plasticity = a false‑alarm in tactile perception.",
+      "purpose": "Final aha – single core explanation",
+      "reveal": "It’s a low‑level tactile hallucination: the brain’s expectation filter turns a tiny, unrelated touch into a phantom buzz.",
       "required_facts": [
-        "Combined model explains 80% of reported phantom buzzes",
-        "It’s a normal by‑product of our predictive brain"
+        "tactile hallucination",
+        "expectation filter"
       ]
     }
   ],
-  "ending_payoff": "Next time your hand jerks at an empty pocket, remember: you’re just your brain’s way of keeping the phone’s buzz alive—even when the phone is silent."
+  "ending_payoff": "Next time you feel that buzz, remember it’s your brain’s own prediction tricking you—no phone, no vibration, just a clever shortcut that keeps you alert."
 }
