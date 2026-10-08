@@ -23,7 +23,7 @@ on:
           - local_image_test
 
 concurrency:
-  group: ${{ github.workflow }}-production
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}
   cancel-in-progress: true
 
 permissions:
@@ -178,33 +178,28 @@ jobs:
           python -m py_compile pipeline.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py
           if [[ "$PIPELINE_MODE" == "v2_test" ]]; then
             test -n "$GEMINI_API_KEY" || { echo "GEMINI_API_KEY secret is missing; refusing to start V2 media generation."; exit 1; }
-            python - <<'PY'
-            import os
-            from google import genai
-            c = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
-            print('Gemini SDK import/client construction: OK')
-            PY
+            python -c 'import os; from google import genai; genai.Client(api_key=os.environ["GEMINI_API_KEY"]); print("Gemini SDK import/client construction: OK")'
           else
             python - <<'PY'
-            import os
-            import torch
-            from pipeline import package_quality_issues
-            _issues = package_quality_issues(
-                {"question": "Why does this work?", "topic": "preflight", "category": "general"},
-                {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
-                {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
-            )
-            print("Packaging gate smoke test: OK", _issues)
-            print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
-            print("torch:", torch.__version__)
-            print("cuda available:", torch.cuda.is_available())
-            assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
-            if os.environ.get("PIPELINE_MODE") != "local_image_test":
-                import kokoro
-                print("Kokoro import: OK")
-            else:
-                print("Kokoro import: skipped for local image test")
-            PY
+          import os
+          import torch
+          from pipeline import package_quality_issues
+          _issues = package_quality_issues(
+              {"question": "Why does this work?", "topic": "preflight", "category": "general"},
+              {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
+              {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
+          )
+          print("Packaging gate smoke test: OK", _issues)
+          print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
+          print("torch:", torch.__version__)
+          print("cuda available:", torch.cuda.is_available())
+          assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
+          if os.environ.get("PIPELINE_MODE") != "local_image_test":
+              import kokoro
+              print("Kokoro import: OK")
+          else:
+              print("Kokoro import: skipped for local image test")
+          PY
           fi
 
       - name: FFmpeg filter smoke test
@@ -228,6 +223,18 @@ jobs:
         run: |
           set -o pipefail
           python v2_test.py 2>&1 | tee v2_test.log
+
+      - name: Upload V2 test artifact
+        if: always() && env.PIPELINE_MODE == 'v2_test'
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-v2-test-${{ github.run_number }}
+          path: |
+            run_work/v2_test/relic_loop_v2_room_memory_test.mp4
+            run_work/v2_test/manifest.json
+            v2_test.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Run production pipeline
         if: env.PIPELINE_MODE != 'v2_test'
