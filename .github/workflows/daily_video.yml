@@ -17,6 +17,7 @@ on:
         type: choice
         options:
           - full
+          - v2_test
           - voice_test
           - visual_test
           - local_image_test
@@ -35,6 +36,7 @@ jobs:
 
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
       YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
       YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
@@ -66,22 +68,24 @@ jobs:
         shell: bash
         run: |
           echo "=============================================="
-          echo "RELIC LOOP PRODUCTION RUN STARTED"
+          echo "RELIC LOOP RUN STARTED"
           echo "RUN NUMBER: ${{ github.run_number }}"
           echo "RUN ID:     ${{ github.run_id }}"
+          echo "MODE:       ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}"
           echo "EVENT:      ${{ github.event_name }}"
           echo "SHA:        ${{ github.sha }}"
           echo "RUN URL:    https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "=============================================="
           {
-            echo "## Relic Loop production run"
+            echo "## Relic Loop run"
             echo "- **Run number:** ${{ github.run_number }}"
             echo "- **Run ID:** ${{ github.run_id }}"
+            echo "- **Mode:** ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}"
             echo "- **Event:** ${{ github.event_name }}"
             echo "- **Run URL:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Clear stale failed-run topic state
+      - name: Clear stale failed-run state
         shell: bash
         run: |
           rm -f \
@@ -93,28 +97,6 @@ jobs:
             state/current_run/upload.json \
             state/current_run/shorts.json
           mkdir -p state/current_run
-
-      - name: Inject next scheduled Relic Loop topic
-        if: github.event_name == 'schedule'
-        shell: bash
-        run: |
-          cat > state/current_run/topic.json <<'JSON'
-          {
-            "question": "Why does your voice sound different when you hear a recording?",
-            "topic": "Why Your Recorded Voice Sounds Different",
-            "category": "everyday psychology and human perception",
-            "era": "modern day",
-            "search_angles": [
-              "why bone conduction makes your own voice sound different to you",
-              "how air conduction changes the voice you hear from a recording",
-              "what happens to the vocal tract and perceived pitch when speaking",
-              "whether recordings actually make your voice deeper or higher or simply reveal the version others hear",
-              "common myths about hearing your own voice"
-            ]
-          }
-          JSON
-          cp state/current_run/topic.json run_work/topic.json 2>/dev/null || true
-          echo "[SCHEDULED TOPIC] Legacy file only; queue selector remains authoritative."
 
       - name: Set run mode
         shell: bash
@@ -182,6 +164,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Install Puter image client
+        if: env.PIPELINE_MODE != 'v2_test'
         shell: bash
         run: |
           node --version
@@ -192,29 +175,40 @@ jobs:
       - name: Preflight checks
         shell: bash
         run: |
-          python -m py_compile pipeline.py local_image_worker.py sitecustomize.py run_pipeline.py
-          python - <<'PY'
-          import os
-          import torch
-          from pipeline import package_quality_issues
-          _issues = package_quality_issues(
-              {"question": "Why does this work?", "topic": "preflight", "category": "general"},
-              {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
-              {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
-          )
-          print("Packaging gate smoke test: OK", _issues)
-          print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
-          print("torch:", torch.__version__)
-          print("cuda available:", torch.cuda.is_available())
-          assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
-          if os.environ.get("PIPELINE_MODE") != "local_image_test":
-              import kokoro
-              print("Kokoro import: OK")
-          else:
-              print("Kokoro import: skipped for local image test")
-          PY
+          python -m py_compile pipeline.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py
+          if [[ "$PIPELINE_MODE" == "v2_test" ]]; then
+            test -n "$GEMINI_API_KEY" || { echo "GEMINI_API_KEY secret is missing; refusing to start V2 media generation."; exit 1; }
+            python - <<'PY'
+            import os
+            from google import genai
+            c = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
+            print('Gemini SDK import/client construction: OK')
+            PY
+          else
+            python - <<'PY'
+            import os
+            import torch
+            from pipeline import package_quality_issues
+            _issues = package_quality_issues(
+                {"question": "Why does this work?", "topic": "preflight", "category": "general"},
+                {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
+                {"title": "Why Does This Work?", "description": "Smoke test", "tags": ["test"], "thumbnail_headline": "The Hidden Reason"},
+            )
+            print("Packaging gate smoke test: OK", _issues)
+            print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
+            print("torch:", torch.__version__)
+            print("cuda available:", torch.cuda.is_available())
+            assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
+            if os.environ.get("PIPELINE_MODE") != "local_image_test":
+                import kokoro
+                print("Kokoro import: OK")
+            else:
+                print("Kokoro import: skipped for local image test")
+            PY
+          fi
 
       - name: FFmpeg filter smoke test
+        if: env.PIPELINE_MODE != 'v2_test'
         shell: bash
         run: |
           python - <<'PY'
@@ -228,7 +222,15 @@ jobs:
           print("FFmpeg emphasis filter smoke test: OK")
           PY
 
-      - name: Run pipeline
+      - name: Run isolated RL V2 prototype
+        if: env.PIPELINE_MODE == 'v2_test'
+        shell: bash
+        run: |
+          set -o pipefail
+          python v2_test.py 2>&1 | tee v2_test.log
+
+      - name: Run production pipeline
+        if: env.PIPELINE_MODE != 'v2_test'
         shell: bash
         run: |
           set -o pipefail
@@ -248,7 +250,7 @@ jobs:
           except Exception:
               data = {}
           data["finished_at"] = datetime.now(timezone.utc).isoformat()
-          data["pipeline_log"] = "pipeline.log"
+          data["pipeline_log"] = "v2_test.log" if data.get("mode") == "v2_test" else "pipeline.log"
           with open(p, "w") as f:
               json.dump(data, f, indent=2)
           PY
@@ -258,78 +260,23 @@ jobs:
         shell: bash
         run: |
           mkdir -p state/current_run
-          python - <<'PY'
-          import json, os
-          from datetime import datetime, timezone
-          identity_path = "state/current_run/github_run.json"
-          report_path = "state/current_run/run_report.json"
-          try:
-              identity = json.load(open(identity_path))
-          except Exception:
-              identity = {}
-          log_path = "pipeline.log"
-          log_exists = os.path.exists(log_path)
-          report = {
-              "report_version": 1,
-              "captured_at": datetime.now(timezone.utc).isoformat(),
-              "status": os.environ.get("JOB_STATUS", "unknown"),
-              "run_id": "${{ github.run_id }}",
-              "run_number": "${{ github.run_number }}",
-              "workflow": "${{ github.workflow }}",
-              "event": "${{ github.event_name }}",
-              "mode": "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}",
-              "sha": "${{ github.sha }}",
-              "ref": "${{ github.ref }}",
-              "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "pipeline_log": log_path if log_exists else None,
-              "pipeline_log_size_bytes": os.path.getsize(log_path) if log_exists else 0,
-              "identity": identity,
-          }
-          with open(report_path, "w") as f:
-              json.dump(report, f, indent=2)
-          print(json.dumps(report, indent=2))
-          PY
-        env:
-          JOB_STATUS: ${{ job.status }}
+          if [[ -f v2_test.log ]]; then
+            tail -n 120 v2_test.log >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          if [[ -f pipeline.log ]]; then
+            tail -n 120 pipeline.log >> "$GITHUB_STEP_SUMMARY" || true
+          fi
 
       - name: Persist resumable state safely
-        if: always() && env.PIPELINE_MODE == 'full'
+        if: always()
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A state
+          git add state/current_run || true
           if ! git diff --cached --quiet; then
-            git commit -m "chore: persist pipeline state"
+            git commit -m "chore: persist Relic Loop run state"
+            git push
+          else
+            echo "No resumable state changes to commit."
           fi
-          git pull --rebase origin main
-          git push
-
-      - name: Upload run diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: relic-loop-run-${{ github.run_id }}
-          if-no-files-found: warn
-          retention-days: 7
-          path: |
-            pipeline.log
-            state/current_run/github_run.json
-            state/current_run/run_report.json
-            run_work/topic.json
-            run_work/research.txt
-            run_work/story.json
-            run_work/seo.json
-            run_work/manifest.json
-            state/last_run.json
-            state/current_run/*.json
-            state/provider_health.json
-            run_work/visual_test/*.jpg
-            run_work/local_image_test/*.jpg
-            run_work/scenes/*.jpg
-            run_work/output/thumbnail.jpg
-            run_work/output/*.mp4
-            run_work/output/*.srt
-            run_work/output/*.wav
-            run_work/audio/*.wav
-            state/current_run/shorts.json
