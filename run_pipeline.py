@@ -5,6 +5,36 @@ from pathlib import Path
 import pipeline as p
 
 
+# Permanent Relic Loop production policy.
+# 5–7 minutes is the target runtime; do not pad a complete story just to hit a word count.
+p.SCRIPT_MIN_WORDS = 750
+p.SCRIPT_MAX_WORDS = 1150
+# More frequent meaningful visual changes: allow up to 150 visual beats per episode.
+p.MAX_VISUAL_BEATS_PER_VIDEO = 150
+
+
+# Harden every generated still prompt around the canonical RL character/style.
+_original_make_visual_prompt = p.make_visual_prompt
+
+
+def _rl_hardened_visual_prompt(*args, **kwargs):
+    prompt = _original_make_visual_prompt(*args, **kwargs)
+    rl_rules = """
+RELIC LOOP CHARACTER / STYLE LOCK — FOLLOW STRICTLY:
+- RL is the canonical recurring human protagonist: a young adult Black male with dark hair, friendly curious face, blue hoodie/jacket over a cream shirt, dark trousers/cargo pants, sneakers, and a backpack when appropriate.
+- Preserve RL's face, hairstyle, skin tone, clothing palette, body proportions, and overall illustrated identity across scenes. Do not redesign or substitute him with a generic male character.
+- Use the established Relic Loop clean modern 2D educational/explainer illustration style: polished, sharp, readable, expressive, simple shapes, strong composition, and clear visual storytelling.
+- Do NOT turn RL or the scene into photorealism, 3D/Pixar style, anime, a different cartoon style, or an old-fashioned documentary illustration.
+- RL should appear naturally in the scene only when a human/character is useful; object-only diagrams, animals, environments, mechanisms, maps, and historical/real-person scenes may omit RL when the narration requires it.
+- When RL is present, keep him visually consistent rather than inventing a new outfit, face, hairstyle, age, or character design.
+- The image must directly explain the narrated beat. Do not add unrelated decorative imagery just to fill the frame.
+"""
+    return prompt + "\n\n" + rl_rules.strip()
+
+
+p.make_visual_prompt = _rl_hardened_visual_prompt
+
+
 def _scene_ranges(script):
     starts=[]; durations=[]; cursor=0.0
     for i in range(1, len(script["scenes"])+1):
