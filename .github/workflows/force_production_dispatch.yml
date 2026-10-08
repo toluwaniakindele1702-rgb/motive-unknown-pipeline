@@ -18,5 +18,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run daily_video.yml --ref main -f mode=full
+          gh workflow run daily_video.yml --repo "${{ github.repository }}" --ref main -f mode=full
           echo "Dispatched Relic Loop Daily Video in full production mode."
