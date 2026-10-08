@@ -1,13 +1,13 @@
 {
-  "run_id": "37715990049",
-  "run_number": "188",
+  "run_id": "37719955976",
+  "run_number": "189",
   "workflow": "Relic Loop Daily Video",
   "event": "workflow_dispatch",
-  "mode": "full",
-  "sha": "3aefa908307420a2ef9c025b03399b2c68a4f718",
+  "mode": "v2_test",
+  "sha": "e3a117fce31b71dc1c65917b231a6b3712d9cc76",
   "ref": "refs/heads/main",
   "started_at": "",
-  "run_url": "https://github.com/toluwaniakindele1702-rgb/motive-unknown-pipeline/actions/runs/37715990049",
-  "finished_at": "2026-10-08T02:10:01.517589+00:00",
-  "pipeline_log": "pipeline.log"
+  "run_url": "https://github.com/toluwaniakindele1702-rgb/motive-unknown-pipeline/actions/runs/37719955976",
+  "finished_at": "2026-10-08T02:53:20.337513+00:00",
+  "pipeline_log": "v2_test.log"
 }
