@@ -22,7 +22,10 @@ except Exception as exc:  # pragma: no cover
 else:
     _IMPORT_ERROR = None
 
-GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+# Use the current Gemini 3.1 Flash Image preview model for the generateContent
+# image-to-video workflow documented by Google. The environment variable remains
+# supported so the test/prod workflow can override it without editing code.
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 GEMINI_VIDEO_MODEL = os.environ.get("GEMINI_VIDEO_MODEL", "veo-3.1-generate-preview")
 
 
@@ -40,13 +43,22 @@ def generate_image(prompt: str, output_path: Path, reference_path: Optional[Path
     contents = [prompt]
     if reference_path and reference_path.exists():
         contents.append(Image.open(reference_path).convert("RGB"))
-        contents.append("Use the supplied image as the canonical RL character reference. Preserve RL's face, hair, clothing, proportions and palette; change only pose, action, camera and environment requested by the scene prompt.")
+        contents.append(
+            "Use the supplied image as the canonical RL character reference. "
+            "Preserve RL's face, hair, clothing, proportions and palette; change only "
+            "pose, action, camera and environment requested by the scene prompt."
+        )
+
+    # The previous implementation passed response_format into
+    # GenerateContentConfig. The installed google-genai SDK used by Actions rejects
+    # that field, so use the SDK's ImageConfig for aspect ratio instead. Google also
+    # documents this generateContent image workflow with response_modalities=['IMAGE'].
     response = c.models.generate_content(
         model=GEMINI_IMAGE_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
-            response_format={"image": {"aspect_ratio": "16:9", "image_size": "1K"}},
+            image_config=types.ImageConfig(aspect_ratio="16:9"),
         ),
     )
     for part in response.parts:
