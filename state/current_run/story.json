@@ -1,0 +1,72 @@
+{
+  "central_question": "Why do songs get stuck in your head?",
+  "hook": "A catchy chorus blares in a crowded elevator, and suddenly the melody is replaying in your mind even though the music has stopped. How does a brief fragment hijack your thoughts?",
+  "aha_moment": "The brain’s phonological loop captures a short, familiar musical chunk and, through predictive coding, uses its ending as a cue to replay its beginning—creating a self‑reinforcing loop that keeps the song looping until attention is redirected.",
+  "story_arc": [
+    {
+      "section": 1,
+      "purpose": "Cold open – hook the mystery",
+      "reveal": "A chorus stops, but the tune keeps playing in your head.",
+      "required_facts": [
+        "A brief musical fragment can persist after the source stops"
+      ]
+    },
+    {
+      "section": 2,
+      "purpose": "Opening promise – tease the answer",
+      "reveal": "We’ll uncover why the brain keeps replaying that snippet.",
+      "required_facts": [
+        "The phenomenon is called an earworm or INMI"
+      ]
+    },
+    {
+      "section": 3,
+      "purpose": "First beat – cue encounter",
+      "reveal": "You hear a catchy 3‑5 second fragment in a noisy environment.",
+      "required_facts": [
+        "Earworms often start with a short, memorable hook"
+      ]
+    },
+    {
+      "section": 4,
+      "purpose": "Second beat – encoding & chunking",
+      "reveal": "The fragment slots into the phonological loop, chunked into 4‑unit groups that fit short‑term memory limits.",
+      "required_facts": [
+        "Phonological loop capacity ~1–2 s, but chunking extends it to 3–5 s"
+      ]
+    },
+    {
+      "section": 5,
+      "purpose": "Third beat – self‑cue loop",
+      "reveal": "The fragment’s ending mirrors its start, automatically cueing the next replay.",
+      "required_facts": [
+        "Predictive coding treats the ending as a cue for the beginning"
+      ]
+    },
+    {
+      "section": 6,
+      "purpose": "Midpoint reversal – challenge the obvious",
+      "reveal": "You might think a strong memory alone explains it, but low cognitive load is the real trigger—when your mind wanders, the loop runs unchecked.",
+      "required_facts": [
+        "Mind‑wandering or low‑load tasks allow the loop to persist"
+      ]
+    },
+    {
+      "section": "7",
+      "purpose": "Fourth beat – emotional modulation",
+      "reveal": "Fast tempo or stress heightens the loop, making the earworm feel more intrusive.",
+      "required_facts": [
+        "Higher arousal strengthens persistence"
+      ]
+    },
+    {
+      "section": 8,
+      "purpose": "Fifth beat – breaking the loop",
+      "reveal": "A competing task or conscious suppression can displace the fragment, ending the replay.",
+      "required_facts": [
+        "Displacement or deliberate suppression stops the loop"
+      ]
+    }
+  ],
+  "ending_payoff": "When you finally snap your attention back to the world, the song stops—because the brain’s own rehearsal system, not a glitch, was keeping the tune alive. Next time you hear a jingle, remember it’s your memory’s way of humming a familiar beat, not a sign of something wrong."
+}
