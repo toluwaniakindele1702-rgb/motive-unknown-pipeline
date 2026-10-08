@@ -15,7 +15,7 @@ def install(p):
         if not scene_count:
             raise RuntimeError("Cannot repair a script with no scenes.")
 
-        min_scene = max(25, math.floor(min_words / scene_count))
+        min_scene = max(25, math.ceil(min_words / scene_count))
         max_scene = min(120, math.floor(max_words / scene_count))
         target_scene = max(min_scene, min(max_scene, round(target_words / scene_count)))
         repaired = json.loads(json.dumps(script, ensure_ascii=False))
@@ -24,10 +24,12 @@ def install(p):
         current_words = p._script_word_count(repaired)
         print(f"[SCRIPT] runtime-aware repair: {current_words} -> ~{target_words} words ({min_words}-{max_words} total; {min_scene}-{max_scene}/scene)")
 
-        batch_size = 6
+        # Small batches are intentional: Groq's TPM limit can reject large repair requests.
+        batch_size = 3
         for start in range(0, scene_count, batch_size):
             end = min(scene_count, start + batch_size)
             batch = repaired["scenes"][start:end]
+            updated = False
             prompt = f"""
 Repair these Relic Loop narration scenes for a SHORT, precise 5-7 minute explainer.
 The FULL script must be {min_words}-{max_words} words, preferably about {target_words}.
@@ -41,10 +43,15 @@ STORY PLAN: {json.dumps(plan, ensure_ascii=False)}
 RESEARCH: {research}
 SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"],"setting":s["setting"],"characters":s["characters"],"action":s["action"],"props":s["props"],"mood":s["mood"]} for s in batch], ensure_ascii=False)}
 """.strip()
-            updated = False
             for attempt in range(1, 4):
                 try:
-                    result = p.groq_json(p.GROQ_WRITER_MODEL, [{"role":"user","content":prompt}], max_completion_tokens=2200, temperature=0.42, attempts=3)
+                    result = p.groq_json(
+                        p.GROQ_LIGHT_MODEL,
+                        [{"role":"user","content":prompt}],
+                        max_completion_tokens=1200,
+                        temperature=0.35,
+                        attempts=2,
+                    )
                     narrations = result.get("narrations")
                     if not isinstance(narrations, list) or len(narrations) != len(batch):
                         raise RuntimeError(f"expected {len(batch)} narrations")
@@ -60,14 +67,14 @@ SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"],"setting":s["setti
                 except Exception as exc:
                     print(f"[SCRIPT] runtime repair batch {start+1}-{end}, attempt {attempt}/3 failed: {exc}")
                     if attempt < 3:
-                        time.sleep(min(6.0, 1.5 * attempt))
+                        time.sleep(min(8.0, 2.0 * attempt))
             if not updated:
                 for scene in batch:
                     text = str(scene.get("narration", "")).strip()
                     if p.count_words(text) > max_scene:
                         text = p._fit_narration_to_limit(text, max_scene)
                         scene["narration"] = text
-                    if not min_scene <= p.count_words(text) <= max_scene:
+                    if p.count_words(text) < min_scene:
                         raise RuntimeError(f"Could not repair scene {scene['id']} into runtime range")
                 print(f"[SCRIPT] salvaged runtime repair batch {start+1}-{end}")
             p.atomic_write_json(p.SCRIPT_PATH, repaired)
@@ -76,40 +83,48 @@ SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"],"setting":s["setti
 
         final_words = p._script_word_count(repaired)
         if final_words < min_words:
-            prompt = f"""
-Lightly expand these narrations so the FULL Relic Loop script reaches {min_words}-{max_words} words.
-Add only useful factual explanation, mechanism, consequence, evidence, examples, or transitions.
-No filler, repetition, scenery, fake dialogue, or unsupported claims. Keep every scene at or below {max_scene} words.
+            topup_per_scene = max(1, math.ceil((min_words - final_words) / scene_count) + 2)
+            for start in range(0, scene_count, batch_size):
+                if final_words >= min_words:
+                    break
+                end = min(scene_count, start + batch_size)
+                batch = repaired["scenes"][start:end]
+                prompt = f"""
+Lightly expand these Relic Loop narrations by about {topup_per_scene} useful words each.
+Preserve facts and wording. Add only mechanism, consequence, evidence, example, or transition.
+No filler, repetition, scenery, fake dialogue, or unsupported claims. Never exceed {max_scene} words per scene.
 Return JSON only: {{"narrations": ["one updated narration per scene, in order"]}}
 RESEARCH: {research}
-SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"]} for s in repaired["scenes"]], ensure_ascii=False)}
+SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"]} for s in batch], ensure_ascii=False)}
 """.strip()
-            result = p.groq_json(p.GROQ_WRITER_MODEL, [{"role":"user","content":prompt}], max_completion_tokens=3200, temperature=0.30, attempts=3)
-            narrations = result.get("narrations")
-            if not isinstance(narrations, list) or len(narrations) != scene_count:
-                raise RuntimeError("Runtime top-up returned the wrong number of narrations")
-            for scene, narration in zip(repaired["scenes"], narrations):
-                text = p.normalize_spaces(str(narration))
-                if p.count_words(text) > max_scene:
-                    text = p._fit_narration_to_limit(text, max_scene)
-                if p.count_words(text) < 25:
-                    raise RuntimeError(f"Runtime top-up made scene {scene['id']} too short")
-                scene["narration"] = text
-            final_words = p._script_word_count(repaired)
+                try:
+                    result = p.groq_json(p.GROQ_LIGHT_MODEL, [{"role":"user","content":prompt}], max_completion_tokens=700, temperature=0.25, attempts=2)
+                    narrations = result.get("narrations")
+                    if isinstance(narrations, list) and len(narrations) == len(batch):
+                        for scene, narration in zip(batch, narrations):
+                            text = p.normalize_spaces(str(narration))
+                            if p.count_words(text) >= min_scene:
+                                scene["narration"] = p._fit_narration_to_limit(text, max_scene)
+                except Exception as exc:
+                    print(f"[SCRIPT] small top-up batch {start+1}-{end} skipped: {exc}")
+                final_words = p._script_word_count(repaired)
+                p.atomic_write_json(p.SCRIPT_PATH, repaired)
+                p._save_current_json(p.CURRENT_SCRIPT_PATH, repaired)
 
+        final_words = p._script_word_count(repaired)
         while final_words > max_words:
-            candidates = [s for s in repaired["scenes"] if p.count_words(str(s.get("narration", ""))) > 25]
+            candidates = [s for s in repaired["scenes"] if p.count_words(str(s.get("narration", ""))) > min_scene]
             if not candidates:
                 break
             scene = max(candidates, key=lambda s:p.count_words(str(s.get("narration", ""))))
             old = p.count_words(str(scene["narration"]))
-            new_limit = max(25, old - max(8, min(20, final_words-max_words)))
-            scene["narration"] = p._fit_narration_to_limit(str(scene["narration"]), new_limit)
+            scene["narration"] = p._fit_narration_to_limit(str(scene["narration"]), max_scene)
             new = p.count_words(str(scene["narration"]))
             if new >= old:
                 break
             final_words = p._script_word_count(repaired)
 
+        final_words = p._script_word_count(repaired)
         if not min_words <= final_words <= max_words:
             raise RuntimeError(f"Runtime script repair finished at {final_words}; expected {min_words}-{max_words}")
         p.atomic_write_json(p.SCRIPT_PATH, repaired)
