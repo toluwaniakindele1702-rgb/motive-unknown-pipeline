@@ -1,0 +1,23 @@
+{
+  "character_id": "rl_v1",
+  "name": "RL",
+  "status": "canonical",
+  "description": "Original Relic Loop recurring protagonist: a young adult Black male with short dark hair, a friendly curious face, blue hoodie/jacket over a cream shirt, dark trousers, simple sneakers, and a small backpack. Clean modern educational illustration with simple geometric forms, expressive facial features, readable poses, consistent proportions, and uncluttered backgrounds.",
+  "visual_rules": [
+    "Keep RL's face, hair, clothing, body proportions, and color palette consistent.",
+    "Use large readable expressions and clear silhouettes.",
+    "Prefer simple uncluttered environments that make the narrated mechanism obvious.",
+    "Use a polished 2D/3D hybrid educational illustration look; do not imitate a named artist or existing character.",
+    "RL is a young adult, never a child.",
+    "No baked-in subtitles, captions, labels, or dialogue text in scene artwork."
+  ],
+  "palette": {
+    "primary": "blue",
+    "shirt": "cream",
+    "trousers": "dark charcoal",
+    "skin": "dark brown",
+    "accent": "warm peach"
+  },
+  "generation_prompt": "Original Relic Loop recurring protagonist RL. Young adult Black male, short dark hair, friendly curious expressive face, blue hoodie or light jacket over a cream shirt, dark trousers, simple sneakers, small backpack. Clean modern educational explainer illustration, simple geometric forms, polished 2D/3D hybrid, readable face and hands, strong silhouette, deliberate limited palette, uncluttered background, consistent proportions. Original character design, not based on any existing character or artist. No text, subtitles, captions, logos, or watermarks in the scene.",
+  "reference_strategy": "If a canonical image exists at assets/characters/rl/rl_master.png or RL_REFERENCE_IMAGE, pass it as a reference. Otherwise the V2 prototype generates a fresh canonical RL reference once and reuses that image for every subsequent scene generation."
+}
