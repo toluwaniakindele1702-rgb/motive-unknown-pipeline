@@ -1,79 +1,79 @@
 {
   "central_question": "Why does your phone sometimes feel like it vibrated when it didn’t?",
-  "hook": "You’re scrolling, the room is quiet, and suddenly you feel that familiar jolt in your pocket—only to find your phone is still dead. What’s making your brain think it’s buzzing?",
-  "aha_moment": "Your brain’s predictive system fills in the missing vibration, turning ordinary touch or noise into a phantom phone buzz.",
+  "hook": "You’re in the middle of a meeting, your phone buzzes in your pocket, you reach for it—only to find it’s still silent. The sensation of a phantom buzz haunts many of us. What’s really happening inside your brain?",
+  "aha_moment": "Your brain has lowered its threshold for detecting a buzz because it’s wired to avoid missing important calls. Any tiny mechanical cue—like a muscle twitch or a jacket shift—gets misread as a phone vibration.",
   "story_arc": [
     {
       "section": 1,
-      "purpose": "Set the everyday mystery",
-      "reveal": "A quiet moment, a sudden jolt in the pocket, no notification visible.",
+      "purpose": "Cold open: immediate mystery",
+      "reveal": "The phone buzz you feel isn’t real.",
       "required_facts": [
-        "Phone vibration feels like a jolt",
-        "No notification appears"
+        "phantom vibration syndrome"
       ]
     },
     {
       "section": 2,
-      "purpose": "Introduce the syndrome and its prevalence",
-      "reveal": "Phantom vibration syndrome (PVS) is common—83 % of people report it in a 249‑person study.",
+      "purpose": "Opening promise: why it matters",
+      "reveal": "Your brain is tuned to avoid missing calls, so it misinterprets ordinary sensations as buzzes.",
       "required_facts": [
-        "PVS term",
-        "Prevalence data"
+        "signal‑detection framework",
+        "low decision threshold"
       ]
     },
     {
       "section": 3,
-      "purpose": "Show contextual triggers",
-      "reveal": "PVS spikes when you’re waiting for a call or in a noisy room.",
+      "purpose": "Context: everyday life",
+      "reveal": "30‑90% of users experience phantom buzzes, often when they’re on the go.",
       "required_facts": [
-        "Waiting for a call",
-        "Noisy environment"
+        "prevalence data"
       ]
     },
     {
       "section": 4,
-      "purpose": "Explain attachment and expectation",
-      "reveal": "Frequent phone use trains the brain to expect a buzz, especially when the phone is always on.",
+      "purpose": "First reveal: sensory bias",
+      "reveal": "The brain’s expectation lowers the decision threshold in the somatosensory system.",
       "required_facts": [
-        "High‑frequency use",
-        "Always‑on culture"
+        "Pacinian corpuscles",
+        "primary somatosensory cortex"
       ]
     },
     {
       "section": 5,
-      "purpose": "Mechanism: predictive coding",
-      "reveal": "The brain’s predictive coding system expects vibration and, when nothing arrives, fills in the sensation.",
+      "purpose": "Second reveal: mechanism in action",
+      "reveal": "A tiny muscle twitch or jacket shift activates Pacinian corpuscles, and the brain, primed for a buzz, labels it as a vibration.",
       "required_facts": [
-        "Predictive coding",
-        "Somatosensory cortex interpretation"
+        "mechanical cue examples",
+        "Pacinian high‑frequency response"
       ]
     },
     {
       "section": 6,
-      "purpose": "Attention capture and misattribution",
-      "reveal": "A tap on the table or a breeze can be misread as a phone buzz because the brain is primed to look for it.",
+      "purpose": "Midpoint reversal: expectation vs reality",
+      "reveal": "Even when vibration is turned off, the illusion persists because the brain’s bias isn’t about the phone’s settings but about the social cost of missing a call.",
       "required_facts": [
-        "Attention capture",
-        "Unrelated tactile cues"
+        "turning off vibration doesn’t help",
+        "social cost of missing calls"
       ]
     },
     {
       "section": 7,
-      "purpose": "Midpoint reversal – it’s not a hallucination or hack",
-      "reveal": "PVS is a normal perceptual bias, not a medical problem or phone malfunction.",
+      "purpose": "Deepening reveal: neural timing",
+      "reveal": "Pre‑stimulus beta‑band activity in S1 sharpens the brain’s representation of an expected buzz, making any noise feel like a notification.",
       "required_facts": [
-        "Debunk myths",
-        "Normal bias"
+        "beta‑band activity",
+        "top‑down prediction"
       ]
     },
     {
       "section": 8,
-      "purpose": "Conclude with practical takeaway",
-      "reveal": "Recognizing PVS lets you ignore the phantom buzz and stay present.",
+      "purpose": "Final reveal: everyday triggers",
+      "reveal": "Clothing movement, ambient vibrations, even a ringtone‑like sound can trigger the phantom buzz, because the brain is primed to read any vibration as a phone alert.",
       "required_facts": [
-        "Practical takeaway"
+        "clothing movement",
+        "ambient vibrations",
+        "auditory cues"
       ]
     }
   ],
-  "ending_payoff": "Next time you feel that phantom jolt, remember it’s your brain’s way of keeping you glued to your phone—no hack, no illness, just a clever shortcut that makes the ordinary feel oddly urgent."
+  "ending_payoff": "Next time you feel your phone buzz, remember: it’s your brain’s alarm system, not the phone, that’s ringing. The ordinary feel of a pocket shift suddenly becomes a high‑stakes notification, and that’s why the illusion feels so convincing."
 }

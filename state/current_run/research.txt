@@ -1,1 +1,49 @@
-{"1. CORE ANSWER":"The sensation of a phone vibrating when it hasn’t is a perceptual illusion known as phantom vibration syndrome (PVS). It arises when the brain’s predictive coding system, primed by frequent phone use and heightened attention to notifications, interprets normal tactile or unrelated stimuli as a vibration. PVS is common, benign, and linked to contextual factors (e.g., waiting for a call, noisy environments) and usage patterns (e.g., high frequency, always‑on habits).","2. STORY BEATS":[{"1":"Introduce the everyday mystery: feeling a phone vibrate when nothing happens."},{"2":"Present the term “phantom vibration syndrome” and its prevalence (83 % of a 249‑person sample reported it)."},{"3":"Show how PVS spikes when people are waiting for a call or in noisy settings."},{"4":"Explain the role of phone attachment and the need for popularity in increasing reports."},{"5":"Describe the predictive coding mechanism: the brain expects a vibration and fills in the absence."},{"6":"Illustrate how attention capture makes unrelated tactile cues (e.g., a tap) misattributed as phone vibrations."},{"7":"Compare PVS to other sensory hallucinations, noting its brief, context‑dependent nature."},{"8":"Debunk common myths: hacking, malfunction, mental illness."},{"9":"Highlight gaps: lack of neuro‑physiological data and untested interventions."},{"10":"Conclude with the practical takeaway: PVS is a normal perceptual bias, not a medical problem."}],"3. MECHANISM / CAUSE AND EFFECT":"Cause: frequent phone use, always‑on notification culture, and contextual cues (waiting for a call, noisy environment) create strong predictions in the brain. Effect: the somatosensory cortex interprets the absence of a physical vibration as a tactile sensation, leading to the illusion of a phone vibration. This misperception is brief, context‑dependent, and usually not distressing.","4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES":["Sauer et al. (2015) – study on determinants of phantom phone sensations.","Rothberg et al. (2010) – survey of medical staff reporting PVS.","Drouin et al. (2012) – exploration of phantom phone signals.","Phone – the object whose vibration is perceived.","Pocket/hand – locations where vibrations would normally be felt.","Waiting for a call – a common contextual trigger.","Noisy environment – another trigger.","High‑frequency phone users – demographic group with higher PVS incidence."],"5. MISCONCEPTIONS OR CONTRADICTIONS":["People think PVS indicates hacking or phone malfunction.","Others believe it signals mental illness.","Both are false; PVS is a normal perceptual bias linked to phone‑use habits."],"6. DISPUTES OR UNCERTAINTY":["Exact neuro‑physiological signature (e.g., EEG patterns) of PVS is unknown.","Effectiveness of interventions such as limiting notifications has not been tested in controlled trials."],"7. VERIFIED SOURCES":["Sauer, V. J., et al. *The phantom in my pocket: Determinants of phantom phone sensations.* Mobile Media & Communication, 2015.","Rothberg, M. B., et al. *Phantom vibration syndrome among medical staff.* BMJ, 2010.","Drouin, M., et al. *Phantom phone signals and other hallucinatory‑like experiences.* Computers in Human Behavior, 2012."]}
+```json
+{
+  "1. CORE ANSWER": "The sensation that a phone vibrates when it hasn’t is called phantom vibration syndrome. It arises because the brain, tuned to avoid missing important calls, lowers its decision threshold for detecting a vibration. When any small mechanical cue—such as a muscle twitch, clothing shift, or ambient vibration—occurs near the phone while the brain expects a buzz, the somatosensory system (primarily Pacinian corpuscles) interprets it as a real vibration. This is a normal perceptual bias, not a pathology.",
+  "2. STORY BEATS (10-16 numbered beats)": [
+    "1. Define phantom vibration syndrome and its prevalence (30‑90% of users).",
+    "2. Explain the signal‑detection framework: two states (vibration present/absent) and two judgments (report vibration/none).",
+    "3. Describe false alarms as the core of the phenomenon.",
+    "4. Discuss sensitivity: stronger vibrations or sensitive skin reduce misses but increase false alarms.",
+    "5. Discuss bias: social cost of missing a call leads to a low decision criterion.",
+    "6. Introduce tactile expectation and top‑down prediction to primary somatosensory cortex.",
+    "7. Highlight Pacinian corpuscles as high‑frequency vibration receptors.",
+    "8. Show how pre‑stimulus beta‑band activity reflects expectation and sharpens neural representation.",
+    "9. List everyday sources that can trigger the illusion (clothing movement, muscle twitches, ambient vibrations, auditory cues).",
+    "10. Mention personality moderators (attachment anxiety, novelty‑seeking, smartphone dependence).",
+    "11. Clarify common misconceptions (not mental illness, not nerve damage, vibration off doesn’t eliminate it).",
+    "12. Outline remaining uncertainties (neural locus of bias, individual differences, long‑term adaptation, cross‑modal interactions).",
+    "13. Suggest visual aids: ROC curve, Pacinian anatomy, beta‑band map, everyday source montage, bias shift illustration."
+  ],
+  "3. MECHANISM / CAUSE AND EFFECT": {
+    "Cause": "Expectation of a phone buzz lowers the decision threshold in the somatosensory system, making it highly sensitive to any small mechanical cue.",
+    "Effect": "Non‑phone vibrations are misinterpreted as phone buzzes, producing phantom vibration sensations."
+  },
+  "4. IMPORTANT PEOPLE / PLACES / OBJECTS / EXAMPLES": [
+    "Pacinian corpuscles – high‑frequency vibration receptors.",
+    "Primary somatosensory cortex (S1) – site of expectation‑driven activity.",
+    "Clothing movement (belt, waistband, bag lining).",
+    "Muscle twitches (thigh, abdomen).",
+    "Ambient vibrations (train, speaker, door).",
+    "Auditory cues resembling ringtones."
+  ],
+  "5. MISCONCEPTIONS OR CONTRADICTIONS": [
+    "Phantom vibrations are not a sign of mental illness.",
+    "They are not caused by nerve damage.",
+    "Turning off vibration does not eliminate the phenomenon."
+  ],
+  "6. DISPUTES OR UNCERTAINTY": [
+    "Exact neural circuits that set the decision criterion.",
+    "Role of individual genetic or developmental differences in Pacinian density.",
+    "Long‑term adaptation of somatosensory cortex to chronic phantom vibrations.",
+    "Interaction between auditory, visual, and tactile expectations."
+  ],
+  "7. VERIFIED SOURCES": [
+    "Source 1: Article on phantom vibration syndrome (lines 4‑10, 18‑22, 58‑60, 84‑87).",
+    "Source 3: Signal detection theory explanation (lines 33‑49, 60‑83, 84‑87).",
+    "Source 4: Tactile expectation and beta‑band activity (lines 13‑16).",
+    "Source 5: Pacinian corpuscle details and ambient vibration effects (lines 15‑19, 26‑28, 45‑53, 40‑48)."
+  ]
+}
+```
