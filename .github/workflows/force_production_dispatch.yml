@@ -1,0 +1,22 @@
+name: Relic Loop Production Trigger
+
+on:
+  push:
+    paths:
+      - '.github/force_production_run'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch full Relic Loop production workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run daily_video.yml --ref main -f mode=full
+          echo "Dispatched Relic Loop Daily Video in full production mode."
