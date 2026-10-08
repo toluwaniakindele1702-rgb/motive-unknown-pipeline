@@ -2,10 +2,10 @@
 
 Test target: "Why do you forget why you walked into a room?"
 - ~2 minutes
-- 60% still-image storytelling / 40% Veo animation
+- 60% still-image storytelling / 40% Gemini Omni animation requests
 - recurring RL character generated once, then reused as an image reference
 - automated camera movement on stills
-- Veo failures immediately fall back to the still image
+- Gemini animation failures immediately fall back to the still image
 - no subtitles or baked-in scene text
 - does not upload to YouTube and does not touch the production queue
 """
@@ -60,7 +60,6 @@ def run(cmd: list[str]) -> None:
 
 
 def make_tts(text: str, path: Path) -> float:
-    """Use local Kokoro; fail loudly only if neither Kokoro nor espeak is available."""
     voice = os.environ.get("KOKORO_VOICE", "am_michael")
     speed = float(os.environ.get("KOKORO_SPEED", "1.05"))
     try:
@@ -82,7 +81,6 @@ def make_tts(text: str, path: Path) -> float:
 
 
 def still_clip(image: Path, audio_duration: float, out: Path, index: int) -> None:
-    # Alternating push/pull gives still scenes visible movement without inventing new content.
     zoom = "zoompan=z='min(zoom+0.0007,1.08)':d=1:s=1280x720:fps=30" if index % 2 else "zoompan=z='if(lte(zoom,1.001),1.08,max(1.0,zoom-0.0007))':d=1:s=1280x720:fps=30"
     run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-loop", "1", "-i", str(image),
          "-t", f"{audio_duration:.3f}", "-vf", zoom + ",format=yuv420p", "-r", "30",
@@ -164,9 +162,11 @@ def main() -> None:
         "test_only": True,
         "scene_count": len(SCENES),
         "word_count": total_words,
-        "requested_animation_ratio": round(sum(k == 'video' for k, _, _ in SCENES) / len(SCENES), 3),
+        "requested_animation_ratio": round(sum(k == "video" for k, _, _ in SCENES) / len(SCENES), 3),
         "successful_animation_ratio": round(animation_ok / len(SCENES), 3),
         "animation_circuit_breaker": "scene-level fallback to still image",
+        "animation_provider": "gemini-omni-1.1-flash",
+        "still_provider": "cloudflare-flux-2-klein-4b",
         "youtube_upload": False,
         "scenes": results,
         "output": str(final),
