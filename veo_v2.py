@@ -1,72 +1,127 @@
-"""Relic Loop V2 media primitives: Nano Banana 2 image generation + Veo 3.1 animation.
+"""Relic Loop V2 media layer.
 
-This module is deliberately isolated from the production pipeline. It is used by the
-2-minute V2 prototype first, then can be imported by the production scene planner.
+Architecture:
+- Cloudflare FLUX.2 Klein 4B is the automated still-image generator.
+- A small RL reference pack is supplied to Cloudflare for character consistency.
+- Gemini Omni Flash is used only for selected image-to-video/reference-to-video scenes.
+- Any video failure immediately falls back to the Cloudflare still, so animation can
+  never break the video build.
+
+Flow remains the visual benchmark/manual creative tool; this module does not attempt
+browser automation of the Flow UI.
 """
 from __future__ import annotations
 
+import base64
+import io
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
-from PIL import Image
+import requests
+from PIL import Image, ImageOps
 
 try:
     from google import genai
-    from google.genai import types
 except Exception as exc:  # pragma: no cover
     genai = None
-    types = None
     _IMPORT_ERROR = exc
 else:
     _IMPORT_ERROR = None
 
-# Use the current Gemini 3.1 Flash Image preview model for the generateContent
-# image-to-video workflow documented by Google. The environment variable remains
-# supported so the test/prod workflow can override it without editing code.
-GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
-GEMINI_VIDEO_MODEL = os.environ.get("GEMINI_VIDEO_MODEL", "veo-3.1-generate-preview")
+CLOUDFLARE_IMAGE_MODEL = os.environ.get(
+    "CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b"
+)
+GEMINI_VIDEO_MODEL = os.environ.get("GEMINI_VIDEO_MODEL", "gemini-omni-1.1-flash")
+CLOUDFLARE_TIMEOUT = int(os.environ.get("CLOUDFLARE_IMAGE_TIMEOUT", "180"))
 
 
-def client():
+def _gemini_client():
     if genai is None:
         raise RuntimeError(f"google-genai is unavailable: {_IMPORT_ERROR}")
-    if not os.environ.get("GEMINI_API_KEY", "").strip():
-        raise RuntimeError("GEMINI_API_KEY is missing; V2 cannot generate media.")
-    return genai.Client(api_key=os.environ["GEMINI_API_KEY"].strip())
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY is missing; video generation cannot run.")
+    return genai.Client(api_key=key)
 
 
-def generate_image(prompt: str, output_path: Path, reference_path: Optional[Path] = None) -> Path:
-    """Generate a 16:9 scene image, optionally using a canonical RL reference."""
-    c = client()
-    contents = [prompt]
-    if reference_path and reference_path.exists():
-        contents.append(Image.open(reference_path).convert("RGB"))
-        contents.append(
-            "Use the supplied image as the canonical RL character reference. "
-            "Preserve RL's face, hair, clothing, proportions and palette; change only "
-            "pose, action, camera and environment requested by the scene prompt."
-        )
+def _cloudflare_credentials() -> tuple[str, str]:
+    account = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+    if not account or not token:
+        raise RuntimeError("CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN are missing.")
+    return account, token
 
-    # The previous implementation passed response_format into
-    # GenerateContentConfig. The installed google-genai SDK used by Actions rejects
-    # that field, so use the SDK's ImageConfig for aspect ratio instead. Google also
-    # documents this generateContent image workflow with response_modalities=['IMAGE'].
-    response = c.models.generate_content(
-        model=GEMINI_IMAGE_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
-            image_config=types.ImageConfig(aspect_ratio="16:9"),
-        ),
+
+def _reference_file(path: Path, size: int = 480) -> io.BytesIO:
+    """Prepare a Cloudflare-compatible reference (<512x512) without distorting RL."""
+    image = Image.open(path).convert("RGB")
+    canvas = Image.new("RGB", (size, size), "white")
+    contained = ImageOps.contain(image, (size - 20, size - 20), method=Image.Resampling.LANCZOS)
+    canvas.paste(contained, ((size - contained.width) // 2, (size - contained.height) // 2))
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+def _cloudflare_references(reference_paths: Iterable[Path]) -> dict[str, tuple[str, bytes, str]]:
+    refs: dict[str, tuple[str, bytes, str]] = {}
+    for index, path in enumerate(reference_paths):
+        if path and path.exists():
+            buf = _reference_file(path)
+            refs[f"input_image_{index}"] = (f"rl_ref_{index}.png", buf.read(), "image/png")
+    return refs
+
+
+def _cloudflare_image(prompt: str, output_path: Path, references: list[Path]) -> Path:
+    account, token = _cloudflare_credentials()
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{CLOUDFLARE_IMAGE_MODEL}"
+    data = {"prompt": prompt, "width": "1024", "height": "576"}
+    files = _cloudflare_references(references)
+
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+        data=data,
+        files=files,
+        timeout=CLOUDFLARE_TIMEOUT,
     )
-    for part in response.parts:
-        if getattr(part, "as_image", None):
-            image = part.as_image()
-            image.save(output_path)
-            return output_path
-    raise RuntimeError("Gemini image generation returned no image part.")
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("success", True):
+        raise RuntimeError(f"Cloudflare image generation failed: {payload}")
+
+    result = payload.get("result") or {}
+    encoded = result.get("image") if isinstance(result, dict) else None
+    if not encoded:
+        raise RuntimeError(f"Cloudflare returned no image data: {payload}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(base64.b64decode(encoded))
+    if output_path.stat().st_size < 10000:
+        raise RuntimeError("Cloudflare returned an invalid or empty image file.")
+    return output_path
+
+
+def generate_image(
+    prompt: str,
+    output_path: Path,
+    reference_path: Optional[Path] = None,
+    reference_paths: Optional[list[Path]] = None,
+) -> Path:
+    """Generate a 16:9 still with Cloudflare FLUX.2 and optional RL references."""
+    refs = list(reference_paths or [])
+    if reference_path and reference_path.exists() and reference_path not in refs:
+        refs.insert(0, reference_path)
+    # FLUX.2 Klein supports up to four image inputs. Keep the pack small and
+    # deterministic for unattended runs.
+    refs = [p for p in refs if p.exists()][:4]
+    return _cloudflare_image(prompt, output_path, refs)
+
+
+def _image_b64(path: Path) -> str:
+    return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def generate_video_from_image(
@@ -74,47 +129,89 @@ def generate_video_from_image(
     prompt: str,
     output_path: Path,
     reference_path: Optional[Path] = None,
+    reference_paths: Optional[list[Path]] = None,
     timeout_seconds: int = 900,
 ) -> Path:
-    """Animate a finished scene image with Veo 3.1.
+    """Generate an animated scene with Gemini Omni Flash.
 
-    The scene image is the starting frame, so even when reference-image support is
-    unavailable the generated motion is anchored to the exact still used in the edit.
-    The optional RL reference is reserved for future reference-image API use.
+    The Cloudflare scene image is always supplied. When an RL reference is available,
+    it is supplied as an additional reference image so the video model has both the
+    exact scene composition and the canonical character appearance.
     """
-    del reference_path  # image-to-video is the reliable common denominator.
-    c = client()
-    base_image = Image.open(image_path).convert("RGB")
-    operation = c.models.generate_videos(
-        model=GEMINI_VIDEO_MODEL,
-        prompt=prompt,
-        image=base_image,
-        config=types.GenerateVideosConfig(
-            aspect_ratio="16:9",
-            resolution="720p",
-            person_generation="allow_adult",
-        ),
+    client = _gemini_client()
+    refs = list(reference_paths or [])
+    if reference_path and reference_path.exists() and reference_path not in refs:
+        refs.insert(0, reference_path)
+    refs = [p for p in refs if p.exists()][:3]
+
+    inputs = [
+        {"type": "image", "data": _image_b64(image_path), "mime_type": "image/png"},
+    ]
+    for ref in refs:
+        inputs.append({"type": "image", "data": _image_b64(ref), "mime_type": "image/png"})
+    inputs.append(
+        {
+            "type": "text",
+            "text": (
+                "Animate the supplied Relic Loop scene. The first image is the exact scene to animate. "
+                "Any additional image is a canonical RL character reference. Preserve RL's identity, "
+                "face, hair, clothing, proportions and color palette. Do not redesign the character. "
+                "Keep the motion subtle, physically plausible and useful for an educational explainer. "
+                "No subtitles, captions, logos, or new text.\n\n" + prompt
+            ),
+        }
     )
+
+    interaction = client.interactions.create(
+        model=GEMINI_VIDEO_MODEL,
+        input=inputs,
+        generation_config={"video_config": {"task": "reference_to_video"}},
+        response_format={"type": "video", "aspect_ratio": "16:9", "resolution": "720p"},
+    )
+
     started = time.time()
-    while not operation.done:
+    while getattr(interaction, "status", "completed") in {"in_progress", "queued"}:
         if time.time() - started > timeout_seconds:
-            raise TimeoutError(f"Veo generation timed out after {timeout_seconds}s")
-        time.sleep(10)
-        operation = c.operations.get(operation)
-    generated = operation.response.generated_videos[0]
-    c.files.download(file=generated.video)
-    generated.video.save(output_path)
+            raise TimeoutError(f"Video generation timed out after {timeout_seconds}s")
+        time.sleep(5)
+        interaction = client.interactions.get(interaction.id)
+
+    if getattr(interaction, "status", None) not in (None, "completed"):
+        raise RuntimeError(f"Video interaction ended with status={interaction.status}")
+
+    output_video = getattr(interaction, "output_video", None)
+    data = getattr(output_video, "data", None) if output_video else None
+    if not data:
+        raise RuntimeError("Video model returned no output_video data.")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(base64.b64decode(data))
     if not output_path.exists() or output_path.stat().st_size < 10000:
-        raise RuntimeError("Veo returned an invalid or empty video file.")
+        raise RuntimeError("Video model returned an invalid or empty video file.")
     return output_path
 
 
-def animate_or_fallback(image_path: Path, prompt: str, video_path: Path, reference_path: Optional[Path] = None) -> bool:
-    """Return True on animation success; never block the scene on a Veo failure."""
+def animate_or_fallback(
+    image_path: Path,
+    prompt: str,
+    video_path: Path,
+    reference_path: Optional[Path] = None,
+    reference_paths: Optional[list[Path]] = None,
+) -> bool:
+    """Return True on animation success; never block the scene on a video failure."""
     try:
-        generate_video_from_image(image_path, prompt, video_path, reference_path=reference_path)
-        print(f"[V2 MOTION] animated: {video_path.name}")
+        generate_video_from_image(
+            image_path,
+            prompt,
+            video_path,
+            reference_path=reference_path,
+            reference_paths=reference_paths,
+        )
+        print(f"[V2 MOTION] animated with {GEMINI_VIDEO_MODEL}: {video_path.name}")
         return True
     except Exception as exc:
-        print(f"[V2 MOTION] animation failed; using image fallback for {image_path.name}: {exc}")
+        print(
+            f"[V2 MOTION] animation failed; using image fallback for "
+            f"{image_path.name}: {exc}"
+        )
         return False
