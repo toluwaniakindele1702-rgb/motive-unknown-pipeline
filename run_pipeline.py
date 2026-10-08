@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import pipeline as p
+import runtime_script_repair
 
 
 # Permanent Relic Loop production policy.
@@ -11,6 +12,9 @@ p.SCRIPT_MIN_WORDS = 750
 p.SCRIPT_MAX_WORDS = 1150
 # More frequent meaningful visual changes: allow up to 150 visual beats per episode.
 p.MAX_VISUAL_BEATS_PER_VIDEO = 150
+# The original pipeline repair routine targeted ~2,050 words. Replace it with
+# the runtime-aware 750–1,150-word repair before every production run.
+runtime_script_repair.install(p)
 
 
 # Harden every generated still prompt around the canonical RL character/style.
