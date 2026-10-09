@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import pipeline as p
 import runtime_script_repair
+import gemini_hardening
 import production_hardening
 
 
