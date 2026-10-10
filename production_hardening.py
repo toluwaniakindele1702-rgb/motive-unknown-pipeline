@@ -3,6 +3,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 import pipeline as p
+import no_text_hardening
+
+# Install the absolute zero-text image policy before any production image generation.
+# This wraps both the final visual-prompt builder and every image-provider boundary.
+no_text_hardening.install(p)
 
 _original_research_topic = p.research_topic
 
@@ -69,4 +74,4 @@ def _protect_transient_state() -> None:
         print(f"[STATE HARDENING] Could not protect transient state: {exc}")
 
 _protect_transient_state()
-print("[PRODUCTION HARDENING] Research fallback + state-race protection installed.")
+print("[PRODUCTION HARDENING] Research fallback + state-race protection + absolute zero-text image policy installed.")
