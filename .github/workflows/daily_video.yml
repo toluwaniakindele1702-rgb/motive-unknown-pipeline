@@ -148,9 +148,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng tesseract-ocr
           ffmpeg -version | head -n 1
           espeak-ng --version
+          tesseract --version | head -n 1
 
       - name: Install CPU-only PyTorch and torchvision
         shell: bash
@@ -183,15 +184,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile pipeline.py production_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py
+          python -m py_compile pipeline.py production_hardening.py no_text_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py
           python - <<'PY'
           import os
+          import shutil
           import torch
           import requests
           import soundfile
+          import pytesseract
           from PIL import Image
           import groq
           from pipeline import package_quality_issues
+          assert shutil.which("tesseract"), "Tesseract OCR binary is missing"
+          print("Tesseract OCR: OK", pytesseract.get_tesseract_version())
           _issues = package_quality_issues(
               {"question": "Why does this work?", "topic": "preflight", "category": "general"},
               {"scenes": [{"narration": "A valid scene with enough words for the smoke test."}]},
