@@ -6,6 +6,7 @@ import pipeline as p
 import runtime_script_repair
 import gemini_hardening
 import production_hardening
+import flow_agent_hardening
 
 
 # Permanent Relic Loop production policy.
@@ -17,6 +18,11 @@ p.MAX_VISUAL_BEATS_PER_VIDEO = 150
 # The original pipeline repair routine targeted ~2,050 words. Replace it with
 # the runtime-aware 750–1,150-word repair before every production run.
 runtime_script_repair.install(p)
+
+# Google Flow is an opt-in provider. With FLOW_AGENT_ENABLED=0, the existing
+# production image chain is untouched. When enabled, Flow Agent gets the first
+# image attempt and the existing providers remain a safety fallback.
+flow_agent_hardening.install()
 
 
 # Harden every generated still prompt around the canonical RL character/style.
