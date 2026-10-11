@@ -49,6 +49,14 @@ jobs:
       PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
       PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
       IMAGE_PROVIDERS: 'cloudflare,local,puter,huggingface,replicate'
+      # Google Flow / Flow Agent bridge. The switch is now ON.
+      # Set FLOW_AGENT_URL as a repository secret when the Flow Agent server is
+      # running on a reachable machine; otherwise the client safely falls back
+      # to the existing image providers.
+      FLOW_AGENT_ENABLED: '1'
+      FLOW_AGENT_URL: ${{ secrets.FLOW_AGENT_URL || 'http://127.0.0.1:8001' }}
+      FLOW_AGENT_TIMEOUT: '300'
+      FLOW_AGENT_IMAGE_MODEL: 'narwhal'
       KOKORO_VOICE: am_michael
       KOKORO_SPEED: '1.05'
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Relic Loop' }}
@@ -184,7 +192,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile pipeline.py production_hardening.py no_text_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py
+          python -m py_compile pipeline.py production_hardening.py no_text_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py flow_agent_client.py flow_agent_hardening.py
           python - <<'PY'
           import os
           import shutil
@@ -204,6 +212,8 @@ jobs:
           )
           print("Packaging gate smoke test: OK", _issues)
           print("IMAGE_PROVIDERS:", os.environ.get("IMAGE_PROVIDERS"))
+          print("FLOW_AGENT_ENABLED:", os.environ.get("FLOW_AGENT_ENABLED"))
+          print("FLOW_AGENT_URL:", os.environ.get("FLOW_AGENT_URL"))
           print("torch:", torch.__version__)
           print("cuda available:", torch.cuda.is_available())
           assert not torch.cuda.is_available(), "Expected CPU-only PyTorch on GitHub runner"
