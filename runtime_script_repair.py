@@ -15,14 +15,17 @@ def install(p):
         if not scene_count:
             raise RuntimeError("Cannot repair a script with no scenes.")
 
-        min_scene = max(25, math.ceil(min_words / scene_count))
-        max_scene = min(120, math.floor(max_words / scene_count))
+        # Scene length is a soft guideline, NOT a hard requirement. Some beats
+        # naturally need only a short sentence or two. The hard requirement is
+        # the total script runtime range, not identical narration lengths.
+        min_scene = 15
+        max_scene = max(90, min(120, math.floor(max_words / max(1, scene_count)) + 25))
         target_scene = max(min_scene, min(max_scene, round(target_words / scene_count)))
         repaired = json.loads(json.dumps(script, ensure_ascii=False))
         p.atomic_write_json(p.SCRIPT_PATH, repaired)
         p._save_current_json(p.CURRENT_SCRIPT_PATH, repaired)
         current_words = p._script_word_count(repaired)
-        print(f"[SCRIPT] runtime-aware repair: {current_words} -> ~{target_words} words ({min_words}-{max_words} total; {min_scene}-{max_scene}/scene)")
+        print(f"[SCRIPT] runtime-aware repair: {current_words} -> ~{target_words} words ({min_words}-{max_words} total; soft {min_scene}-{max_scene}/scene)")
 
         # Small batches are intentional: Groq's TPM limit can reject large repair requests.
         batch_size = 3
@@ -33,9 +36,10 @@ def install(p):
             prompt = f"""
 Repair these Relic Loop narration scenes for a SHORT, precise 5-7 minute explainer.
 The FULL script must be {min_words}-{max_words} words, preferably about {target_words}.
-For these {len(batch)} scenes, aim for about {target_scene} words each, between {min_scene} and {max_scene}.
+Aim for about {target_scene} words per scene, but scene length is a SOFT guideline only: valid scenes may be shorter when the beat is naturally brief. Keep each scene between {min_scene} and {max_scene} words when practical.
 If narration is short, add only useful explanation, mechanism, consequence, evidence, example, or transition.
-If narration is long, remove repetition and filler. Do not pad the story. Do not change scene metadata.
+If narration is long, remove repetition and filler. Do not pad the story just to make every scene the same size.
+Do not change scene metadata.
 Do not invent facts, dialogue, motives, events, statistics, or sources. Keep the energetic conversational voice.
 Return JSON only: {{"narrations": ["one repaired narration per scene, in order"]}}
 TOPIC: {json.dumps(topic, ensure_ascii=False)}
@@ -57,8 +61,10 @@ SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"],"setting":s["setti
                         raise RuntimeError(f"expected {len(batch)} narrations")
                     for scene, narration in zip(batch, narrations):
                         text = p.normalize_spaces(str(narration))
+                        # Never reject a useful short beat merely because it is
+                        # below the average scene target.
                         if p.count_words(text) < min_scene:
-                            raise RuntimeError(f"scene {scene['id']} below {min_scene} words")
+                            raise RuntimeError(f"scene {scene['id']} below absolute floor of {min_scene} words")
                         if p.count_words(text) > max_scene:
                             text = p._fit_narration_to_limit(text, max_scene)
                         scene["narration"] = text
@@ -69,21 +75,24 @@ SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"],"setting":s["setti
                     if attempt < 3:
                         time.sleep(min(8.0, 2.0 * attempt))
             if not updated:
+                # Salvage the batch instead of killing an otherwise valid episode.
+                # Short scenes are allowed; only empty/nearly-empty narration fails.
                 for scene in batch:
-                    text = str(scene.get("narration", "")).strip()
+                    text = p.normalize_spaces(str(scene.get("narration", "")))
                     if p.count_words(text) > max_scene:
                         text = p._fit_narration_to_limit(text, max_scene)
-                        scene["narration"] = text
                     if p.count_words(text) < min_scene:
-                        raise RuntimeError(f"Could not repair scene {scene['id']} into runtime range")
+                        raise RuntimeError(f"Could not preserve usable narration for scene {scene['id']}")
+                    scene["narration"] = text
                 print(f"[SCRIPT] salvaged runtime repair batch {start+1}-{end}")
             p.atomic_write_json(p.SCRIPT_PATH, repaired)
             p._save_current_json(p.CURRENT_SCRIPT_PATH, repaired)
             print(f"[SCRIPT] saved runtime repair through scene {end} (~{p._script_word_count(repaired)} words)")
 
         final_words = p._script_word_count(repaired)
-        if final_words < min_words:
+        while final_words < min_words:
             topup_per_scene = max(1, math.ceil((min_words - final_words) / scene_count) + 2)
+            progress = False
             for start in range(0, scene_count, batch_size):
                 if final_words >= min_words:
                     break
@@ -104,12 +113,18 @@ SCENES: {json.dumps([{"id":s["id"],"narration":s["narration"]} for s in batch], 
                         for scene, narration in zip(batch, narrations):
                             text = p.normalize_spaces(str(narration))
                             if p.count_words(text) >= min_scene:
-                                scene["narration"] = p._fit_narration_to_limit(text, max_scene)
+                                new_text = p._fit_narration_to_limit(text, max_scene)
+                                if p.count_words(new_text) > p.count_words(scene.get("narration", "")):
+                                    scene["narration"] = new_text
+                                    progress = True
                 except Exception as exc:
                     print(f"[SCRIPT] small top-up batch {start+1}-{end} skipped: {exc}")
                 final_words = p._script_word_count(repaired)
                 p.atomic_write_json(p.SCRIPT_PATH, repaired)
                 p._save_current_json(p.CURRENT_SCRIPT_PATH, repaired)
+            if not progress:
+                break
+            final_words = p._script_word_count(repaired)
 
         final_words = p._script_word_count(repaired)
         while final_words > max_words:
