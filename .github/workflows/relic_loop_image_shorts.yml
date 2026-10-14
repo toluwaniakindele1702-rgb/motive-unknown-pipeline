@@ -1,0 +1,117 @@
+name: Relic Loop Image Shorts
+run-name: Relic Loop Image Short #${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Optional story seed; leave blank for an original absurd story"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    - cron: '23 2 * * *'
+      timezone: 'Africa/Lagos'
+
+concurrency:
+  group: relic-loop-image-shorts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_WRITER_MODEL: ${{ vars.GROQ_WRITER_MODEL || 'openai/gpt-oss-120b' }}
+      RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-klein-4b'
+      RELIC_LOOP_IMAGE_WIDTH: '576'
+      RELIC_LOOP_IMAGE_HEIGHT: '1024'
+      RELIC_LOOP_IMAGE_RETRIES: '3'
+      RELIC_LOOP_OCR_STRICT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install lightweight dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng tesseract-ocr
+
+      - name: Preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          ffmpeg -version | head -n 1
+          tesseract --version | head -n 1
+          espeak-ng --version
+
+      - name: Generate story and fast-cut storyboard
+        run: |
+          set -o pipefail
+          python relic_loop_shorts.py 2>&1 | tee shorts_flow.log
+
+      - name: Render every visual beat with Cloudflare
+        run: |
+          set -o pipefail
+          python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
+
+      - name: Assemble Short with real camera motion
+        run: |
+          set -o pipefail
+          python assemble_relic_loop_short.py 2>&1 | tee assemble.log
+
+      - name: Write run summary
+        if: always()
+        run: |
+          {
+            echo "## Relic Loop Image Short"
+            echo
+            echo "Approved hand-drawn stickman direction, fast image changes, strict OCR rejection, and subtle push-in/pull-out camera motion."
+            echo
+            if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
+            echo
+            if [ -f state/current_run/cloudflare_image_manifest.json ]; then python - <<'PY'
+          import json
+          p='state/current_run/cloudflare_image_manifest.json'
+          d=json.load(open(p))
+          print('Rendered beats:', len(d.get('beats', [])))
+          print('Model:', d.get('model'))
+          print('Resolution:', d.get('width'), 'x', d.get('height'))
+          PY
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload finished Short and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-image-short-${{ github.run_number }}
+          path: |
+            state/current_run/relic_loop_short.json
+            state/current_run/flow_storyboard_prompt.txt
+            state/current_run/flow_manifest.json
+            state/current_run/cloudflare_image_manifest.json
+            state/current_run/relic_loop_short.mp4
+            state/current_run/voiceover.wav
+            shorts_flow.log
+            cloudflare_images.log
+            assemble.log
+          if-no-files-found: warn
+          retention-days: 14
