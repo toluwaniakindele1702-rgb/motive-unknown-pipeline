@@ -14,9 +14,9 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch full Relic Loop production workflow
+      - name: Dispatch Shorts-first Relic Loop workflow
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run daily_video.yml --repo "${{ github.repository }}" --ref main -f mode=full
-          echo "Dispatched Relic Loop Daily Video in full production mode."
+          gh workflow run daily_video.yml --repo "${{ github.repository }}" --ref main -f mode=shorts_flow
+          echo "Dispatched Relic Loop Daily Video in Shorts-first Flow handoff mode."
