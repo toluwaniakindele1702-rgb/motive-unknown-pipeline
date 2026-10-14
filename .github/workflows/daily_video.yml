@@ -6,16 +6,15 @@ on:
     - cron: '23 2 * * *'
       timezone: 'Africa/Lagos'
   # Production push triggering is handled by force_production_dispatch.yml.
-  # Keeping a push trigger here would create duplicate production runs and can
-  # cancel the real run through concurrency controls.
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Choose a test or production run'
+        description: 'Choose a Shorts or legacy/test run'
         required: true
-        default: full
+        default: shorts_flow
         type: choice
         options:
+          - shorts_flow
           - full
           - v2_test
           - voice_test
@@ -23,14 +22,83 @@ on:
           - local_image_test
 
 concurrency:
-  group: relic-loop-production-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}
+  group: relic-loop-production-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'shorts_flow' }}
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  shorts_flow:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'shorts_flow')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_WRITER_MODEL: ${{ vars.GROQ_WRITER_MODEL || 'openai/gpt-oss-120b' }}
+      RELIC_LOOP_TOPIC: ${{ vars.RELIC_LOOP_TOPIC || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Announce Shorts run
+        shell: bash
+        run: |
+          echo "RELlC LOOP SHORTS FLOW RUN"
+          echo "Run: ${{ github.run_number }} / ${{ github.run_id }}"
+          echo "URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install lightweight Shorts planner dependency
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --retries 5 --timeout 120 --prefer-binary groq
+
+      - name: Generate Relic Loop Short + Flow Storyboard package
+        shell: bash
+        run: |
+          set -o pipefail
+          python relic_loop_shorts.py 2>&1 | tee shorts_flow.log
+
+      - name: Show Flow handoff in run summary
+        shell: bash
+        run: |
+          {
+            echo "## Relic Loop — Flow Storyboard Handoff"
+            echo
+            echo "The pipeline has generated the Short package. Open Google Flow → Storyboard Studio and use the contents below."
+            echo
+            echo '### Flow prompt'
+            echo '```text'
+            cat state/current_run/flow_storyboard_prompt.txt
+            echo '```'
+            echo
+            echo '### Package metadata'
+            cat state/current_run/flow_manifest.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Flow handoff package
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-flow-short-${{ github.run_number }}
+          path: |
+            state/current_run/relic_loop_short.json
+            state/current_run/flow_storyboard_prompt.txt
+            state/current_run/flow_manifest.json
+            shorts_flow.log
+          if-no-files-found: error
+          retention-days: 14
+
   build:
+    if: github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.mode == 'shorts_flow')
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -49,11 +117,7 @@ jobs:
       PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
       PUTER_IMAGE_MODEL: ${{ vars.PUTER_IMAGE_MODEL || 'black-forest-labs/flux-2-pro' }}
       IMAGE_PROVIDERS: 'cloudflare,local,puter,huggingface,replicate'
-      # Google Flow / Flow Agent bridge. The switch is now ON.
-      # Set FLOW_AGENT_URL as a repository secret when the Flow Agent server is
-      # running on a reachable machine; otherwise the client safely falls back
-      # to the existing image providers.
-      FLOW_AGENT_ENABLED: '1'
+      FLOW_AGENT_ENABLED: '0'
       FLOW_AGENT_URL: ${{ secrets.FLOW_AGENT_URL || 'http://127.0.0.1:8001' }}
       FLOW_AGENT_TIMEOUT: '300'
       FLOW_AGENT_IMAGE_MODEL: 'narwhal'
@@ -78,10 +142,10 @@ jobs:
         shell: bash
         run: |
           echo "=============================================="
-          echo "RELIC LOOP RUN STARTED"
+          echo "RELIC LOOP LEGACY/TEST RUN STARTED"
           echo "RUN NUMBER: ${{ github.run_number }}"
           echo "RUN ID:     ${{ github.run_id }}"
-          echo "MODE:       ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}"
+          echo "MODE:       ${{ inputs.mode }}"
           echo "EVENT:      ${{ github.event_name }}"
           echo "SHA:        ${{ github.sha }}"
           echo "RUN URL:    https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -90,7 +154,7 @@ jobs:
             echo "## Relic Loop run"
             echo "- **Run number:** ${{ github.run_number }}"
             echo "- **Run ID:** ${{ github.run_id }}"
-            echo "- **Mode:** ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}"
+            echo "- **Mode:** ${{ inputs.mode }}"
             echo "- **Event:** ${{ github.event_name }}"
             echo "- **Run URL:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -110,12 +174,7 @@ jobs:
 
       - name: Set run mode
         shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "PIPELINE_MODE=${{ inputs.mode }}" >> "$GITHUB_ENV"
-          else
-            echo "PIPELINE_MODE=full" >> "$GITHUB_ENV"
-          fi
+        run: echo "PIPELINE_MODE=${{ inputs.mode }}" >> "$GITHUB_ENV"
 
       - name: Write run identity
         shell: bash
@@ -127,7 +186,7 @@ jobs:
             "run_number": "${{ github.run_number }}",
             "workflow": "${{ github.workflow }}",
             "event": "${{ github.event_name }}",
-            "mode": "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}",
+            "mode": "${{ inputs.mode }}",
             "sha": "${{ github.sha }}",
             "ref": "${{ github.ref }}",
             "started_at": "${{ github.run_started_at }}",
@@ -192,7 +251,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile pipeline.py production_hardening.py no_text_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py flow_agent_client.py flow_agent_hardening.py
+          python -m py_compile pipeline.py production_hardening.py no_text_hardening.py runtime_script_repair.py local_image_worker.py sitecustomize.py run_pipeline.py veo_v2.py v2_test.py flow_agent_client.py flow_agent_hardening.py relic_loop_shorts.py
           python - <<'PY'
           import os
           import shutil
@@ -265,7 +324,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Run production pipeline
+      - name: Run legacy production pipeline
         if: env.PIPELINE_MODE != 'v2_test'
         shell: bash
         run: |
