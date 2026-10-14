@@ -1,9 +1,4 @@
-"""Generate Relic Loop fast-cut Shorts images with a hard visual style lock.
-
-This module is intentionally separate from the legacy production pipeline. It reads
-state/current_run/relic_loop_short.json, generates one Cloudflare image per beat,
-rejects likely story text with OCR, and writes a beat manifest for assembly.
-"""
+"""Generate Relic Loop fast-cut Shorts images with a hard visual style lock."""
 from __future__ import annotations
 
 import base64
@@ -28,12 +23,13 @@ WIDTH = int(os.environ.get("RELIC_LOOP_IMAGE_WIDTH", "576"))
 HEIGHT = int(os.environ.get("RELIC_LOOP_IMAGE_HEIGHT", "1024"))
 MAX_RETRIES = int(os.environ.get("RELIC_LOOP_IMAGE_RETRIES", "3"))
 OCR_STRICT = os.environ.get("RELIC_LOOP_OCR_STRICT", "1") != "0"
+REFERENCE_B64 = ROOT / "assets" / "relic_loop_character_reference.jpg.b64"
 
 STYLE_LOCK = """
-RELlC LOOP MASTER VISUAL STYLE — DO NOT REDESIGN:
+RELIC LOOP MASTER VISUAL STYLE — DO NOT REDESIGN:
 modern hand-drawn 2D stickman animation illustration, based on the supplied Relic Loop
-stickman reference: simple round head, simple tapered torso, thin expressive limbs,
-clean slightly imperfect black ink linework, minimal oval eyes, highly expressive
+stickman character reference: simple round head, simple tapered torso, thin expressive
+limbs, clean slightly imperfect black ink linework, minimal oval eyes, highly expressive
 mouth/eyebrow shapes, readable hands and exaggerated body language. Keep the character
 simple; spend visual complexity on the action, environment, perspective and composition.
 Clean graphic cartoon rendering with subtle flat-to-soft 2D shading, restrained color,
@@ -62,23 +58,43 @@ composition and cause/effect. If incidental environmental writing appears natura
 it must be tiny, non-readable and never plot-bearing.
 """.strip()
 
-TEXT_RE = re.compile(r"\b(?:caption|subtitle|title card|speech bubble|watermark|logo|typography|written explanation|text overlay|words on screen)\b", re.I)
+STORY_TEXT_REQUEST_RE = re.compile(
+    r"\b(?:add|show|display|write|render|include|put)\b[^.\n]{0,80}\b(?:caption|subtitle|title card|speech bubble|logo|watermark|readable words|text overlay|written words)\b",
+    re.I,
+)
+
+
+def _load_reference() -> list[tuple[str, bytes]]:
+    if not REFERENCE_B64.exists():
+        return []
+    try:
+        blob = base64.b64decode(REFERENCE_B64.read_text(encoding="utf-8").strip())
+        if not blob:
+            return []
+        return [("relic_loop_character_reference.jpg", blob)]
+    except Exception as exc:
+        raise RuntimeError(f"Could not decode Relic Loop character reference: {exc}") from exc
 
 
 def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> bytes:
     if not ACCOUNT_ID or not TOKEN:
         raise RuntimeError("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
     url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/{MODEL}"
-    files = {}
+    # Klein 4B expects multipart input. Keep prompt/size in multipart fields even when
+    # no reference is available; this avoids silently falling back to form-encoded data.
+    files: dict[str, tuple[None, str] | tuple[str, bytes, str]] = {
+        "prompt": (None, prompt),
+        "width": (None, str(WIDTH)),
+        "height": (None, str(HEIGHT)),
+    }
     if refs:
         for idx, (name, blob) in enumerate(refs[:4]):
             files[f"input_image_{idx}"] = (name, blob, "image/jpeg")
-    data = {"prompt": prompt, "width": str(WIDTH), "height": str(HEIGHT)}
     headers = {"Authorization": f"Bearer {TOKEN}"}
     last = None
     for attempt in range(MAX_RETRIES):
         try:
-            r = requests.post(url, headers=headers, data=data, files=files or None, timeout=180)
+            r = requests.post(url, headers=headers, files=files, timeout=180)
             if r.status_code == 429:
                 time.sleep(8 * (attempt + 1))
                 continue
@@ -115,17 +131,16 @@ def _ocr_has_text(path: Path) -> bool:
             if word and conf >= 55 and len(re.sub(r"[^A-Za-z0-9]", "", word)) >= 2:
                 return True
     except Exception:
-        # If OCR itself fails, don't silently claim the image passed the gate.
         return True
     return False
 
 
 def _reference_blurb() -> str:
     return (
-        "The supplied Relic Loop reference establishes the character construction: "
-        "round head, simple tapered torso, thin limbs, simple oval eyes, black expressive "
+        "Use the supplied Relic Loop character reference as the identity anchor. Preserve "
+        "its round head, simple tapered torso, thin limbs, simple oval eyes, black expressive "
         "ink linework, hand-drawn asymmetry, minimal facial marks, readable hands and "
-        "exaggerated poses. Preserve that identity in every beat."
+        "exaggerated poses. Do not redesign the character between beats."
     )
 
 
@@ -174,26 +189,27 @@ def main() -> None:
     if len(scenes) < 20:
         raise SystemExit(f"Refusing to render only {len(scenes)} beats; minimum is 20")
 
-    # The exact user-supplied reference images are represented in the repository by a
-    # text style lock for now; adding binary refs is optional because the prompt itself
-    # is deliberately complete and the generator must also work on fresh GitHub runners.
-    refs = []
+    refs = _load_reference()
     manifest = {
         "type": "relic_loop_cloudflare_image_render",
-        "version": 1,
+        "version": 2,
         "title": package.get("title"),
         "width": WIDTH,
         "height": HEIGHT,
         "model": MODEL,
-        "reference_mode": "canonical_style_lock",
+        "reference_mode": "character_reference_plus_canonical_style_lock" if refs else "canonical_style_lock",
+        "character_reference": str(REFERENCE_B64) if refs else None,
         "text_gate": "strict_ocr",
         "beats": [],
     }
 
     for index, scene in enumerate(scenes, 1):
         prompt = _scene_prompt(scene, package.get("characters") or [], package.get("locations") or [])
-        if TEXT_RE.search(prompt):
-            raise SystemExit(f"Prompt safety gate failed for beat {index}: story-text dependency detected")
+        scene_fields = " ".join(
+            str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action", "camera")
+        )
+        if STORY_TEXT_REQUEST_RE.search(scene_fields):
+            raise SystemExit(f"Prompt safety gate failed for beat {index}: deliberate story text requested")
         output = IMAGE_DIR / f"beat_{index:03d}.png"
         accepted = False
         for attempt in range(1, MAX_RETRIES + 1):
