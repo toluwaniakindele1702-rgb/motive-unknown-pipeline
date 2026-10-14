@@ -1,4 +1,4 @@
-"""Relic Loop Shorts-first story/Flow handoff engine."""
+"""Relic Loop Shorts-first story/image engine."""
 from __future__ import annotations
 
 import json
@@ -22,33 +22,38 @@ WORK_DIR.mkdir(parents=True, exist_ok=True)
 MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
+# This is the canonical image-generator style. Keep it explicit because the
+# image generator must receive the same visual identity on every beat.
 STYLE = """
-Relic Loop Shorts visual identity:
-- modern expressive 2D stickman animation, hand-drawn/cartoon illustration feel
-- bold clean linework, flat-to-soft 2D shading, graphic shapes, readable silhouettes
-- simple but believable environments designed for animation
-- highly expressive faces, poses, body language and physical comedy
-- characters are clearly stickman/cartoon figures, NOT photographs or photoreal humans
-- energetic camera movement: push-ins, whip pans, quick reveals, reaction shots
-- strong visual cause/effect; every shot should visibly explain or advance the joke
-- consistent character design across every scene
-- cinematic vertical 9:16 composition
-- playful absurd comedy, not horror and not graphic violence
-- no photorealism, live-action photography, stock-photo appearance, anime, Pixar/3D look,
-  old documentary illustration, generic smiling portraits, or static headshots
+RELIC LOOP — CANONICAL CLOUDFLARE IMAGE STYLE:
+- expressive 2D stickman cartoon illustration for YouTube Shorts
+- hand-drawn feel with bold, clean black linework and simple graphic shapes
+- stickman characters have simple heads/bodies/limbs but highly expressive faces,
+  eyes, mouths, eyebrows, hands and poses; body language carries the comedy
+- flat-to-soft 2D shading, crisp readable silhouettes, strong foreground/background separation
+- colorful but controlled cartoon palette; simple believable environments with enough detail
+  to explain the action without becoming visually cluttered
+- dynamic compositions, exaggerated perspective, dramatic close-ups, wide shots,
+  reaction shots, action poses and visual cause/effect
+- every image must SHOW the exact beat being narrated; never use a generic portrait
+  or a character simply looking at camera
+- preserve character identity, clothing, proportions and recurring props across beats
+- vertical 9:16 composition, designed for fast-cut Shorts editing
+- playful absurd comedy, energetic and visually punchy, non-graphic
+- NOT photorealistic, NOT live action, NOT stock photography, NOT anime,
+  NOT Pixar/3D, NOT realistic human photography, NOT old documentary art
+- NO captions, subtitles, title cards, speech bubbles, logos, watermarks,
+  UI overlays or deliberate typography
+- incidental environmental writing may exist only if naturally part of the setting
+  and never carries the joke or plot
 """.strip()
 
-# We no longer impose the old OCR-style absolute zero-text wall on Flow-ready prompts.
-# Flow is a stronger visual generator. We still prohibit captions/subtitles/typography as
-# storytelling crutches, while allowing incidental/environmental writing when naturally
-# present in a scene. The downstream Flow prompt should prioritize visual storytelling.
 VISUAL_TEXT_POLICY = """
-VISUAL TEXT POLICY: Do not use captions, subtitles, title cards, speech bubbles,
-watermarks, logos, or typography as part of the storytelling. Do not ask for written
-explanations inside the image. Natural incidental environmental writing is allowed
-when it genuinely belongs in the setting, but it must never carry the joke or plot.
-Communicate the story primarily through characters, actions, objects, expressions,
-composition, camera movement and visual cause/effect.
+NO STORY TEXT IN IMAGES: Cloudflare image prompts must not request captions,
+subtitles, title cards, speech bubbles, watermarks, logos, labels, UI text or
+written explanations. The visual must communicate through action, expression,
+objects, composition and cause/effect. Incidental real-world environmental writing
+is allowed only when it naturally belongs in the scene and is not plot-bearing.
 """.strip()
 
 SCHEMA_PROMPT = """
@@ -65,39 +70,47 @@ Schema:
   "scenes": [
     {
       "number": 1,
-      "duration_seconds": 3.5,
+      "duration_seconds": 1.4,
+      "beat_text": "the exact tiny narration beat, usually one phrase/clause",
       "narration": "exact narration for this beat",
-      "visual_prompt": "detailed 2D stickman visual prompt",
-      "camera": "camera movement/composition",
-      "action": "what visibly happens",
-      "transition": "how this shot moves into the next"
+      "visual_prompt": "detailed Cloudflare-ready 2D stickman image prompt",
+      "camera": "camera/composition for this single image",
+      "action": "the exact visible action or reaction",
+      "transition": "immediate visual change into the next beat"
     }
   ],
-  "flow_prompt": "one complete prompt for Flow Storyboard Studio that can create the cast and storyboard from this package",
+  "flow_prompt": "one complete prompt describing the same cast and visual style",
   "youtube_description": "short description",
   "tags": ["...", "..."]
 }
 """
 
 SYSTEM = f"""You are the creative director for Relic Loop, a Shorts-only YouTube animation channel.
-Create original absurd/funny micro-stories designed for retention. The story should start immediately,
-escalate quickly, contain a clear visual joke or unexpected turn, and end with a satisfying punchline/payoff.
-Do not make it a documentary, explainer, listicle, curiosity explainer, or generic motivational story.
+Create original absurd/funny micro-stories designed for retention. Start immediately,
+escalate quickly, contain a clear visual joke or unexpected turn, and end with a punchline.
+Do not make documentaries, explainers, listicles, curiosity explainers, or motivational stories.
 Keep it safe, non-graphic, and visually understandable without subtitles or captions.
 
 {STYLE}
 
 {VISUAL_TEXT_POLICY}
 
-Short requirements:
-- total narration target: 55-105 words
-- total runtime target: 20-45 seconds
-- 6-10 scenes, usually 2-5 seconds each
-- each scene must materially change the action, framing, reaction, or visual information
-- recurring characters must keep the same appearance in every scene
-- narration must match what is visibly happening
-- every scene must SHOW the action rather than merely showing a person smiling at camera
-- avoid brand names and copyrighted characters
+FAST-CUT IMAGE REQUIREMENTS:
+- This is an IMAGE-BASED Short, not a small number of long shots.
+- Target 12-24 visual beats for a 20-45 second Short whenever the narration supports it.
+- A new image should be created at EVERY meaningful phrase, clause, comma, full stop,
+  sudden tone change, reaction, action change, reveal, or important detail.
+- Do NOT hold one image for several unrelated phrases.
+- Prefer many short beats over 6-10 long scenes.
+- Typical image duration: 0.7-2.5 seconds; use up to 3.0 seconds only when a beat genuinely needs it.
+- Two adjacent beats must differ visibly in action, expression, framing, object state,
+  camera angle, or story information. If the narration changes, the visual should change too.
+- The first 1-2 seconds must contain a strong visual hook.
+- Tiny details matter: if narration mentions an object, expression, movement, location,
+  reaction, or consequence, show it in the corresponding image.
+- Use extreme close-ups and reaction shots when a phrase calls for them.
+- Keep recurring characters visually consistent across all images.
+- Every image prompt must describe the exact action for that beat, not a generic scene.
 
 {SCHEMA_PROMPT}
 """
@@ -176,27 +189,29 @@ def _validate(data: dict[str, Any]) -> list[str]:
     if not 55 <= _words(narration) <= 115:
         errors.append(f"narration_words={_words(narration)}")
     scenes = data.get("scenes")
-    if not isinstance(scenes, list) or not 6 <= len(scenes) <= 10:
-        errors.append("scene_count")
+    if not isinstance(scenes, list) or not 12 <= len(scenes) <= 24:
+        errors.append("scene_count_fast_cut")
         return errors
     total = 0.0
-    forbidden = re.compile(r"\b(?:caption|subtitle|title card|watermark|speech bubble|typography)\b", re.I)
+    forbidden = re.compile(r"\b(?:caption|subtitle|title card|watermark|speech bubble|typography|logo|written explanation)\b", re.I)
     for i, scene in enumerate(scenes, 1):
         if not isinstance(scene, dict):
             errors.append(f"scene_{i}_not_object")
             continue
         d = float(scene.get("duration_seconds", 0) or 0)
         total += d
-        if not 2.0 <= d <= 6.0:
+        if not 0.6 <= d <= 3.0:
             errors.append(f"scene_{i}_duration")
-        for field in ("visual_prompt", "camera", "action", "narration"):
+        for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not scene.get(field):
                 errors.append(f"scene_{i}_missing_{field}")
         vp = str(scene.get("visual_prompt", ""))
         if forbidden.search(vp):
             errors.append(f"scene_{i}_text_dependency")
-        if re.search(r"\b(?:photorealistic|live[- ]action|stock photo|portrait of a smiling man)\b", vp, re.I):
+        if re.search(r"\b(?:photorealistic|live[- ]action|stock photo|portrait of a smiling man|anime|pixar|3d render)\b", vp, re.I):
             errors.append(f"scene_{i}_wrong_visual_style")
+        if "stickman" not in vp.lower():
+            errors.append(f"scene_{i}_missing_stickman")
     if not 20 <= total <= 45:
         errors.append(f"runtime={total:.1f}")
     return errors
@@ -205,8 +220,8 @@ def _validate(data: dict[str, Any]) -> list[str]:
 def _prompt_for(topic: str | None = None) -> str:
     history = _topic_context()
     if topic:
-        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nMake the situation escalate into an unexpected visual punchline.\n\n{SYSTEM}"
-    return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and a strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\n{SYSTEM}"
+        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into many immediate visual beats at phrases, commas, full stops, tone changes and reactions.\n\n{SYSTEM}"
+    return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\nBreak the narration into many immediate visual beats at phrases, commas, full stops, tone changes and reactions.\n\n{SYSTEM}"
 
 
 def generate(topic: str | None = None) -> dict[str, Any]:
@@ -223,7 +238,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                     {"role": "user", "content": _prompt_for(topic)},
                 ],
                 temperature=0.95,
-                max_completion_tokens=2400,
+                max_completion_tokens=3600,
             )
             data = _extract_json(response.choices[0].message.content or "")
             errors = _validate(data)
@@ -235,7 +250,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                         {"role": "user", "content": "Repair this JSON so it passes every requirement. Return ONLY JSON.\nErrors: " + ", ".join(errors) + "\nJSON:\n" + json.dumps(data, ensure_ascii=False)},
                     ],
                     temperature=0.25,
-                    max_completion_tokens=2400,
+                    max_completion_tokens=3600,
                 )
                 data = _extract_json(repair.choices[0].message.content or "")
                 errors = _validate(data)
@@ -243,6 +258,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                 data["generated_at"] = datetime.now(timezone.utc).isoformat()
                 data["visual_policy"] = VISUAL_TEXT_POLICY
                 data["style_policy"] = STYLE
+                data["beat_policy"] = "new image at meaningful phrases, commas, full stops, tone changes and important visual details"
                 return data
             last_error = ValueError("Short package validation failed: " + ", ".join(errors))
         except Exception as exc:
@@ -262,52 +278,58 @@ def write_package(data: dict[str, Any]) -> None:
 
     scenes = data["scenes"]
     lines = [
-        "RELIC LOOP — FLOW STORYBOARD STUDIO JOB",
+        "RELIC LOOP — CLOUDLFARE FAST-CUT IMAGE JOB",
         "", data["flow_prompt"], "",
-        "CANONICAL STYLE:", STYLE, "",
+        "CANONICAL CLOUDFLARE IMAGE STYLE:", STYLE, "",
         "VISUAL TEXT POLICY:", VISUAL_TEXT_POLICY, "",
+        "FAST-CUT RULE: CHANGE IMAGE AT EVERY MEANINGFUL PHRASE, COMMA, FULL STOP, TONE CHANGE, REACTION OR IMPORTANT DETAIL.", "",
         "CAST:",
     ]
     for c in data["characters"]:
         lines.append(f"- {c['name']}: {c['appearance']}. Personality: {c['personality']}")
     lines += ["", "LOCATIONS:"] + [f"- {x}" for x in data["locations"]]
-    lines += ["", "SCENES:"]
+    lines += ["", "IMAGE BEATS:"]
     for s in scenes:
         lines += [
-            f"Scene {s['number']} — {s['duration_seconds']}s",
+            f"Beat {s['number']} — {s['duration_seconds']}s",
+            f"Beat text: {s['beat_text']}",
             f"Narration: {s['narration']}",
-            f"Visual: {s['visual_prompt']}",
+            f"CLOUDFLARE IMAGE PROMPT: {s['visual_prompt']}",
             f"Camera: {s['camera']}",
             f"Action: {s['action']}",
-            f"Transition: {s['transition']}",
+            f"Immediate transition: {s['transition']}",
             "",
         ]
     lines += ["VOICEOVER:", data["narration"], ""]
     flow_path.write_text("\n".join(lines), encoding="utf-8")
 
     manifest = {
-        "type": "relic_loop_flow_storyboard",
-        "version": 2,
+        "type": "relic_loop_fast_cut_image_short",
+        "version": 3,
         "title": data["title"],
         "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
         "scene_count": len(scenes),
-        "flow_template": "Storyboard Studio",
-        "zero_text_gate": False,
-        "text_policy": "no_deliberate_story_text",
-        "media_generation": "manual_in_flow",
+        "image_generation": "cloudflare_workers_ai",
+        "image_style": "expressive_2d_stickman_cartoon",
+        "beat_change_policy": "phrase_comma_full_stop_tone_change_detail",
+        "min_scene_seconds": 0.6,
+        "max_scene_seconds": 3.0,
+        "zero_text_gate": True,
+        "text_policy": "reject deliberate story text",
+        "media_generation": "image_based_short",
         "files": [str(json_path), str(flow_path)],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    # Record the title/topic only after the package has passed validation.
     history = _load_topic_history()
     title = str(data.get("title", "")).strip()
     if title and title.lower() not in {x.lower() for x in history}:
         history.append(title)
         _save_topic_history(history)
 
-    print(f"[FLOW] Ready: {flow_path}")
-    print(f"[FLOW] JSON:  {json_path}")
+    print(f"[CLOUDFLARE] Ready: {flow_path}")
+    print(f"[SHORTS] Images/beats: {len(scenes)}")
+    print(f"[SHORTS] Runtime: {sum(float(s['duration_seconds']) for s in scenes):.1f}s")
 
 
 def main() -> None:
@@ -316,7 +338,7 @@ def main() -> None:
     write_package(data)
     print(f"[SHORTS] {data['title']}")
     print(f"[SHORTS] {_words(data['narration'])} narration words")
-    print(f"[SHORTS] {len(data['scenes'])} scenes / {sum(float(s['duration_seconds']) for s in data['scenes']):.1f}s")
+    print(f"[SHORTS] {len(data['scenes'])} fast-cut image beats / {sum(float(s['duration_seconds']) for s in data['scenes']):.1f}s")
 
 
 if __name__ == "__main__":
