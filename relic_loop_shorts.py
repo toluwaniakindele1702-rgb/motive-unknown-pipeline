@@ -22,8 +22,6 @@ WORK_DIR.mkdir(parents=True, exist_ok=True)
 MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
-# This is the canonical image-generator style. Keep it explicit because the
-# image generator must receive the same visual identity on every beat.
 STYLE = """
 RELIC LOOP — CANONICAL CLOUDFLARE IMAGE STYLE:
 - expressive 2D stickman cartoon illustration for YouTube Shorts
@@ -70,7 +68,7 @@ Schema:
   "scenes": [
     {
       "number": 1,
-      "duration_seconds": 1.4,
+      "duration_seconds": 1.2,
       "beat_text": "the exact tiny narration beat, usually one phrase/clause",
       "narration": "exact narration for this beat",
       "visual_prompt": "detailed Cloudflare-ready 2D stickman image prompt",
@@ -97,12 +95,15 @@ Keep it safe, non-graphic, and visually understandable without subtitles or capt
 
 FAST-CUT IMAGE REQUIREMENTS:
 - This is an IMAGE-BASED Short, not a small number of long shots.
-- Target 12-24 visual beats for a 20-45 second Short whenever the narration supports it.
+- REQUIRED: minimum 20 visual beats per Short.
+- TARGET: 25-40 visual beats per Short whenever the narration supports it.
+- ALLOWED: more than 30 beats; do NOT cap a Short at 30 or 24 beats.
 - A new image should be created at EVERY meaningful phrase, clause, comma, full stop,
   sudden tone change, reaction, action change, reveal, or important detail.
+- If a sentence contains several distinct actions or details, split them into separate beats.
 - Do NOT hold one image for several unrelated phrases.
 - Prefer many short beats over 6-10 long scenes.
-- Typical image duration: 0.7-2.5 seconds; use up to 3.0 seconds only when a beat genuinely needs it.
+- Typical image duration: 0.6-1.8 seconds; use up to 2.5 seconds only when a beat genuinely needs it.
 - Two adjacent beats must differ visibly in action, expression, framing, object state,
   camera angle, or story information. If the narration changes, the visual should change too.
 - The first 1-2 seconds must contain a strong visual hook.
@@ -189,7 +190,7 @@ def _validate(data: dict[str, Any]) -> list[str]:
     if not 55 <= _words(narration) <= 115:
         errors.append(f"narration_words={_words(narration)}")
     scenes = data.get("scenes")
-    if not isinstance(scenes, list) or not 12 <= len(scenes) <= 24:
+    if not isinstance(scenes, list) or not 20 <= len(scenes) <= 45:
         errors.append("scene_count_fast_cut")
         return errors
     total = 0.0
@@ -200,7 +201,7 @@ def _validate(data: dict[str, Any]) -> list[str]:
             continue
         d = float(scene.get("duration_seconds", 0) or 0)
         total += d
-        if not 0.6 <= d <= 3.0:
+        if not 0.5 <= d <= 2.5:
             errors.append(f"scene_{i}_duration")
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not scene.get(field):
@@ -220,8 +221,8 @@ def _validate(data: dict[str, Any]) -> list[str]:
 def _prompt_for(topic: str | None = None) -> str:
     history = _topic_context()
     if topic:
-        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into many immediate visual beats at phrases, commas, full stops, tone changes and reactions.\n\n{SYSTEM}"
-    return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\nBreak the narration into many immediate visual beats at phrases, commas, full stops, tone changes and reactions.\n\n{SYSTEM}"
+        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into at least 20 immediate visual beats, preferably 25-40, at phrases, commas, full stops, tone changes and reactions. Do not cap the beat count at 24 or 30.\n\n{SYSTEM}"
+    return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\nBreak the narration into at least 20 immediate visual beats, preferably 25-40, at phrases, commas, full stops, tone changes and reactions. Do not cap the beat count at 24 or 30.\n\n{SYSTEM}"
 
 
 def generate(topic: str | None = None) -> dict[str, Any]:
@@ -238,7 +239,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                     {"role": "user", "content": _prompt_for(topic)},
                 ],
                 temperature=0.95,
-                max_completion_tokens=3600,
+                max_completion_tokens=6000,
             )
             data = _extract_json(response.choices[0].message.content or "")
             errors = _validate(data)
@@ -250,7 +251,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                         {"role": "user", "content": "Repair this JSON so it passes every requirement. Return ONLY JSON.\nErrors: " + ", ".join(errors) + "\nJSON:\n" + json.dumps(data, ensure_ascii=False)},
                     ],
                     temperature=0.25,
-                    max_completion_tokens=3600,
+                    max_completion_tokens=6000,
                 )
                 data = _extract_json(repair.choices[0].message.content or "")
                 errors = _validate(data)
@@ -258,7 +259,6 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                 data["generated_at"] = datetime.now(timezone.utc).isoformat()
                 data["visual_policy"] = VISUAL_TEXT_POLICY
                 data["style_policy"] = STYLE
-                data["beat_policy"] = "new image at meaningful phrases, commas, full stops, tone changes and important visual details"
                 return data
             last_error = ValueError("Short package validation failed: " + ", ".join(errors))
         except Exception as exc:
@@ -278,11 +278,10 @@ def write_package(data: dict[str, Any]) -> None:
 
     scenes = data["scenes"]
     lines = [
-        "RELIC LOOP — CLOUDLFARE FAST-CUT IMAGE JOB",
+        "RELIC LOOP — FAST-CUT CLOUDFLARE IMAGE JOB",
         "", data["flow_prompt"], "",
-        "CANONICAL CLOUDFLARE IMAGE STYLE:", STYLE, "",
+        "CANONICAL STYLE:", STYLE, "",
         "VISUAL TEXT POLICY:", VISUAL_TEXT_POLICY, "",
-        "FAST-CUT RULE: CHANGE IMAGE AT EVERY MEANINGFUL PHRASE, COMMA, FULL STOP, TONE CHANGE, REACTION OR IMPORTANT DETAIL.", "",
         "CAST:",
     ]
     for c in data["characters"]:
@@ -294,10 +293,10 @@ def write_package(data: dict[str, Any]) -> None:
             f"Beat {s['number']} — {s['duration_seconds']}s",
             f"Beat text: {s['beat_text']}",
             f"Narration: {s['narration']}",
-            f"CLOUDFLARE IMAGE PROMPT: {s['visual_prompt']}",
+            f"Visual: {s['visual_prompt']}",
             f"Camera: {s['camera']}",
             f"Action: {s['action']}",
-            f"Immediate transition: {s['transition']}",
+            f"Transition: {s['transition']}",
             "",
         ]
     lines += ["VOICEOVER:", data["narration"], ""]
@@ -308,15 +307,14 @@ def write_package(data: dict[str, Any]) -> None:
         "version": 3,
         "title": data["title"],
         "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
-        "scene_count": len(scenes),
-        "image_generation": "cloudflare_workers_ai",
-        "image_style": "expressive_2d_stickman_cartoon",
-        "beat_change_policy": "phrase_comma_full_stop_tone_change_detail",
-        "min_scene_seconds": 0.6,
-        "max_scene_seconds": 3.0,
-        "zero_text_gate": True,
-        "text_policy": "reject deliberate story text",
-        "media_generation": "image_based_short",
+        "image_beat_count": len(scenes),
+        "minimum_image_beats": 20,
+        "target_image_beats": "25-40",
+        "flow_template": "Storyboard Studio",
+        "zero_text_gate": False,
+        "text_policy": "no_deliberate_story_text",
+        "media_generation": "cloudflare_images",
+        "beat_policy": "new_image_at_phrase_comma_full_stop_tone_change_action_reaction_detail",
         "files": [str(json_path), str(flow_path)],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -327,9 +325,9 @@ def write_package(data: dict[str, Any]) -> None:
         history.append(title)
         _save_topic_history(history)
 
-    print(f"[CLOUDFLARE] Ready: {flow_path}")
-    print(f"[SHORTS] Images/beats: {len(scenes)}")
-    print(f"[SHORTS] Runtime: {sum(float(s['duration_seconds']) for s in scenes):.1f}s")
+    print(f"[IMAGE] Ready: {flow_path}")
+    print(f"[IMAGE] JSON:  {json_path}")
+    print(f"[IMAGE] Beats: {len(scenes)}")
 
 
 def main() -> None:
@@ -338,7 +336,7 @@ def main() -> None:
     write_package(data)
     print(f"[SHORTS] {data['title']}")
     print(f"[SHORTS] {_words(data['narration'])} narration words")
-    print(f"[SHORTS] {len(data['scenes'])} fast-cut image beats / {sum(float(s['duration_seconds']) for s in data['scenes']):.1f}s")
+    print(f"[SHORTS] {len(data['scenes'])} image beats / {sum(float(s['duration_seconds']) for s in data['scenes']):.1f}s")
 
 
 if __name__ == "__main__":
