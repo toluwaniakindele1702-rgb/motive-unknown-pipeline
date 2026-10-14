@@ -1,5 +1,5 @@
 name: Relic Loop Image Shorts
-run-name: Relic Loop Image Short #${{ github.run_number }}
+run-name: "Relic Loop Image Short ${{ github.run_number }}"
 
 on:
   workflow_dispatch:
@@ -51,6 +51,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng tesseract-ocr
 
+      - name: Decode approved Relic Loop character reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run_work/references
+          base64 -d assets/relic_loop_character_reference.jpg.b64 > run_work/references/relic_loop_character_reference.jpg
+          test -s run_work/references/relic_loop_character_reference.jpg
+          file run_work/references/relic_loop_character_reference.jpg
+
       - name: Preflight
         shell: bash
         run: |
@@ -83,7 +92,7 @@ jobs:
           {
             echo "## Relic Loop Image Short"
             echo
-            echo "Approved hand-drawn stickman direction, fast image changes, strict OCR rejection, and subtle push-in/pull-out camera motion."
+            echo "Approved hand-drawn stickman reference, fast image changes, strict OCR rejection, and subtle push-in/pull-out camera motion."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
@@ -94,6 +103,7 @@ jobs:
           print('Rendered beats:', len(d.get('beats', [])))
           print('Model:', d.get('model'))
           print('Resolution:', d.get('width'), 'x', d.get('height'))
+          print('Reference mode:', d.get('reference_mode'))
           PY
             fi
           } >> "$GITHUB_STEP_SUMMARY"
