@@ -1,0 +1,97 @@
+name: Relic Loop Image Shorts FIXED
+
+run-name: Relic Loop Image Short FIXED #${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: Optional story seed; leave blank for automatic topic selection
+        required: false
+        default: ''
+        type: string
+  schedule:
+    - cron: '23 2 * * *'
+      timezone: Africa/Lagos
+
+concurrency:
+  group: relic-loop-image-shorts-fixed
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_WRITER_MODEL: openai/gpt-oss-120b
+      RELIC_LOOP_TOPIC: ${{ inputs.topic || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-klein-4b'
+      RELIC_LOOP_IMAGE_WIDTH: '576'
+      RELIC_LOOP_IMAGE_HEIGHT: '1024'
+      RELIC_LOOP_IMAGE_RETRIES: '3'
+      RELIC_LOOP_OCR_STRICT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng tesseract-ocr
+
+      - name: Check required secrets
+        run: |
+          test -n "$GROQ_API_KEY" || { echo 'Missing GROQ_API_KEY'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; }
+
+      - name: Generate story package with fixed JSON engine
+        run: python relic_loop_shorts_fixed.py
+
+      - name: Render Cloudflare stickman images
+        run: python cloudflare_relic_loop_images.py
+
+      - name: Assemble Short
+        run: python assemble_relic_loop_short.py
+
+      - name: Write run summary
+        if: always()
+        run: |
+          echo '## Relic Loop Image Short' >> "$GITHUB_STEP_SUMMARY"
+          if test -f state/current_run/relic_loop_short.json; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('state/current_run/relic_loop_short.json')
+          d=json.loads(p.read_text())
+          print(f"**Title:** {d.get('title','')}")
+          print(f"**Image beats:** {len(d.get('scenes',[]))}")
+          print(f"**Runtime:** {sum(float(s.get('duration_seconds',0)) for s in d.get('scenes',[])):.1f}s")
+          PY
+          fi
+
+      - name: Upload Relic Loop outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-image-short-fixed-${{ github.run_number }}
+          path: |
+            state/current_run/relic_loop_short.json
+            state/current_run/flow_storyboard_prompt.txt
+            state/current_run/flow_manifest.json
+            state/current_run/cloudflare_image_manifest.json
+            state/current_run/relic_loop_short.mp4
+            state/current_run/voiceover.wav
+            state/current_run/images/
+          if-no-files-found: warn
