@@ -35,6 +35,7 @@ jobs:
       RELIC_LOOP_IMAGE_HEIGHT: '1024'
       RELIC_LOOP_IMAGE_RETRIES: '3'
       RELIC_LOOP_OCR_STRICT: '1'
+      PYTHONUNBUFFERED: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -74,7 +75,7 @@ jobs:
       - name: Generate story and fast-cut storyboard
         run: |
           set -o pipefail
-          python relic_loop_shorts.py 2>&1 | tee shorts_flow.log
+          python relic_loop_shorts_fixed.py 2>&1 | tee shorts_flow.log
 
       - name: Render every visual beat with Cloudflare
         run: |
