@@ -2,9 +2,6 @@ name: Relic Loop Image Shorts
 run-name: "Relic Loop Image Short ${{ github.run_number }}"
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       topic:
