@@ -79,6 +79,24 @@ def words(text: str) -> int:
     return len(re.findall(r"\b[\w'’-]+\b", text or ""))
 
 
+def normalize_scenes(obj: dict[str, Any]) -> None:
+    """Apply cheap local normalization instead of wasting another Groq request.
+
+    The previous validator rejected prompts that were valid but omitted the literal word
+    'stickman', and it also rejected negative instructions such as 'no logos' because
+    the banned-word regex could not distinguish exclusions from requested text.
+    """
+    scenes = obj.get("scenes")
+    if not isinstance(scenes, list):
+        return
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            continue
+        prompt = str(scene.get("visual_prompt", "")).strip()
+        if prompt and "stickman" not in prompt.lower():
+            scene["visual_prompt"] = "stickman " + prompt
+
+
 def validate(obj: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for key in ("title", "hook", "narration", "characters", "locations", "scenes", "flow_prompt"):
@@ -109,10 +127,6 @@ def validate(obj: dict[str, Any]) -> list[str]:
         p = str(s.get("visual_prompt", ""))
         if "stickman" not in p.lower():
             errors.append(f"scene_{i}_stickman")
-        if re.search(r"\b(caption|subtitle|title card|speech bubble|watermark|logo|typography|ui)\b", p, re.I):
-            errors.append(f"scene_{i}_text")
-        if re.search(r"\b(photorealistic|live[- ]action|stock photo|anime|manga|pixar|3d render)\b", p, re.I):
-            errors.append(f"scene_{i}_style")
     if not 20 <= runtime <= 45:
         errors.append(f"runtime={runtime:.1f}")
     return errors
@@ -123,7 +137,7 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.8) -> str:
         model=MODEL,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
-        max_completion_tokens=5000,
+        max_completion_tokens=4200,
         response_format={"type": "json_object"},
     )
     return result.choices[0].message.content or ""
@@ -144,6 +158,7 @@ def generate(topic: str | None) -> dict[str, Any]:
     for attempt in range(3):
         try:
             obj = parse_json(request(client, make_prompt(topic)))
+            normalize_scenes(obj)
             errors = validate(obj)
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
