@@ -1,7 +1,4 @@
-"""Robust Relic Loop Shorts story generator.
-
-This is a replacement for the older planner when Groq returns malformed/truncated JSON.
-"""
+"""Relic Loop Shorts generator optimized for Groq free-tier token limits."""
 from __future__ import annotations
 
 import json
@@ -23,51 +20,34 @@ RUN.mkdir(parents=True, exist_ok=True)
 MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
-STYLE = """Modern expressive 2D hand-drawn stickman cartoon for Relic Loop. Round head,
-simple tapered torso, thin expressive limbs, clean slightly imperfect black ink linework,
-minimal oval eyes, expressive mouths and eyebrows, readable hands and exaggerated poses.
-Clean graphic cartoon rendering, subtle flat-to-soft 2D shading, restrained color, clear
-silhouettes, believable simplified environments, dynamic perspective and energetic comedy
-timing. Vertical 9:16. Keep character identity, proportions, clothing and important props
-consistent across beats. No photorealism, live action, stock photography, anime/manga,
-Pixar/3D, glossy mascot art, realistic human photography or old documentary art.""".strip()
+STYLE = ("Modern expressive 2D hand-drawn stickman cartoon: round head, simple tapered torso, "
+         "thin expressive limbs, clean black ink linework, minimal eyes, expressive mouth and "
+         "eyebrows, readable hands, exaggerated poses, flat-to-soft 2D shading, restrained color, "
+         "clear silhouettes, believable simple environments, dynamic perspective, vertical 9:16. "
+         "Consistent character identity. No photorealism, live action, stock photo, anime, manga, "
+         "3D/Pixar, glossy mascot or documentary art.")
 
-SYSTEM = f"""You are the creative director for Relic Loop, a Shorts-only absurd-comedy animation channel.
-Create an original fictional micro-story: instant weird situation, fast escalation, visual
-cause/effect, unexpected turn, punchline. Do not make a documentary, explainer, listicle,
-motivational story or curiosity explainer. Keep it safe and non-graphic.
+SYSTEM = f"""You are Relic Loop's creative director. Make one original fictional absurd-comedy YouTube Short.
+Formula: instant weird situation -> escalation -> bigger problem -> absurd twist -> punchline.
+Safe, non-graphic, visual and fast. Do NOT make an explainer, documentary, listicle or educational story.
 
-CANONICAL STYLE:
-{STYLE}
+STYLE: {STYLE}
 
-IMAGE BEAT RULES:
-- Minimum 20 scenes; target 25-40. More than 30 is allowed.
-- New image at every meaningful phrase, clause, comma, full stop, tone change, action,
-  reaction, reveal or important detail.
-- Each beat must show the exact action, expression, object state or consequence being narrated.
-- Adjacent beats must visibly differ in action, expression, framing, camera, object state or information.
-- Duration must be 0.5-2.5 seconds; total runtime 20-45 seconds.
-- No deliberate captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text.
+Return ONLY JSON. Keep every field extremely compact so the response stays below the free-tier token limit.
+Create EXACTLY 20 visual beats for a 20-45 second Short. Each beat is 0.8-2.2 seconds.
+Change the image whenever the narration changes action, reaction, object state, reveal or important detail.
+No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
 
-Return ONLY valid JSON. Keep scene descriptions compact. Exact schema:
-{{
-  "title":"short title",
-  "hook":"opening sentence",
-  "narration":"55-105 words",
-  "characters":[{{"name":"A","role":"...","appearance":"...","personality":"..."}}],
-  "locations":["..."],
-  "scenes":[{{"number":1,"duration_seconds":1.0,"beat_text":"...","narration":"...","visual_prompt":"stickman shot prompt","camera":"...","action":"...","transition":"..."}}],
-  "flow_prompt":"concise full-story style prompt",
-  "youtube_description":"...",
-  "tags":["...","..."]
-}}
-"""
+JSON shape:
+{{"title":"...","hook":"...","narration":"55-85 words","characters":[{{"name":"A","appearance":"..."}}],"locations":["..."],"scenes":[{{"number":1,"duration_seconds":1.0,"beat_text":"...","narration":"...","visual_prompt":"...","camera":"...","action":"..."}}],"flow_prompt":"...","youtube_description":"...","tags":["...","..."]}}
+
+Scene visual_prompt must say "stickman" and describe only what is visible. Keep each visual_prompt, camera and action short."""
 
 
 def history() -> list[str]:
     try:
         value = json.loads(HISTORY.read_text(encoding="utf-8"))
-        return [str(x).strip() for x in value if str(x).strip()][-100:] if isinstance(value, list) else []
+        return [str(x).strip() for x in value if str(x).strip()][-60:] if isinstance(value, list) else []
     except Exception:
         return []
 
@@ -86,35 +66,12 @@ def parse_json(text: str) -> dict[str, Any]:
             return obj
     except json.JSONDecodeError:
         pass
-    depth = 0
-    start = None
-    quoted = False
-    escaped = False
-    for i, ch in enumerate(text):
-        if quoted:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                quoted = False
-            continue
-        if ch == '"':
-            quoted = True
-        elif ch == "{":
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == "}" and depth:
-            depth -= 1
-            if depth == 0 and start is not None:
-                try:
-                    obj = json.loads(text[start:i + 1])
-                    if isinstance(obj, dict):
-                        return obj
-                except json.JSONDecodeError:
-                    pass
-                start = None
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        obj = json.loads(text[start:end + 1])
+        if isinstance(obj, dict):
+            return obj
     raise ValueError("Groq did not return valid JSON")
 
 
@@ -127,16 +84,14 @@ def validate(obj: dict[str, Any]) -> list[str]:
     for key in ("title", "hook", "narration", "characters", "locations", "scenes", "flow_prompt"):
         if not obj.get(key):
             errors.append(f"missing:{key}")
-    count = words(str(obj.get("narration", "")))
-    if not 55 <= count <= 105:
-        errors.append(f"narration_words={count}")
+    wc = words(str(obj.get("narration", "")))
+    if not 55 <= wc <= 85:
+        errors.append(f"narration_words={wc}")
     scenes = obj.get("scenes")
-    if not isinstance(scenes, list) or not 20 <= len(scenes) <= 45:
+    if not isinstance(scenes, list) or len(scenes) != 20:
         errors.append("scene_count")
         return errors
     runtime = 0.0
-    forbidden = re.compile(r"\b(?:caption|subtitle|title card|speech bubble|watermark|logo|typography|written explanation)\b", re.I)
-    wrong = re.compile(r"\b(?:photorealistic|live[- ]action|stock photo|anime|manga|pixar|3d render)\b", re.I)
     for i, s in enumerate(scenes, 1):
         if not isinstance(s, dict):
             errors.append(f"scene_{i}_object")
@@ -146,29 +101,29 @@ def validate(obj: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError):
             d = 0
         runtime += d
-        if not 0.5 <= d <= 2.5:
+        if not 0.8 <= d <= 2.2:
             errors.append(f"scene_{i}_duration")
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not str(s.get(field, "")).strip():
                 errors.append(f"scene_{i}_{field}")
-        prompt = str(s.get("visual_prompt", ""))
-        if "stickman" not in prompt.lower():
+        p = str(s.get("visual_prompt", ""))
+        if "stickman" not in p.lower():
             errors.append(f"scene_{i}_stickman")
-        if forbidden.search(prompt):
+        if re.search(r"\b(caption|subtitle|title card|speech bubble|watermark|logo|typography|ui)\b", p, re.I):
             errors.append(f"scene_{i}_text")
-        if wrong.search(prompt):
+        if re.search(r"\b(photorealistic|live[- ]action|stock photo|anime|manga|pixar|3d render)\b", p, re.I):
             errors.append(f"scene_{i}_style")
     if not 20 <= runtime <= 45:
         errors.append(f"runtime={runtime:.1f}")
     return errors
 
 
-def request(client: Groq, messages: list[dict[str, str]], temperature: float) -> str:
+def request(client: Groq, user_prompt: str, temperature: float = 0.8) -> str:
     result = client.chat.completions.create(
         model=MODEL,
-        messages=messages,
+        messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
-        max_completion_tokens=8000,
+        max_completion_tokens=5000,
         response_format={"type": "json_object"},
     )
     return result.choices[0].message.content or ""
@@ -176,9 +131,9 @@ def request(client: Groq, messages: list[dict[str, str]], temperature: float) ->
 
 def make_prompt(topic: str | None) -> str:
     old = history()
-    used = "No previous topics recorded." if not old else "Previously used titles; do not repeat or make near-duplicates:\n" + "\n".join(f"- {x}" for x in old[-40:])
-    seed = f"Use this seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
-    return f"{seed}\n\n{used}\n\nGenerate the complete Short package. Keep all scene fields compact. Use at least 20 visual beats, preferably 25-40."
+    used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
+    seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
+    return f"{seed}\n{used}\nWrite the complete package now. EXACTLY 20 compact scenes."
 
 
 def generate(topic: str | None) -> dict[str, Any]:
@@ -188,22 +143,21 @@ def generate(topic: str | None) -> dict[str, Any]:
     last: Exception | None = None
     for attempt in range(3):
         try:
-            obj = parse_json(request(client, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": make_prompt(topic)}], 0.9))
+            obj = parse_json(request(client, make_prompt(topic)))
             errors = validate(obj)
-            if errors:
-                repair = "Repair this JSON and return ONLY JSON. Fix every error while preserving the story where possible. Keep at least 20 scenes and keep every field compact. Errors: " + ", ".join(errors) + "\nJSON:\n" + json.dumps(obj, ensure_ascii=False)
-                obj = parse_json(request(client, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": repair}], 0.2))
-                errors = validate(obj)
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
                 obj["visual_policy"] = "No deliberate story text in images."
                 obj["style_policy"] = STYLE
                 return obj
-            last = ValueError("validation failed: " + ", ".join(errors))
+            last = ValueError("validation failed: " + ", ".join(errors[:12]))
         except Exception as exc:
             last = exc
             msg = str(exc).lower()
-            time.sleep(8 + attempt * 8 if any(x in msg for x in ("429", "rate", "timeout")) else 3 + attempt * 2)
+            wait = 65 if any(x in msg for x in ("429", "rate limit", "rate_limit")) else 5 + attempt * 5
+            if attempt < 2:
+                print(f"[SHORTS] attempt {attempt + 1} failed: {exc}; waiting {wait}s")
+                time.sleep(wait)
     raise RuntimeError(f"Could not generate a valid Relic Loop Short package: {last}")
 
 
@@ -215,20 +169,20 @@ def write(obj: dict[str, Any]) -> None:
     scenes = obj["scenes"]
     lines = ["RELIC LOOP — FAST-CUT CLOUDFLARE IMAGE JOB", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
     for c in obj["characters"]:
-        lines.append(f"- {c['name']}: {c['appearance']}. Personality: {c['personality']}")
+        lines.append(f"- {c['name']}: {c['appearance']}")
     lines += ["", "LOCATIONS:"] + [f"- {x}" for x in obj["locations"]] + ["", "IMAGE BEATS:"]
     for s in scenes:
-        lines += [f"Beat {s['number']} — {s['duration_seconds']}s", f"Beat text: {s['beat_text']}", f"Narration: {s['narration']}", f"Visual: {s['visual_prompt']}", f"Camera: {s['camera']}", f"Action: {s['action']}", f"Transition: {s.get('transition', '')}", ""]
+        lines += [f"Beat {s['number']} — {s['duration_seconds']}s", f"Beat text: {s['beat_text']}", f"Narration: {s['narration']}", f"Visual: {s['visual_prompt']}", f"Camera: {s['camera']}", f"Action: {s['action']}", ""]
     lines += ["VOICEOVER:", obj["narration"], ""]
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_fast_cut_image_short",
-        "version": 4,
+        "version": 5,
         "title": obj["title"],
         "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
         "image_beat_count": len(scenes),
         "minimum_image_beats": 20,
-        "target_image_beats": "25-40",
+        "target_image_beats": "20",
         "flow_template": "Storyboard Studio",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
