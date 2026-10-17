@@ -1,4 +1,4 @@
-"""Generate Relic Loop fast-cut Shorts images with a hard visual style lock."""
+"""Generate Relic Loop story Short images with a hard visual style lock."""
 from __future__ import annotations
 
 import base64
@@ -111,13 +111,7 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
 
 
 def _ocr_candidates(path: Path) -> list[tuple[str, float]]:
-    """Return plausible OCR words rather than treating every OCR hallucination as text.
-
-    Cartoon linework frequently produces one- or two-character false positives. We only
-    treat OCR as evidence of story text when it produces either multiple plausible words,
-    or one longer high-confidence word. This keeps the no-text safety gate while avoiding
-    rejection of clean stickman art because Tesseract guessed a tiny fragment of a line.
-    """
+    """Return plausible OCR words rather than treating every OCR hallucination as text."""
     if not OCR_STRICT:
         return []
     proc = subprocess.run(
@@ -146,20 +140,14 @@ def _ocr_has_text(path: Path) -> bool:
     try:
         candidates = _ocr_candidates(path)
     except Exception:
-        # A broken OCR installation should not turn the entire render into a hard failure.
-        # The prompt-level no-text guard remains active, so accept the image and continue.
         return False
 
     strong = [word for word, conf in candidates if conf >= 70 and len(word) >= 4]
     medium = [word for word, conf in candidates if conf >= 60 and len(word) >= 3]
-
-    # Two or more plausible words are strong evidence of actual rendered text.
     if len(medium) >= 2:
         return True
-    # One long, high-confidence OCR word is also meaningful.
     if strong:
         return True
-    # A single short/low-confidence fragment is usually a false positive in cartoon art.
     return False
 
 
@@ -185,7 +173,7 @@ def _scene_prompt(scene: dict, characters: list[dict], locations: list[str], att
             "use blank surfaces, generic objects and simple shapes. Do not create signs, labels, "
             "menus, posters, packaging, screens with text, letters, numbers or symbols.\n"
         )
-    return f"""Create ONE vertical 9:16 image for a fast-cut Relic Loop absurd-comedy Short.
+    return f"""Create ONE vertical 9:16 image for a Relic Loop absurd-comedy Short.
 
 {STYLE_LOCK}
 
@@ -212,8 +200,7 @@ standing in the location. Use a strong, readable composition and expressive pose
 {retry_note}
 Do not add any extra characters, props, locations, story events or visual jokes that
 are not useful to this beat. Do not turn this into a poster, thumbnail or character sheet.
-This is a single frame from an animated story, so it must look like a real shot from
-one continuous 2D cartoon Short.""".strip()
+This is a single shot from one continuous 2D cartoon Short.""".strip()
 
 
 def main() -> None:
@@ -222,13 +209,13 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if len(scenes) < 20:
-        raise SystemExit(f"Refusing to render only {len(scenes)} beats; minimum is 20")
+    if not 12 <= len(scenes) <= 16:
+        raise SystemExit(f"Refusing to render {len(scenes)} beats; expected 12-16")
 
     refs = _load_reference()
     manifest = {
         "type": "relic_loop_cloudflare_image_render",
-        "version": 3,
+        "version": 4,
         "title": package.get("title"),
         "width": WIDTH,
         "height": HEIGHT,
