@@ -1,4 +1,4 @@
-"""Generate Relic Loop story Short images with a hard visual style lock."""
+"""Generate Relic Loop story Short images with a hard visual and story-truth lock."""
 from __future__ import annotations
 
 import base64
@@ -31,19 +31,18 @@ RELIC LOOP MASTER VISUAL STYLE — DO NOT REDESIGN:
 modern hand-drawn 2D stickman animation illustration, based on the supplied Relic Loop
 stickman character reference: simple round head, simple tapered torso, thin expressive
 limbs, clean slightly imperfect black ink linework, minimal oval eyes, highly expressive
-mouth/eyebrow shapes, readable hands and exaggerated body language. Keep the character
-simple; spend visual complexity on the action, environment, perspective and composition.
-Clean graphic cartoon rendering with subtle flat-to-soft 2D shading, restrained color,
-clear silhouettes, believable but simplified environments, strong foreground/background
-separation, energetic comedy timing, dynamic perspective and polished Shorts storyboard
-quality. Vertical 9:16 composition. The character identity must remain stable between
-beats; do not redesign the head, body proportions or line language.
+mouth/eyebrow shapes, readable hands and exaggerated body language. Keep the human
+protagonist simple; spend visual complexity on the exact action, environment, perspective
+and composition. Clean graphic cartoon rendering with subtle flat-to-soft 2D shading,
+restrained color, clear silhouettes, believable but simplified environments, strong
+foreground/background separation, energetic comedy timing, dynamic perspective and
+polished Shorts storyboard quality. Vertical 9:16 composition. Character identity must
+remain stable between beats; do not redesign head, body proportions or line language.
 
 SHOT LANGUAGE:
-Use purposeful shot variation: wide establishing shot, medium action shot, close-up
-reaction, extreme close-up detail, over-the-shoulder reveal, low/high angle, side view,
-front view, and dramatic perspective when the beat benefits from it. Never use camera
-variation just for decoration: framing must make the current joke/action clearer.
+Use purposeful variation such as wide establishing, medium action, close reaction,
+extreme detail, over-the-shoulder reveal, low/high angle or dramatic perspective only
+when it makes the current story action clearer. Framing must serve the exact beat.
 
 ABSOLUTE STYLE EXCLUSIONS:
 no photorealism, no live action, no stock photography, no anime, no manga, no Pixar/3D,
@@ -55,8 +54,8 @@ NO_TEXT = """
 NO STORY TEXT: do not render captions, subtitles, title cards, speech bubbles, labels,
 logos, watermarks, UI, signs with readable words, written explanations, or typography.
 The image must communicate the beat through visible action, facial expression, objects,
-composition and cause/effect. If incidental environmental writing appears naturally,
-it must be tiny, non-readable and never plot-bearing.
+composition and cause/effect. If incidental environmental writing appears naturally, it
+must be tiny, non-readable and never plot-bearing.
 """.strip()
 
 STORY_TEXT_REQUEST_RE = re.compile(
@@ -111,7 +110,6 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
 
 
 def _ocr_candidates(path: Path) -> list[tuple[str, float]]:
-    """Return plausible OCR words rather than treating every OCR hallucination as text."""
     if not OCR_STRICT:
         return []
     proc = subprocess.run(
@@ -141,14 +139,9 @@ def _ocr_has_text(path: Path) -> bool:
         candidates = _ocr_candidates(path)
     except Exception:
         return False
-
     strong = [word for word, conf in candidates if conf >= 70 and len(word) >= 4]
     medium = [word for word, conf in candidates if conf >= 60 and len(word) >= 3]
-    if len(medium) >= 2:
-        return True
-    if strong:
-        return True
-    return False
+    return bool(len(medium) >= 2 or strong)
 
 
 def _reference_blurb() -> str:
@@ -156,22 +149,29 @@ def _reference_blurb() -> str:
         "Use the supplied Relic Loop character reference as the identity anchor. Preserve "
         "its round head, simple tapered torso, thin limbs, simple oval eyes, black expressive "
         "ink linework, hand-drawn asymmetry, minimal facial marks, readable hands and "
-        "exaggerated poses. Do not redesign the character between beats."
+        "exaggerated poses. The same human protagonist must look like the same person in every beat."
     )
 
 
-def _scene_prompt(scene: dict, characters: list[dict], locations: list[str], attempt: int = 1) -> str:
+def _scene_prompt(scene: dict, characters: list[dict], locations: list[str], previous_scene: dict | None = None, attempt: int = 1) -> str:
     cast = "; ".join(
-        f"{c.get('name','character')}: {c.get('appearance','simple Relic Loop stickman')}"
+        f"{c.get('name','protagonist')}: {c.get('appearance','simple human Relic Loop stickman')}"
         for c in characters
     )
+    continuity = ""
+    if previous_scene:
+        continuity = f"""
+PREVIOUS STORY BEAT FOR CONTINUITY:
+{previous_scene.get('beat_text','')}
+The current image must be the direct next moment, consequence or reaction from that beat.
+Do not invent a new unrelated event.
+"""
     retry_note = ""
     if attempt > 1:
         retry_note = (
-            "\nTEXT-CLEAN REGENERATION: This is a replacement frame because the previous frame "
-            "looked text-like to an automated checker. Make the environment visually clean: "
-            "use blank surfaces, generic objects and simple shapes. Do not create signs, labels, "
-            "menus, posters, packaging, screens with text, letters, numbers or symbols.\n"
+            "\nTEXT-CLEAN REGENERATION: The previous frame looked text-like. Use blank surfaces, "
+            "generic objects and simple shapes. Do not create signs, labels, menus, posters, "
+            "packaging, screens with text, letters, numbers or symbols.\n"
         )
     return f"""Create ONE vertical 9:16 image for a Relic Loop absurd-comedy Short.
 
@@ -184,23 +184,29 @@ CAST CONTINUITY:
 
 LOCATIONS AVAILABLE:
 {', '.join(str(x) for x in locations)}
+{continuity}
 
-CURRENT BEAT — THIS IS THE ONLY STORY MOMENT TO ILLUSTRATE:
+CURRENT BEAT — THIS IS THE ONLY MOMENT TO ILLUSTRATE:
 Beat text: {scene.get('beat_text','')}
-Narration: {scene.get('narration','')}
+Narration for this shot: {scene.get('narration','')}
 Visible action: {scene.get('action','')}
 Camera/composition: {scene.get('camera','')}
 
-Make the exact action unmistakable. If the beat says a character turns, show the turn.
-If something moves, show the movement. If the character reacts, show the reaction.
-If an object changes state, show the changed state. Do not merely show the character
-standing in the location. Use a strong, readable composition and expressive pose.
+NARRATION IS THE SOURCE OF TRUTH.
+Reenact the current beat literally. Do not summarize it and do not invent a visual joke.
+If the protagonist is running, visibly show the running. If he drops something, show it
+being dropped or lying where it landed. If he boards a vehicle, show him boarding it. If
+he realizes a mistake, show the relevant situation plus his exact reaction. If another
+person is required by the narration, show that person; otherwise do not add them.
+
+The frame must clearly answer: WHO is present, WHERE are they, WHAT exactly are they doing,
+and WHAT just happened to cause this moment?
 
 {NO_TEXT}
 {retry_note}
-Do not add any extra characters, props, locations, story events or visual jokes that
-are not useful to this beat. Do not turn this into a poster, thumbnail or character sheet.
-This is a single shot from one continuous 2D cartoon Short.""".strip()
+Do not add extra characters, props, locations, plot events or unrelated visual gags.
+Do not turn this into a poster, thumbnail or character sheet. This is one literal shot
+from one continuous human-centered cartoon story.""".strip()
 
 
 def main() -> None:
@@ -215,7 +221,7 @@ def main() -> None:
     refs = _load_reference()
     manifest = {
         "type": "relic_loop_cloudflare_image_render",
-        "version": 4,
+        "version": 5,
         "title": package.get("title"),
         "width": WIDTH,
         "height": HEIGHT,
@@ -224,20 +230,20 @@ def main() -> None:
         "character_reference": str(REFERENCE_B64) if refs else None,
         "text_gate": "probable_text_ocr_with_retry",
         "ocr_retries": OCR_RETRIES,
+        "story_truth": "literal_scene_reenactment",
         "beats": [],
     }
 
+    previous_scene = None
     for index, scene in enumerate(scenes, 1):
-        scene_fields = " ".join(
-            str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action", "camera")
-        )
+        scene_fields = " ".join(str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action", "camera"))
         if STORY_TEXT_REQUEST_RE.search(scene_fields):
             raise SystemExit(f"Prompt safety gate failed for beat {index}: deliberate story text requested")
 
         output = IMAGE_DIR / f"beat_{index:03d}.png"
         accepted = False
         for attempt in range(1, OCR_RETRIES + 1):
-            prompt = _scene_prompt(scene, package.get("characters") or [], package.get("locations") or [], attempt)
+            prompt = _scene_prompt(scene, package.get("characters") or [], package.get("locations") or [], previous_scene, attempt)
             blob = _cloudflare(prompt, refs)
             output.write_bytes(blob)
             if not _ocr_has_text(output):
@@ -249,21 +255,20 @@ def main() -> None:
                 time.sleep(2 * attempt)
 
         if not accepted:
-            raise SystemExit(
-                f"Beat {index} produced probable story text in {OCR_RETRIES} consecutive frames; refusing to use it"
-            )
+            raise SystemExit(f"Beat {index} produced probable story text in {OCR_RETRIES} consecutive frames; refusing to use it")
 
         manifest["beats"].append({
             "number": index,
             "duration_seconds": float(scene.get("duration_seconds", 1.0)),
             "image": str(output),
             "prompt": prompt,
+            "beat_text": scene.get("beat_text"),
+            "narration": scene.get("narration"),
         })
+        previous_scene = scene
         print(f"[IMAGE {index}/{len(scenes)}] accepted")
 
-    (RUN / "cloudflare_image_manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    (RUN / "cloudflare_image_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[IMAGE] Rendered {len(scenes)} images to {IMAGE_DIR}")
 
 
