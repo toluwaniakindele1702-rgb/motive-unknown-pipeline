@@ -71,6 +71,31 @@ def _load_reference() -> list[tuple[str, bytes]]:
     return [("relic_loop_character_reference.jpg", blob)] if blob else []
 
 
+def _response_diagnostic(response: requests.Response) -> str:
+    """Return a compact, useful Cloudflare diagnostic without leaking secrets."""
+    body = response.text.strip()
+    if not body:
+        body = "<empty response body>"
+    try:
+        payload = response.json()
+        # Cloudflare commonly returns useful success/errors under success/errors/messages.
+        errors = payload.get("errors") if isinstance(payload, dict) else None
+        messages = payload.get("messages") if isinstance(payload, dict) else None
+        result_keys = list((payload.get("result") or {}).keys()) if isinstance(payload, dict) and isinstance(payload.get("result"), dict) else []
+        parts = [f"status={response.status_code}"]
+        if errors:
+            parts.append(f"errors={json.dumps(errors, ensure_ascii=False)}")
+        if messages:
+            parts.append(f"messages={json.dumps(messages, ensure_ascii=False)}")
+        if result_keys:
+            parts.append(f"result_keys={result_keys}")
+        if len(parts) == 1:
+            parts.append(f"json={json.dumps(payload, ensure_ascii=False)[:1200]}")
+        return " | ".join(parts)
+    except ValueError:
+        return f"status={response.status_code} | body={body[:1200]}"
+
+
 def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> bytes:
     if not ACCOUNT_ID or not TOKEN:
         raise RuntimeError("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
@@ -83,21 +108,64 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
             files[f"input_image_{idx}"] = (name, blob, "image/jpeg")
     headers = {"Authorization": f"Bearer {TOKEN}"}
     last = None
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
+            print(f"[CLOUDFLARE] request attempt {attempt}/{MAX_RETRIES} model={MODEL} size={WIDTH}x{HEIGHT}")
             r = requests.post(url, headers=headers, files=files, timeout=180)
+            diagnostic = _response_diagnostic(r)
+            print(f"[CLOUDFLARE] HTTP response: {diagnostic}")
+
             if r.status_code == 429:
-                time.sleep(8 * (attempt + 1)); continue
-            r.raise_for_status()
-            image = ((r.json().get("result") or {}).get("image"))
+                last = RuntimeError(f"Cloudflare rate limit: {diagnostic}")
+                if attempt < MAX_RETRIES:
+                    wait = 8 * attempt
+                    print(f"[CLOUDFLARE] rate limited; retrying in {wait}s")
+                    time.sleep(wait)
+                    continue
+                break
+
+            if r.status_code >= 500:
+                last = RuntimeError(f"Cloudflare server error: {diagnostic}")
+                if attempt < MAX_RETRIES:
+                    wait = 4 * attempt
+                    print(f"[CLOUDFLARE] server error; retrying in {wait}s")
+                    time.sleep(wait)
+                    continue
+                break
+
+            if not r.ok:
+                raise RuntimeError(f"Cloudflare API rejected request: {diagnostic}")
+
+            try:
+                payload = r.json()
+            except ValueError as exc:
+                raise RuntimeError(f"Cloudflare returned non-JSON success response: {diagnostic}") from exc
+
+            image = ((payload.get("result") or {}).get("image")) if isinstance(payload, dict) else None
             if not image:
-                raise RuntimeError("Cloudflare response had no result.image")
-            return base64.b64decode(image)
+                raise RuntimeError(f"Cloudflare response had no result.image: {diagnostic}")
+
+            try:
+                decoded = base64.b64decode(image, validate=True)
+            except Exception as exc:
+                raise RuntimeError("Cloudflare returned an invalid base64 image payload") from exc
+            if not decoded:
+                raise RuntimeError("Cloudflare returned an empty image payload")
+            return decoded
+
+        except requests.RequestException as exc:
+            last = RuntimeError(f"Cloudflare HTTP transport error: {type(exc).__name__}: {exc}")
+            print(f"[CLOUDFLARE] transport error: {last}")
+            if attempt < MAX_RETRIES:
+                wait = 4 * attempt
+                time.sleep(wait)
         except Exception as exc:
             last = exc
-            if attempt + 1 < MAX_RETRIES:
-                time.sleep(4 * (attempt + 1))
-    raise RuntimeError(f"Cloudflare image generation failed: {last}")
+            print(f"[CLOUDFLARE] attempt failed: {type(exc).__name__}: {exc}")
+            if attempt < MAX_RETRIES:
+                time.sleep(4 * attempt)
+
+    raise RuntimeError(f"Cloudflare image generation failed after {MAX_RETRIES} attempts: {last}")
 
 
 def _ocr_has_text(path: Path) -> bool:
@@ -123,8 +191,6 @@ def _ocr_has_text(path: Path) -> bool:
                 candidates.append((word, conf))
         strong = [w for w, c in candidates if c >= 78 and len(w) >= 4]
         medium = [w for w, c in candidates if c >= 68 and len(w) >= 4]
-        # Require multiple confident words. This avoids rejecting cartoon linework that
-        # Tesseract interprets as letters. A single false positive is not text evidence.
         return len(strong) >= 2 or len(medium) >= 3
     except Exception:
         return False
@@ -186,13 +252,14 @@ def main() -> None:
 
     refs = _load_reference()
     manifest = {
-        "type": "relic_loop_cloudflare_image_render", "version": 6,
+        "type": "relic_loop_cloudflare_image_render", "version": 7,
         "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
         "reference_mode": "character_reference_plus_canonical_style_lock" if refs else "canonical_style_lock",
         "character_reference": str(REFERENCE_B64) if refs else None,
         "text_gate": "heuristic_ocr_soft_gate_with_retry",
         "ocr_retries": OCR_RETRIES,
         "ocr_policy": "warn_and_regenerate; never cancel a run solely because OCR suspects text",
+        "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
         "story_truth": "literal_scene_reenactment", "beats": [],
     }
 
@@ -217,9 +284,6 @@ def main() -> None:
             if attempt < OCR_RETRIES:
                 time.sleep(2 * attempt)
 
-        # IMPORTANT: OCR is a heuristic, not a hard validator. If the model repeatedly
-        # produces a false positive, keep the final generated frame rather than throwing
-        # away the whole successful story/render run.
         if not accepted:
             accepted = output.exists() and output.stat().st_size > 0
             if accepted:
