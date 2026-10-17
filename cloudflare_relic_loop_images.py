@@ -1,4 +1,4 @@
-"""Generate Relic Loop story Short images with a hard visual and story-truth lock."""
+"""Generate Relic Loop story Short images with story-truth and narration-timing locks."""
 from __future__ import annotations
 
 import base64
@@ -72,13 +72,9 @@ def _load_reference() -> list[tuple[str, bytes]]:
 
 
 def _response_diagnostic(response: requests.Response) -> str:
-    """Return a compact, useful Cloudflare diagnostic without leaking secrets."""
-    body = response.text.strip()
-    if not body:
-        body = "<empty response body>"
+    body = response.text.strip() or "<empty response body>"
     try:
         payload = response.json()
-        # Cloudflare commonly returns useful success/errors under success/errors/messages.
         errors = payload.get("errors") if isinstance(payload, dict) else None
         messages = payload.get("messages") if isinstance(payload, dict) else None
         result_keys = list((payload.get("result") or {}).keys()) if isinstance(payload, dict) and isinstance(payload.get("result"), dict) else []
@@ -114,7 +110,6 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
             r = requests.post(url, headers=headers, files=files, timeout=180)
             diagnostic = _response_diagnostic(r)
             print(f"[CLOUDFLARE] HTTP response: {diagnostic}")
-
             if r.status_code == 429:
                 last = RuntimeError(f"Cloudflare rate limit: {diagnostic}")
                 if attempt < MAX_RETRIES:
@@ -123,7 +118,6 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
                     time.sleep(wait)
                     continue
                 break
-
             if r.status_code >= 500:
                 last = RuntimeError(f"Cloudflare server error: {diagnostic}")
                 if attempt < MAX_RETRIES:
@@ -132,19 +126,15 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
                     time.sleep(wait)
                     continue
                 break
-
             if not r.ok:
                 raise RuntimeError(f"Cloudflare API rejected request: {diagnostic}")
-
             try:
                 payload = r.json()
             except ValueError as exc:
                 raise RuntimeError(f"Cloudflare returned non-JSON success response: {diagnostic}") from exc
-
             image = ((payload.get("result") or {}).get("image")) if isinstance(payload, dict) else None
             if not image:
                 raise RuntimeError(f"Cloudflare response had no result.image: {diagnostic}")
-
             try:
                 decoded = base64.b64decode(image, validate=True)
             except Exception as exc:
@@ -152,24 +142,20 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
             if not decoded:
                 raise RuntimeError("Cloudflare returned an empty image payload")
             return decoded
-
         except requests.RequestException as exc:
             last = RuntimeError(f"Cloudflare HTTP transport error: {type(exc).__name__}: {exc}")
             print(f"[CLOUDFLARE] transport error: {last}")
             if attempt < MAX_RETRIES:
-                wait = 4 * attempt
-                time.sleep(wait)
+                time.sleep(4 * attempt)
         except Exception as exc:
             last = exc
             print(f"[CLOUDFLARE] attempt failed: {type(exc).__name__}: {exc}")
             if attempt < MAX_RETRIES:
                 time.sleep(4 * attempt)
-
     raise RuntimeError(f"Cloudflare image generation failed after {MAX_RETRIES} attempts: {last}")
 
 
 def _ocr_has_text(path: Path) -> bool:
-    """Heuristic only. OCR is never allowed to cancel an otherwise valid run."""
     if not OCR_STRICT:
         return False
     try:
@@ -247,12 +233,12 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if not 12 <= len(scenes) <= 16:
-        raise SystemExit(f"Refusing to render {len(scenes)} beats; expected 12-16")
+    if not 10 <= len(scenes) <= 18:
+        raise SystemExit(f"Refusing to render {len(scenes)} beats; expected 10-18")
 
     refs = _load_reference()
     manifest = {
-        "type": "relic_loop_cloudflare_image_render", "version": 7,
+        "type": "relic_loop_cloudflare_image_render", "version": 8,
         "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
         "reference_mode": "character_reference_plus_canonical_style_lock" if refs else "canonical_style_lock",
         "character_reference": str(REFERENCE_B64) if refs else None,
@@ -260,7 +246,9 @@ def main() -> None:
         "ocr_retries": OCR_RETRIES,
         "ocr_policy": "warn_and_regenerate; never cancel a run solely because OCR suspects text",
         "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
-        "story_truth": "literal_scene_reenactment", "beats": [],
+        "story_truth": "literal_scene_reenactment",
+        "timing_truth": "beat durations are derived from contiguous narration excerpts; assembly recalculates from actual TTS duration",
+        "beats": [],
     }
 
     previous_scene = None
@@ -268,7 +256,6 @@ def main() -> None:
         scene_fields = " ".join(str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action", "camera"))
         if STORY_TEXT_REQUEST_RE.search(scene_fields):
             raise SystemExit(f"Prompt safety gate failed for beat {index}: deliberate story text requested")
-
         output = IMAGE_DIR / f"beat_{index:03d}.png"
         accepted = False
         ocr_suspected = False
@@ -283,19 +270,20 @@ def main() -> None:
             print(f"[IMAGE {index}/{len(scenes)}] OCR suspected text; regenerating ({attempt}/{OCR_RETRIES})")
             if attempt < OCR_RETRIES:
                 time.sleep(2 * attempt)
-
         if not accepted:
             accepted = output.exists() and output.stat().st_size > 0
             if accepted:
                 print(f"[IMAGE {index}/{len(scenes)}] OCR remained suspicious after retries; ACCEPTING final frame to protect run continuity")
-
         if not accepted:
             raise SystemExit(f"Beat {index} did not produce an image")
-
         manifest["beats"].append({
-            "number": index, "duration_seconds": float(scene.get("duration_seconds", 1.0)),
-            "image": str(output), "prompt": prompt, "beat_text": scene.get("beat_text"),
-            "narration": scene.get("narration"), "ocr_suspected": ocr_suspected,
+            "number": index,
+            "duration_seconds": float(scene.get("duration_seconds", 1.0)),
+            "image": str(output),
+            "prompt": prompt,
+            "beat_text": scene.get("beat_text"),
+            "narration": scene.get("narration"),
+            "ocr_suspected": ocr_suspected,
         })
         previous_scene = scene
         print(f"[IMAGE {index}/{len(scenes)}] accepted")
