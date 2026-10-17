@@ -36,6 +36,7 @@ jobs:
       RELIC_LOOP_IMAGE_RETRIES: '3'
       RELIC_LOOP_OCR_RETRIES: '4'
       RELIC_LOOP_OCR_STRICT: '1'
+      RELIC_LOOP_VOICE: 'en-US-AndrewNeural'
       PYTHONUNBUFFERED: '1'
     steps:
       - name: Checkout
@@ -50,9 +51,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow
+          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow edge-tts
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng tesseract-ocr
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
 
       - name: Decode approved Relic Loop character reference
         shell: bash
@@ -73,7 +74,10 @@ jobs:
           ffmpeg -version | head -n 1
           ffmpeg -filters | grep -q zoompan || { echo "FFmpeg zoompan filter is missing"; exit 1; }
           tesseract --version | head -n 1
-          espeak-ng --version
+          python - <<'PY'
+          import edge_tts
+          print('edge-tts:', getattr(edge_tts, '__version__', 'installed'))
+          PY
 
       - name: Validate Python files before spending API quota
         run: |
@@ -81,7 +85,7 @@ jobs:
           python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py
           echo "Python syntax check passed."
 
-      - name: Generate story and fast-cut storyboard
+      - name: Generate story and paced storyboard
         run: |
           set -o pipefail
           python relic_loop_shorts_fixed.py 2>&1 | tee shorts_flow.log
@@ -91,7 +95,7 @@ jobs:
           set -o pipefail
           python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
 
-      - name: Assemble Short with robust camera motion
+      - name: Assemble Short with robust camera motion and neural narration
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
@@ -102,7 +106,7 @@ jobs:
           {
             echo "## Relic Loop Image Short"
             echo
-            echo "Approved hand-drawn stickman reference, fast image changes, probable-text OCR rejection with regeneration, and robust push-in/pull-out camera motion with a static fallback."
+            echo "Paced 12-16-shot absurd story, approved hand-drawn stickman reference, probable-text OCR rejection with regeneration, push-in/pull-out camera motion with a static fallback, and natural neural narration."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
@@ -130,6 +134,7 @@ jobs:
             state/current_run/cloudflare_image_manifest.json
             state/current_run/relic_loop_short.mp4
             state/current_run/voiceover.wav
+            state/current_run/voiceover_neural.mp3
             shorts_flow.log
             cloudflare_images.log
             assemble.log
