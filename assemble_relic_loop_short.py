@@ -1,8 +1,9 @@
-"""Assemble generated Relic Loop story beats into a vertical MP4 with natural narration and robust camera motion."""
+"""Assemble Relic Loop Shorts: narration is the master timeline; visuals follow it."""
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,41 +37,33 @@ def run(cmd: list[str]) -> None:
 
 def media_duration(path: Path) -> float:
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
         text=True, capture_output=True, check=True,
     )
     return float(result.stdout.strip())
 
 
+def _norm(text: str) -> str:
+    return " ".join(str(text or "").split())
+
+
 async def _synthesize(text: str) -> None:
-    communicate = edge_tts.Communicate(
-        text,
-        VOICE,
-        rate=VOICE_RATE,
-        volume=VOICE_VOLUME,
-        pitch=VOICE_PITCH,
-    )
+    communicate = edge_tts.Communicate(text, VOICE, rate=VOICE_RATE, volume=VOICE_VOLUME, pitch=VOICE_PITCH)
     await communicate.save(str(TTS_MP3))
 
 
 def make_voiceover(text: str) -> None:
-    text = " ".join(str(text or "").split())
+    text = _norm(text)
     if not text:
         raise SystemExit("Narration is empty; refusing to create a silent Short")
     if len(text.split()) < 50:
-        raise SystemExit("Narration is suspiciously short; refusing to create a silent/empty Short")
-
+        raise SystemExit("Narration is suspiciously short; refusing to create a broken Short")
     print(f"[VOICE] Generating natural neural narration with {VOICE}")
     TTS_MP3.unlink(missing_ok=True)
     asyncio.run(_synthesize(text))
     if not TTS_MP3.exists() or TTS_MP3.stat().st_size < 1000:
         raise SystemExit("Neural TTS produced no usable audio")
-
-    run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-i", str(TTS_MP3), "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(AUDIO),
-    ])
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(TTS_MP3), "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(AUDIO)])
     if not AUDIO.exists() or AUDIO.stat().st_size < 10000:
         raise SystemExit("Neural TTS conversion produced no usable WAV")
     duration = media_duration(AUDIO)
@@ -93,7 +86,6 @@ def validate_image(image: Path, index: int) -> None:
 def make_clip(image: Path, duration: float, index: int) -> Path:
     out = FRAMES / f"clip_{index:03d}.mp4"
     frames = max(1, round(duration * FPS))
-
     if index % 2:
         zoom = "min(zoom+0.0018,1.07)"
     else:
@@ -104,23 +96,17 @@ def make_clip(image: Path, duration: float, index: int) -> Path:
         f"d={frames}:s={W}x{H}:fps={FPS},format=yuv420p"
     )
     try:
-        run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-loop", "1", "-i", str(image), "-vf", vf,
-            "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast",
-            "-crf", "22", "-pix_fmt", "yuv420p", str(out),
-        ])
+        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", vf, "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out)])
     except subprocess.CalledProcessError:
         print(f"[ASSEMBLY] camera-motion filter failed on beat {index}; using safe static fallback")
         out.unlink(missing_ok=True)
         fallback = f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
-        run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-loop", "1", "-i", str(image), "-vf", fallback,
-            "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast",
-            "-crf", "22", "-pix_fmt", "yuv420p", str(out),
-        ])
+        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", fallback, "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out)])
     return out
+
+
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\b[\w'’-]+\b", _norm(text)))
 
 
 def main() -> None:
@@ -132,57 +118,85 @@ def main() -> None:
     data = json.loads(MANIFEST.read_text(encoding="utf-8"))
     story = json.loads(STORY.read_text(encoding="utf-8"))
     beats = data.get("beats") or []
-    if not 12 <= len(beats) <= 16:
-        raise SystemExit(f"Refusing to assemble {len(beats)} beats; expected 12-16")
+    narration = _norm(story.get("narration", ""))
+    if not 10 <= len(beats) <= 18:
+        raise SystemExit(f"Refusing to assemble {len(beats)} beats; expected 10-18")
+    if _word_count(narration) < 50:
+        raise SystemExit("Master narration is too short")
+
+    # Generate the actual narration FIRST. This duration is the master video duration.
+    make_voiceover(narration)
+    audio_duration = media_duration(AUDIO)
+    total_words = _word_count(narration)
+
+    # Scene narration is an ordered partition of the master narration. Allocate each image
+    # a proportional share of the real TTS duration. There is no fixed image timer.
+    beat_word_counts = [_word_count(str(b.get("narration", ""))) for b in beats]
+    if sum(beat_word_counts) != total_words:
+        raise SystemExit(
+            f"Beat narration does not cover the complete story: beat_words={sum(beat_word_counts)}, master_words={total_words}. "
+            "Refusing to make a video where visuals and narration drift apart."
+        )
+    if any(count <= 0 for count in beat_word_counts):
+        raise SystemExit("Every visual beat must contain narration text")
+
+    # Proportional timing follows the actual TTS duration while preserving the story order.
+    raw_durations = [audio_duration * count / total_words for count in beat_word_counts]
+    durations = []
+    for d in raw_durations:
+        # Do not force a cadence. This only prevents pathological sub-frame clips.
+        durations.append(max(0.20, d))
+    scale = audio_duration / sum(durations)
+    durations = [d * scale for d in durations]
 
     shutil.rmtree(FRAMES, ignore_errors=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
-
     clips: list[Path] = []
-    for i, beat in enumerate(beats, 1):
+    for i, (beat, duration) in enumerate(zip(beats, durations), 1):
         image = Path(beat["image"])
         if not image.exists():
             raise SystemExit(f"Missing image for beat {i}: {image}")
         validate_image(image, i)
-        duration = float(beat["duration_seconds"])
-        if not 1.4 <= duration <= 3.2:
-            raise SystemExit(f"Invalid beat {i} duration: {duration}")
         clips.append(make_clip(image, duration, i))
+        print(f"[TIMING] beat {i}: {beat_word_counts[i-1]} words -> {duration:.2f}s")
 
     concat = RUN / "clips.txt"
     concat.write_text("\n".join(f"file '{p.resolve().as_posix()}'" for p in clips) + "\n", encoding="utf-8")
     silent = RUN / "silent_short.mp4"
-    run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "concat", "-safe", "0", "-i", str(concat),
-        "-fflags", "+genpts", "-c", "copy", str(silent),
-    ])
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-fflags", "+genpts", "-c", "copy", str(silent)])
     if not silent.exists() or silent.stat().st_size == 0:
         raise SystemExit("Silent video assembly produced no MP4")
 
-    make_voiceover(story.get("narration", ""))
     video_duration = media_duration(silent)
-    audio_duration = media_duration(AUDIO)
-    if audio_duration < video_duration * 0.82 or audio_duration > video_duration * 1.18:
-        raise SystemExit(
-            f"Narration/video timing mismatch: narration={audio_duration:.2f}s, video={video_duration:.2f}s; "
-            "refusing to publish a badly synced Short"
-        )
+    # The silent video must match the narration master duration, not an arbitrary storyboard target.
+    if abs(video_duration - audio_duration) > 0.35:
+        raise SystemExit(f"Story timing mismatch: narration={audio_duration:.2f}s, visual timeline={video_duration:.2f}s")
 
-    run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-i", str(silent), "-i", str(AUDIO),
-        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
-        "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(OUTPUT),
-    ])
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(silent), "-i", str(AUDIO), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-t", f"{audio_duration:.3f}", "-movflags", "+faststart", str(OUTPUT)])
     if not OUTPUT.exists() or OUTPUT.stat().st_size == 0:
         raise SystemExit("Final video assembly produced no MP4")
 
-    final_audio = media_duration(OUTPUT)
-    if final_audio < 5:
-        raise SystemExit("Final MP4 audio track is missing or unusably short")
+    final_duration = media_duration(OUTPUT)
+    if abs(final_duration - audio_duration) > 0.35:
+        raise SystemExit(f"Final duration mismatch: narration={audio_duration:.2f}s, final={final_duration:.2f}s")
+    if final_duration < 5:
+        raise SystemExit("Final MP4 is unusably short")
+
+    # Record the actual timing used so the artifact is auditable.
+    timing = {
+        "timing_policy": "narration_is_master_timeline",
+        "master_narration_seconds": audio_duration,
+        "master_narration_words": total_words,
+        "beats": [
+            {"number": i, "narration_words": beat_word_counts[i-1], "duration_seconds": round(durations[i-1], 3), "image": beats[i-1]["image"]}
+            for i in range(1, len(beats) + 1)
+        ],
+        "final_duration_seconds": final_duration,
+    }
+    (RUN / "timing_manifest.json").write_text(json.dumps(timing, indent=2), encoding="utf-8")
     print(f"[SHORT] READY: {OUTPUT}")
-    print(f"[SHORT] final duration: {final_audio:.2f}s")
+    print(f"[SHORT] narration-master duration: {audio_duration:.2f}s")
+    print(f"[SHORT] final duration: {final_duration:.2f}s")
 
 
 if __name__ == "__main__":
