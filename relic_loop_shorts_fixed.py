@@ -80,6 +80,7 @@ SCENE RULES:
 - beat_text, narration, visual_prompt and action must describe the SAME event.
 - visual_prompt must explicitly say "human stickman" or "stickman protagonist" and describe only visible things.
 - Every scene must contain the protagonist or a directly relevant visible consequence of his previous action.
+- Refer to the protagonist naturally by name or with a human reference such as he, she, him, her, the man, the guy, the person, or the protagonist. Do NOT force the name into every scene; natural pronouns are preferred for spoken storytelling.
 - Do not introduce a new prop, character, location or event unless the narration/story requires it.
 - Do not invent visual jokes that are absent from the narration.
 - No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
@@ -177,7 +178,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         errors.append("scene_count")
         return errors
     runtime = 0.0
-    protagonist_name = str(chars[0].get("name", "")) if isinstance(chars[0], dict) else ""
+    human_reference_pattern = re.compile(r"\b(?:he|him|his|she|her|hers|man|woman|boy|girl|guy|person|human|protagonist)\b")
     for i, s in enumerate(scenes, 1):
         if not isinstance(s, dict):
             errors.append(f"scene_{i}_object")
@@ -195,8 +196,11 @@ def validate(obj: dict[str, Any]) -> list[str]:
         combined = " ".join(str(s.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action")).lower()
         if "stickman" not in str(s.get("visual_prompt", "")).lower():
             errors.append(f"scene_{i}_stickman")
-        if protagonist_name and protagonist_name.lower() not in combined:
-            errors.append(f"scene_{i}_protagonist_missing")
+        # The old validator required the protagonist's exact name in every scene.
+        # That rejected natural storytelling where later scenes correctly use he/she/him/her.
+        # Require a human reference instead; the visual prompt still requires a stickman.
+        if not human_reference_pattern.search(combined):
+            errors.append(f"scene_{i}_protagonist_reference_missing")
         # The same event must be represented across all scene fields; reject obvious contradictions.
         if len(str(s.get("beat_text", ""))) < 12 or len(str(s.get("action", ""))) < 8:
             errors.append(f"scene_{i}_too_vague")
@@ -280,7 +284,7 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_story_image_short",
-        "version": 10,
+        "version": 11,
         "title": obj["title"],
         "runtime_seconds": runtime,
         "image_beat_count": len(scenes),
@@ -292,6 +296,7 @@ def write(obj: dict[str, Any]) -> None:
         "text_policy": "no_deliberate_story_text",
         "story_policy": "human_protagonist_cause_effect_absurd_comedy",
         "visual_policy": "narration_is_source_of_truth_literal_scene_reenactment",
+        "story_validator": "natural_human_reference_not_exact_name_every_scene",
         "media_generation": "cloudflare_images",
         "beat_policy": "new_image_on_meaningful_story_action_reaction_state_change_reveal_detail",
         "voice_policy": "natural_neural_narrator",
