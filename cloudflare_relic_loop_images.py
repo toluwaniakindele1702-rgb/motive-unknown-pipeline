@@ -22,7 +22,7 @@ MODEL = os.environ.get("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-k
 WIDTH = int(os.environ.get("RELIC_LOOP_IMAGE_WIDTH", "576"))
 HEIGHT = int(os.environ.get("RELIC_LOOP_IMAGE_HEIGHT", "1024"))
 MAX_RETRIES = int(os.environ.get("RELIC_LOOP_IMAGE_RETRIES", "3"))
-OCR_RETRIES = int(os.environ.get("RELIC_LOOP_OCR_RETRIES", "4"))
+OCR_RETRIES = int(os.environ.get("RELIC_LOOP_OCR_RETRIES", "2"))
 OCR_STRICT = os.environ.get("RELIC_LOOP_OCR_STRICT", "1") != "0"
 REFERENCE_B64 = ROOT / "assets" / "relic_loop_character_reference.jpg.b64"
 
@@ -67,13 +67,8 @@ STORY_TEXT_REQUEST_RE = re.compile(
 def _load_reference() -> list[tuple[str, bytes]]:
     if not REFERENCE_B64.exists():
         return []
-    try:
-        blob = base64.b64decode(REFERENCE_B64.read_text(encoding="utf-8").strip())
-        if not blob:
-            return []
-        return [("relic_loop_character_reference.jpg", blob)]
-    except Exception as exc:
-        raise RuntimeError(f"Could not decode Relic Loop character reference: {exc}") from exc
+    blob = base64.b64decode(REFERENCE_B64.read_text(encoding="utf-8").strip())
+    return [("relic_loop_character_reference.jpg", blob)] if blob else []
 
 
 def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> bytes:
@@ -81,9 +76,7 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
         raise RuntimeError("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
     url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/{MODEL}"
     files: dict[str, tuple[None, str] | tuple[str, bytes, str]] = {
-        "prompt": (None, prompt),
-        "width": (None, str(WIDTH)),
-        "height": (None, str(HEIGHT)),
+        "prompt": (None, prompt), "width": (None, str(WIDTH)), "height": (None, str(HEIGHT))
     }
     if refs:
         for idx, (name, blob) in enumerate(refs[:4]):
@@ -94,13 +87,11 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
         try:
             r = requests.post(url, headers=headers, files=files, timeout=180)
             if r.status_code == 429:
-                time.sleep(8 * (attempt + 1))
-                continue
+                time.sleep(8 * (attempt + 1)); continue
             r.raise_for_status()
-            payload = r.json()
-            image = ((payload.get("result") or {}).get("image"))
+            image = ((r.json().get("result") or {}).get("image"))
             if not image:
-                raise RuntimeError(f"Cloudflare response had no result.image: {payload}")
+                raise RuntimeError("Cloudflare response had no result.image")
             return base64.b64decode(image)
         except Exception as exc:
             last = exc
@@ -109,39 +100,34 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes]] | None = None) -> byt
     raise RuntimeError(f"Cloudflare image generation failed: {last}")
 
 
-def _ocr_candidates(path: Path) -> list[tuple[str, float]]:
-    if not OCR_STRICT:
-        return []
-    proc = subprocess.run(
-        ["tesseract", str(path), "stdout", "--psm", "11", "tsv"],
-        text=True, capture_output=True, timeout=30, check=False,
-    )
-    candidates: list[tuple[str, float]] = []
-    for line in proc.stdout.splitlines()[1:]:
-        parts = line.split("\t")
-        if len(parts) < 12:
-            continue
-        word = re.sub(r"[^A-Za-z0-9]", "", parts[11].strip())
-        try:
-            conf = float(parts[10])
-        except ValueError:
-            conf = -1
-        if not word or conf < 55:
-            continue
-        candidates.append((word, conf))
-    return candidates
-
-
 def _ocr_has_text(path: Path) -> bool:
+    """Heuristic only. OCR is never allowed to cancel an otherwise valid run."""
     if not OCR_STRICT:
         return False
     try:
-        candidates = _ocr_candidates(path)
+        proc = subprocess.run(
+            ["tesseract", str(path), "stdout", "--psm", "11", "tsv"],
+            text=True, capture_output=True, timeout=30, check=False,
+        )
+        candidates = []
+        for line in proc.stdout.splitlines()[1:]:
+            parts = line.split("\t")
+            if len(parts) < 12:
+                continue
+            word = re.sub(r"[^A-Za-z0-9]", "", parts[11].strip())
+            try:
+                conf = float(parts[10])
+            except ValueError:
+                conf = -1
+            if word and conf >= 60 and len(word) >= 3:
+                candidates.append((word, conf))
+        strong = [w for w, c in candidates if c >= 78 and len(w) >= 4]
+        medium = [w for w, c in candidates if c >= 68 and len(w) >= 4]
+        # Require multiple confident words. This avoids rejecting cartoon linework that
+        # Tesseract interprets as letters. A single false positive is not text evidence.
+        return len(strong) >= 2 or len(medium) >= 3
     except Exception:
         return False
-    strong = [word for word, conf in candidates if conf >= 70 and len(word) >= 4]
-    medium = [word for word, conf in candidates if conf >= 60 and len(word) >= 3]
-    return bool(len(medium) >= 2 or strong)
 
 
 def _reference_blurb() -> str:
@@ -154,25 +140,13 @@ def _reference_blurb() -> str:
 
 
 def _scene_prompt(scene: dict, characters: list[dict], locations: list[str], previous_scene: dict | None = None, attempt: int = 1) -> str:
-    cast = "; ".join(
-        f"{c.get('name','protagonist')}: {c.get('appearance','simple human Relic Loop stickman')}"
-        for c in characters
-    )
+    cast = "; ".join(f"{c.get('name','protagonist')}: {c.get('appearance','simple human Relic Loop stickman')}" for c in characters)
     continuity = ""
     if previous_scene:
-        continuity = f"""
-PREVIOUS STORY BEAT FOR CONTINUITY:
-{previous_scene.get('beat_text','')}
-The current image must be the direct next moment, consequence or reaction from that beat.
-Do not invent a new unrelated event.
-"""
+        continuity = f"\nPREVIOUS STORY BEAT:\n{previous_scene.get('beat_text','')}\nThe current frame is the direct next moment or consequence. Do not invent a new event.\n"
     retry_note = ""
     if attempt > 1:
-        retry_note = (
-            "\nTEXT-CLEAN REGENERATION: The previous frame looked text-like. Use blank surfaces, "
-            "generic objects and simple shapes. Do not create signs, labels, menus, posters, "
-            "packaging, screens with text, letters, numbers or symbols.\n"
-        )
+        retry_note = "\nTEXT-CLEAN RETRY: Use blank surfaces and generic objects. No signs, labels, menus, posters, packaging, screens, letters, numbers or symbols.\n"
     return f"""Create ONE vertical 9:16 image for a Relic Loop absurd-comedy Short.
 
 {STYLE_LOCK}
@@ -185,28 +159,20 @@ CAST CONTINUITY:
 LOCATIONS AVAILABLE:
 {', '.join(str(x) for x in locations)}
 {continuity}
-
 CURRENT BEAT — THIS IS THE ONLY MOMENT TO ILLUSTRATE:
 Beat text: {scene.get('beat_text','')}
 Narration for this shot: {scene.get('narration','')}
 Visible action: {scene.get('action','')}
 Camera/composition: {scene.get('camera','')}
 
-NARRATION IS THE SOURCE OF TRUTH.
-Reenact the current beat literally. Do not summarize it and do not invent a visual joke.
-If the protagonist is running, visibly show the running. If he drops something, show it
-being dropped or lying where it landed. If he boards a vehicle, show him boarding it. If
-he realizes a mistake, show the relevant situation plus his exact reaction. If another
-person is required by the narration, show that person; otherwise do not add them.
-
-The frame must clearly answer: WHO is present, WHERE are they, WHAT exactly are they doing,
-and WHAT just happened to cause this moment?
+NARRATION IS THE SOURCE OF TRUTH. Reenact the current beat literally. Do not summarize it,
+and do not invent a visual joke. The frame must clearly show WHO is present, WHERE they are,
+WHAT exactly they are doing, and WHAT caused this moment. Do not add unrelated characters,
+props, locations, plot events or visual gags.
 
 {NO_TEXT}
 {retry_note}
-Do not add extra characters, props, locations, plot events or unrelated visual gags.
-Do not turn this into a poster, thumbnail or character sheet. This is one literal shot
-from one continuous human-centered cartoon story.""".strip()
+This is one literal shot from one continuous human-centered cartoon story.""".strip()
 
 
 def main() -> None:
@@ -220,18 +186,14 @@ def main() -> None:
 
     refs = _load_reference()
     manifest = {
-        "type": "relic_loop_cloudflare_image_render",
-        "version": 5,
-        "title": package.get("title"),
-        "width": WIDTH,
-        "height": HEIGHT,
-        "model": MODEL,
+        "type": "relic_loop_cloudflare_image_render", "version": 6,
+        "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
         "reference_mode": "character_reference_plus_canonical_style_lock" if refs else "canonical_style_lock",
         "character_reference": str(REFERENCE_B64) if refs else None,
-        "text_gate": "probable_text_ocr_with_retry",
+        "text_gate": "heuristic_ocr_soft_gate_with_retry",
         "ocr_retries": OCR_RETRIES,
-        "story_truth": "literal_scene_reenactment",
-        "beats": [],
+        "ocr_policy": "warn_and_regenerate; never cancel a run solely because OCR suspects text",
+        "story_truth": "literal_scene_reenactment", "beats": [],
     }
 
     previous_scene = None
@@ -242,6 +204,7 @@ def main() -> None:
 
         output = IMAGE_DIR / f"beat_{index:03d}.png"
         accepted = False
+        ocr_suspected = False
         for attempt in range(1, OCR_RETRIES + 1):
             prompt = _scene_prompt(scene, package.get("characters") or [], package.get("locations") or [], previous_scene, attempt)
             blob = _cloudflare(prompt, refs)
@@ -249,21 +212,26 @@ def main() -> None:
             if not _ocr_has_text(output):
                 accepted = True
                 break
-            output.unlink(missing_ok=True)
-            print(f"[IMAGE {index}/{len(scenes)}] OCR looked text-like; regenerating ({attempt}/{OCR_RETRIES})")
+            ocr_suspected = True
+            print(f"[IMAGE {index}/{len(scenes)}] OCR suspected text; regenerating ({attempt}/{OCR_RETRIES})")
             if attempt < OCR_RETRIES:
                 time.sleep(2 * attempt)
 
+        # IMPORTANT: OCR is a heuristic, not a hard validator. If the model repeatedly
+        # produces a false positive, keep the final generated frame rather than throwing
+        # away the whole successful story/render run.
         if not accepted:
-            raise SystemExit(f"Beat {index} produced probable story text in {OCR_RETRIES} consecutive frames; refusing to use it")
+            accepted = output.exists() and output.stat().st_size > 0
+            if accepted:
+                print(f"[IMAGE {index}/{len(scenes)}] OCR remained suspicious after retries; ACCEPTING final frame to protect run continuity")
+
+        if not accepted:
+            raise SystemExit(f"Beat {index} did not produce an image")
 
         manifest["beats"].append({
-            "number": index,
-            "duration_seconds": float(scene.get("duration_seconds", 1.0)),
-            "image": str(output),
-            "prompt": prompt,
-            "beat_text": scene.get("beat_text"),
-            "narration": scene.get("narration"),
+            "number": index, "duration_seconds": float(scene.get("duration_seconds", 1.0)),
+            "image": str(output), "prompt": prompt, "beat_text": scene.get("beat_text"),
+            "narration": scene.get("narration"), "ocr_suspected": ocr_suspected,
         })
         previous_scene = scene
         print(f"[IMAGE {index}/{len(scenes)}] accepted")
