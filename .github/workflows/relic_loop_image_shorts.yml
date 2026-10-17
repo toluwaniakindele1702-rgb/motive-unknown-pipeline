@@ -23,7 +23,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_WRITER_MODEL: ${{ vars.GROQ_WRITER_MODEL || 'openai/gpt-oss-120b' }}
@@ -48,6 +48,7 @@ jobs:
 
       - name: Install lightweight dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow
           sudo apt-get update
@@ -70,6 +71,7 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
           ffmpeg -version | head -n 1
+          ffmpeg -filters | grep -q zoompan || { echo "FFmpeg zoompan filter is missing"; exit 1; }
           tesseract --version | head -n 1
           espeak-ng --version
 
@@ -89,7 +91,7 @@ jobs:
           set -o pipefail
           python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
 
-      - name: Assemble Short with real camera motion
+      - name: Assemble Short with robust camera motion
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
@@ -100,7 +102,7 @@ jobs:
           {
             echo "## Relic Loop Image Short"
             echo
-            echo "Approved hand-drawn stickman reference, fast image changes, probable-text OCR rejection with regeneration, and subtle push-in/pull-out camera motion."
+            echo "Approved hand-drawn stickman reference, fast image changes, probable-text OCR rejection with regeneration, and robust push-in/pull-out camera motion with a static fallback."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
