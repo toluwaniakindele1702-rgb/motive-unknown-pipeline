@@ -1,4 +1,4 @@
-"""Relic Loop Shorts generator optimized for Groq free-tier token limits."""
+"""Relic Loop Shorts generator optimized for strong story pacing and Groq free-tier limits."""
 from __future__ import annotations
 
 import json
@@ -31,19 +31,32 @@ SYSTEM = f"""You are Relic Loop's creative director. Make one original fictional
 Formula: instant weird situation -> escalation -> bigger problem -> absurd twist -> punchline.
 Safe, non-graphic, visual and fast. Do NOT make an explainer, documentary, listicle or educational story.
 
+STORY QUALITY IS THE PRIORITY:
+- The narration must be a genuinely entertaining mini-story, not a description of images.
+- Hook the viewer in the first sentence with something strange happening immediately.
+- Build clear cause-and-effect: each event should make the next event happen.
+- Escalate twice or three times, then deliver a specific absurd payoff/punchline.
+- Use natural spoken English, contractions, punchy sentence lengths and conversational rhythm.
+- No generic intro, no "have you ever wondered", no filler, no moral, no lesson and no ending that simply stops.
+- The final sentence should land the joke.
+- The story must make sense even if the viewer never sees the images.
+
 STYLE: {STYLE}
 
-Return ONLY JSON. Keep every field extremely compact so the response stays below the free-tier token limit.
-Create 24-30 visual beats for a 25-45 second Short. TARGET 30 BEATS. NEVER return fewer than 24 beats.
-If your first idea is too short, split actions/reactions/reveals into additional distinct visual beats until there are at least 24.
-Each beat is 0.8-1.8 seconds. Total runtime must be 25-45 seconds.
-Change the image whenever the narration changes action, reaction, object state, reveal or important detail.
+Return ONLY JSON. Keep fields compact enough for the free-tier token limit.
+Create 12-16 visual beats for a 25-40 second Short. TARGET 14 BEATS. NEVER return fewer than 12 or more than 16.
+The images are story shots, NOT a slideshow. Let important shots breathe.
+Each beat is 1.4-3.2 seconds. Total runtime must be 25-40 seconds.
+Use a new image only when there is a meaningful change of action, reaction, object state, reveal, location or important detail.
+Do NOT split every sentence, comma or phrase into its own image. Combine closely related actions into one strong shot.
+
 No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
 
 JSON shape:
-{{"title":"...","hook":"...","narration":"55-85 words","characters":[{{"name":"A","appearance":"..."}}],"locations":["..."],"scenes":[{{"number":1,"duration_seconds":1.0,"beat_text":"...","narration":"...","visual_prompt":"...","camera":"...","action":"..."}}],"flow_prompt":"...","youtube_description":"...","tags":["...","..."]}}
+{{"title":"...","hook":"...","narration":"70-100 words","characters":[{{"name":"A","appearance":"..."}}],"locations":["..."],"scenes":[{{"number":1,"duration_seconds":2.0,"beat_text":"...","narration":"...","visual_prompt":"...","camera":"...","action":"..."}}],"flow_prompt":"...","youtube_description":"...","tags":["...","..."]}}
 
-Scene visual_prompt must say "stickman" and describe only what is visible. Keep each visual_prompt, camera and action short."""
+Scene visual_prompt must say "stickman" and describe only what is visible. Keep visual_prompt, camera and action short.
+Each scene's narration should correspond to that shot, but the main narration must remain one smooth continuous story."""
 
 
 def history() -> list[str]:
@@ -100,10 +113,10 @@ def validate(obj: dict[str, Any]) -> list[str]:
         if not obj.get(key):
             errors.append(f"missing:{key}")
     wc = words(str(obj.get("narration", "")))
-    if not 55 <= wc <= 85:
+    if not 70 <= wc <= 100:
         errors.append(f"narration_words={wc}")
     scenes = obj.get("scenes")
-    if not isinstance(scenes, list) or not 24 <= len(scenes) <= 30:
+    if not isinstance(scenes, list) or not 12 <= len(scenes) <= 16:
         errors.append("scene_count")
         return errors
     runtime = 0.0
@@ -116,7 +129,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError):
             d = 0
         runtime += d
-        if not 0.8 <= d <= 1.8:
+        if not 1.4 <= d <= 3.2:
             errors.append(f"scene_{i}_duration")
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not str(s.get(field, "")).strip():
@@ -124,12 +137,12 @@ def validate(obj: dict[str, Any]) -> list[str]:
         p = str(s.get("visual_prompt", ""))
         if "stickman" not in p.lower():
             errors.append(f"scene_{i}_stickman")
-    if not 25 <= runtime <= 45:
+    if not 25 <= runtime <= 40:
         errors.append(f"runtime={runtime:.1f}")
     return errors
 
 
-def request(client: Groq, user_prompt: str, temperature: float = 0.8) -> str:
+def request(client: Groq, user_prompt: str, temperature: float = 0.9) -> str:
     result = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
@@ -145,9 +158,9 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
     if retry:
-        requirement = "IMPORTANT RETRY: The previous package failed validation. Return a complete 24-30 beat package with 30 preferred, valid 0.8-1.8 second beats, and total runtime 25-45 seconds. Fix every validation issue; do not return 23 or fewer."
+        requirement = "IMPORTANT RETRY: The previous package failed validation. Return a complete 12-16 beat package with 14 preferred, valid 1.4-3.2 second beats, 25-40 seconds total, and a coherent 70-100 word story with a real comedic payoff."
     else:
-        requirement = "Return 24-30 visual beats, with 30 preferred. The absolute minimum is 24."
+        requirement = "Return 12-16 visual beats, with 14 preferred. The story must have a clear setup, escalation, twist and punchline."
     return f"{seed}\n{used}\n{requirement}\nWrite the complete package now."
 
 
@@ -160,8 +173,6 @@ def generate(topic: str | None) -> dict[str, Any]:
         try:
             obj = parse_json(request(client, make_prompt(topic, retry=attempt > 0)))
             normalize_scenes(obj)
-            scenes = obj.get("scenes")
-            beat_count = len(scenes) if isinstance(scenes, list) else 0
             errors = validate(obj)
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -190,7 +201,7 @@ def write(obj: dict[str, Any]) -> None:
     runtime = round(sum(float(s["duration_seconds"]) for s in obj["scenes"]), 2)
     json_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     scenes = obj["scenes"]
-    lines = ["RELIC LOOP — FAST-CUT CLOUDFLARE IMAGE JOB", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
+    lines = ["RELIC LOOP — STORY SHORT", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
     for c in obj["characters"]:
         lines.append(f"- {c['name']}: {c['appearance']}")
     lines += ["", "LOCATIONS:"] + [f"- {x}" for x in obj["locations"]] + ["", "IMAGE BEATS:"]
@@ -199,19 +210,20 @@ def write(obj: dict[str, Any]) -> None:
     lines += ["VOICEOVER:", obj["narration"], ""]
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
-        "type": "relic_loop_fast_cut_image_short",
-        "version": 8,
+        "type": "relic_loop_story_image_short",
+        "version": 9,
         "title": obj["title"],
         "runtime_seconds": runtime,
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 24,
-        "target_image_beats": 30,
-        "maximum_image_beats": 30,
+        "minimum_image_beats": 12,
+        "target_image_beats": 14,
+        "maximum_image_beats": 16,
         "flow_template": "Storyboard Studio",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
         "media_generation": "cloudflare_images",
-        "beat_policy": "new_image_at_phrase_comma_full_stop_tone_change_action_reaction_detail",
+        "beat_policy": "new_image_on_meaningful_story_action_reaction_state_change_reveal_detail",
+        "voice_policy": "natural_neural_narrator",
         "files": [str(json_path), str(flow_path)],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
