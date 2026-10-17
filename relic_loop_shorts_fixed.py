@@ -34,7 +34,7 @@ Safe, non-graphic, visual and fast. Do NOT make an explainer, documentary, listi
 STYLE: {STYLE}
 
 Return ONLY JSON. Keep every field extremely compact so the response stays below the free-tier token limit.
-Create EXACTLY 20 visual beats for a 20-45 second Short. Each beat is 0.8-2.2 seconds.
+Create UP TO 30 visual beats for a 25-45 second Short. Target 30 beats, but NEVER fail the story because fewer beats are possible. Each beat is 0.8-1.8 seconds.
 Change the image whenever the narration changes action, reaction, object state, reveal or important detail.
 No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
 
@@ -80,18 +80,13 @@ def words(text: str) -> int:
 
 
 def normalize_scenes(obj: dict[str, Any]) -> None:
-    """Apply cheap local normalization instead of wasting another Groq request.
-
-    The previous validator rejected prompts that were valid but omitted the literal word
-    'stickman', and it also rejected negative instructions such as 'no logos' because
-    the banned-word regex could not distinguish exclusions from requested text.
-    """
     scenes = obj.get("scenes")
     if not isinstance(scenes, list):
         return
-    for scene in scenes:
+    for i, scene in enumerate(scenes, 1):
         if not isinstance(scene, dict):
             continue
+        scene["number"] = i
         prompt = str(scene.get("visual_prompt", "")).strip()
         if prompt and "stickman" not in prompt.lower():
             scene["visual_prompt"] = "stickman " + prompt
@@ -106,7 +101,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not 55 <= wc <= 85:
         errors.append(f"narration_words={wc}")
     scenes = obj.get("scenes")
-    if not isinstance(scenes, list) or len(scenes) != 20:
+    if not isinstance(scenes, list) or not 10 <= len(scenes) <= 30:
         errors.append("scene_count")
         return errors
     runtime = 0.0
@@ -119,7 +114,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError):
             d = 0
         runtime += d
-        if not 0.8 <= d <= 2.2:
+        if not 0.8 <= d <= 1.8:
             errors.append(f"scene_{i}_duration")
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not str(s.get(field, "")).strip():
@@ -127,7 +122,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         p = str(s.get("visual_prompt", ""))
         if "stickman" not in p.lower():
             errors.append(f"scene_{i}_stickman")
-    if not 20 <= runtime <= 45:
+    if not 25 <= runtime <= 45:
         errors.append(f"runtime={runtime:.1f}")
     return errors
 
@@ -147,7 +142,7 @@ def make_prompt(topic: str | None) -> str:
     old = history()
     used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
-    return f"{seed}\n{used}\nWrite the complete package now. EXACTLY 20 compact scenes."
+    return f"{seed}\n{used}\nWrite the complete package now. Target up to 30 compact scenes, but fewer is acceptable if needed."
 
 
 def generate(topic: str | None) -> dict[str, Any]:
@@ -182,6 +177,7 @@ def write(obj: dict[str, Any]) -> None:
     manifest_path = RUN / "flow_manifest.json"
     json_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     scenes = obj["scenes"]
+    runtime = round(sum(float(s["duration_seconds"]) for s in scenes), 2)
     lines = ["RELIC LOOP — FAST-CUT CLOUDFLARE IMAGE JOB", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
     for c in obj["characters"]:
         lines.append(f"- {c['name']}: {c['appearance']}")
@@ -192,12 +188,13 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_fast_cut_image_short",
-        "version": 5,
+        "version": 6,
         "title": obj["title"],
-        "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
+        "runtime_seconds": runtime,
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 20,
-        "target_image_beats": "20",
+        "minimum_image_beats": 10,
+        "target_image_beats": 30,
+        "maximum_image_beats": 30,
         "flow_template": "Storyboard Studio",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
@@ -213,7 +210,7 @@ def write(obj: dict[str, Any]) -> None:
         save_history(used)
     print(f"[SHORTS] {obj['title']}")
     print(f"[SHORTS] {words(obj['narration'])} narration words")
-    print(f"[SHORTS] {len(scenes)} image beats / {sum(float(s['duration_seconds']) for s in scenes):.1f}s")
+    print(f"[SHORTS] {len(scenes)} image beats / {runtime:.1f}s")
 
 
 if __name__ == "__main__":
