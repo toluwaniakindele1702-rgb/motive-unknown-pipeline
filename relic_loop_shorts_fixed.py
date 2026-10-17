@@ -145,7 +145,7 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
     if retry:
-        requirement = "IMPORTANT RETRY: The previous package was too short. Return 24-30 visual beats, with 30 preferred. Do not return 23 or fewer."
+        requirement = "IMPORTANT RETRY: The previous package failed validation. Return a complete 24-30 beat package with 30 preferred, valid 0.8-1.8 second beats, and total runtime 25-45 seconds. Fix every validation issue; do not return 23 or fewer."
     else:
         requirement = "Return 24-30 visual beats, with 30 preferred. The absolute minimum is 24."
     return f"{seed}\n{used}\n{requirement}\nWrite the complete package now."
@@ -169,8 +169,8 @@ def generate(topic: str | None) -> dict[str, Any]:
                 obj["style_policy"] = STYLE
                 return obj
             last = ValueError("validation failed: " + ", ".join(errors[:12]))
-            if beat_count <= 23 and attempt < 2:
-                print(f"[SHORTS] only {beat_count} image beats; regenerating (24 minimum, 30 target)")
+            if attempt < 2:
+                print(f"[SHORTS] validation failed ({len(errors)} issue(s)); regenerating package {attempt + 2}/3")
                 time.sleep(3)
                 continue
         except Exception as exc:
@@ -187,9 +187,9 @@ def write(obj: dict[str, Any]) -> None:
     json_path = RUN / "relic_loop_short.json"
     flow_path = RUN / "flow_storyboard_prompt.txt"
     manifest_path = RUN / "flow_manifest.json"
+    runtime = round(sum(float(s["duration_seconds"]) for s in obj["scenes"]), 2)
     json_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     scenes = obj["scenes"]
-    runtime = round(sum(float(s["duration_seconds"]) for s in scenes), 2)
     lines = ["RELIC LOOP — FAST-CUT CLOUDFLARE IMAGE JOB", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
     for c in obj["characters"]:
         lines.append(f"- {c['name']}: {c['appearance']}")
@@ -200,7 +200,7 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_fast_cut_image_short",
-        "version": 7,
+        "version": 8,
         "title": obj["title"],
         "runtime_seconds": runtime,
         "image_beat_count": len(scenes),
