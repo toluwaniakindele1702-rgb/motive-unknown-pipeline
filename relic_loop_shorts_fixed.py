@@ -34,7 +34,9 @@ Safe, non-graphic, visual and fast. Do NOT make an explainer, documentary, listi
 STYLE: {STYLE}
 
 Return ONLY JSON. Keep every field extremely compact so the response stays below the free-tier token limit.
-Create UP TO 30 visual beats for a 25-45 second Short. Target 30 beats, but NEVER fail the story because fewer beats are possible. Each beat is 0.8-1.8 seconds.
+Create 24-30 visual beats for a 25-45 second Short. TARGET 30 BEATS. NEVER return fewer than 24 beats.
+If your first idea is too short, split actions/reactions/reveals into additional distinct visual beats until there are at least 24.
+Each beat is 0.8-1.8 seconds. Total runtime must be 25-45 seconds.
 Change the image whenever the narration changes action, reaction, object state, reveal or important detail.
 No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
 
@@ -101,7 +103,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not 55 <= wc <= 85:
         errors.append(f"narration_words={wc}")
     scenes = obj.get("scenes")
-    if not isinstance(scenes, list) or not 10 <= len(scenes) <= 30:
+    if not isinstance(scenes, list) or not 24 <= len(scenes) <= 30:
         errors.append("scene_count")
         return errors
     runtime = 0.0
@@ -138,11 +140,15 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.8) -> str:
     return result.choices[0].message.content or ""
 
 
-def make_prompt(topic: str | None) -> str:
+def make_prompt(topic: str | None, retry: bool = False) -> str:
     old = history()
     used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise with an immediate visual hook."
-    return f"{seed}\n{used}\nWrite the complete package now. Target up to 30 compact scenes, but fewer is acceptable if needed."
+    if retry:
+        requirement = "IMPORTANT RETRY: The previous package was too short. Return 24-30 visual beats, with 30 preferred. Do not return 23 or fewer."
+    else:
+        requirement = "Return 24-30 visual beats, with 30 preferred. The absolute minimum is 24."
+    return f"{seed}\n{used}\n{requirement}\nWrite the complete package now."
 
 
 def generate(topic: str | None) -> dict[str, Any]:
@@ -152,8 +158,10 @@ def generate(topic: str | None) -> dict[str, Any]:
     last: Exception | None = None
     for attempt in range(3):
         try:
-            obj = parse_json(request(client, make_prompt(topic)))
+            obj = parse_json(request(client, make_prompt(topic, retry=attempt > 0)))
             normalize_scenes(obj)
+            scenes = obj.get("scenes")
+            beat_count = len(scenes) if isinstance(scenes, list) else 0
             errors = validate(obj)
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -161,6 +169,10 @@ def generate(topic: str | None) -> dict[str, Any]:
                 obj["style_policy"] = STYLE
                 return obj
             last = ValueError("validation failed: " + ", ".join(errors[:12]))
+            if beat_count <= 23 and attempt < 2:
+                print(f"[SHORTS] only {beat_count} image beats; regenerating (24 minimum, 30 target)")
+                time.sleep(3)
+                continue
         except Exception as exc:
             last = exc
             msg = str(exc).lower()
@@ -188,11 +200,11 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_fast_cut_image_short",
-        "version": 6,
+        "version": 7,
         "title": obj["title"],
         "runtime_seconds": runtime,
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 10,
+        "minimum_image_beats": 24,
         "target_image_beats": 30,
         "maximum_image_beats": 30,
         "flow_template": "Storyboard Studio",
