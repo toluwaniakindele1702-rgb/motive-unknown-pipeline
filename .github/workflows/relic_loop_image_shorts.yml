@@ -34,6 +34,7 @@ jobs:
       RELIC_LOOP_IMAGE_WIDTH: '576'
       RELIC_LOOP_IMAGE_HEIGHT: '1024'
       RELIC_LOOP_IMAGE_RETRIES: '3'
+      RELIC_LOOP_OCR_RETRIES: '4'
       RELIC_LOOP_OCR_STRICT: '1'
       PYTHONUNBUFFERED: '1'
     steps:
@@ -72,6 +73,12 @@ jobs:
           tesseract --version | head -n 1
           espeak-ng --version
 
+      - name: Validate Python files before spending API quota
+        run: |
+          set -euo pipefail
+          python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py
+          echo "Python syntax check passed."
+
       - name: Generate story and fast-cut storyboard
         run: |
           set -o pipefail
@@ -93,7 +100,7 @@ jobs:
           {
             echo "## Relic Loop Image Short"
             echo
-            echo "Approved hand-drawn stickman reference, fast image changes, strict OCR rejection, and subtle push-in/pull-out camera motion."
+            echo "Approved hand-drawn stickman reference, fast image changes, probable-text OCR rejection with regeneration, and subtle push-in/pull-out camera motion."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
