@@ -1,4 +1,4 @@
-name: Relic Loop Voice Test
+name: Relic Loop Kokoro Voice Test
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
 jobs:
   voice-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,15 +19,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Edge TTS
-        run: python -m pip install --disable-pip-version-check edge-tts
+      - name: Install Kokoro
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y espeak-ng
+          python -m pip install --disable-pip-version-check "kokoro>=0.9.4" soundfile
 
-      - name: Generate voice samples
+      - name: Generate Kokoro samples
         run: python relic_loop_voice_test.py
 
-      - name: Upload voice samples
+      - name: Upload Kokoro samples
         uses: actions/upload-artifact@v4
         with:
-          name: relic-loop-voice-test
+          name: relic-loop-kokoro-voice-test
           path: voice_samples/
           retention-days: 14
