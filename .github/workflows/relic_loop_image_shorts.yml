@@ -85,17 +85,17 @@ jobs:
           python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py
           echo "Python syntax check passed."
 
-      - name: Generate story and paced storyboard
+      - name: Generate story and story-driven storyboard
         run: |
           set -o pipefail
           python relic_loop_shorts_fixed.py 2>&1 | tee shorts_flow.log
 
-      - name: Render every visual beat with Cloudflare
+      - name: Render every meaningful visual beat with Cloudflare
         run: |
           set -o pipefail
           python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
 
-      - name: Assemble Short with robust camera motion and neural narration
+      - name: Assemble with narration as the master timeline
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
@@ -106,7 +106,7 @@ jobs:
           {
             echo "## Relic Loop Image Short"
             echo
-            echo "Paced 12-16-shot absurd story, approved hand-drawn stickman reference, probable-text OCR rejection with regeneration, push-in/pull-out camera motion with a static fallback, and natural neural narration."
+            echo "Story-first absurd Short: complete narration first, meaningful literal visual beats second, natural neural voice as the master timeline, and no fixed image cadence."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
@@ -120,6 +120,8 @@ jobs:
           print('Reference mode:', d.get('reference_mode'))
           PY
             fi
+            echo
+            if [ -f state/current_run/timing_manifest.json ]; then cat state/current_run/timing_manifest.json; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload finished Short and diagnostics
@@ -132,6 +134,7 @@ jobs:
             state/current_run/flow_storyboard_prompt.txt
             state/current_run/flow_manifest.json
             state/current_run/cloudflare_image_manifest.json
+            state/current_run/timing_manifest.json
             state/current_run/relic_loop_short.mp4
             state/current_run/voiceover.wav
             state/current_run/voiceover_neural.mp3
