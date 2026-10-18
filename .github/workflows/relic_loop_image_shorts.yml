@@ -36,7 +36,8 @@ jobs:
       RELIC_LOOP_IMAGE_RETRIES: '3'
       RELIC_LOOP_OCR_RETRIES: '2'
       RELIC_LOOP_OCR_STRICT: '1'
-      RELIC_LOOP_VOICE: 'en-US-AndrewNeural'
+      RELIC_LOOP_VOICE: 'am_liam'
+      RELIC_LOOP_KOKORO_VOICE: 'am_liam'
       PYTHONUNBUFFERED: '1'
     steps:
       - name: Checkout
@@ -45,13 +46,13 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Install lightweight dependencies
+      - name: Install Kokoro and pipeline dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow edge-tts
+          python -m pip install --retries 5 --timeout 120 --prefer-binary 'kokoro>=0.9.4,<1.0' 'soundfile>=0.13,<1.0' 'numpy>=2.0,<3'
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr espeak-ng
       - name: Decode approved Relic Loop character reference
         shell: bash
         run: |
@@ -71,14 +72,29 @@ jobs:
           ffmpeg -filters | grep -q zoompan || { echo "FFmpeg zoompan filter is missing"; exit 1; }
           ffprobe -version | head -n 1
           tesseract --version | head -n 1
+          espeak-ng --version | head -n 1
           python - <<'PY'
           import edge_tts
-          print('edge-tts:', getattr(edge_tts, '__version__', 'installed'))
+          print('Kokoro compatibility voice backend:', getattr(edge_tts, '__version__', 'installed'))
+          print('Voice:', __import__('os').environ.get('RELIC_LOOP_KOKORO_VOICE'))
+          PY
+          python - <<'PY'
+          import asyncio
+          import os
+          import tempfile
+          from pathlib import Path
+          import edge_tts
+          out = Path(tempfile.gettempdir()) / 'relic_loop_kokoro_preflight.mp3'
+          out.unlink(missing_ok=True)
+          asyncio.run(edge_tts.Communicate('This is a Kokoro Liam preflight test.').save(str(out)))
+          if not out.exists() or out.stat().st_size < 1000:
+              raise SystemExit('Kokoro Liam preflight produced no usable audio')
+          print('Kokoro Liam preflight passed:', out.stat().st_size, 'bytes')
           PY
       - name: Validate Python files before spending API quota
         run: |
           set -euo pipefail
-          python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py
+          python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py edge_tts.py
           echo "Python syntax check passed."
       - name: Generate story and story-driven storyboard
         run: |
@@ -88,7 +104,7 @@ jobs:
         run: |
           set -o pipefail
           python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
-      - name: Assemble with narration as the master timeline
+      - name: Assemble with Liam narration as the master timeline
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
@@ -117,6 +133,7 @@ jobs:
             echo "image_model=${CLOUDFLARE_IMAGE_MODEL}"
             echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
             echo "voice=${RELIC_LOOP_VOICE}"
+            echo "kokoro_voice=${RELIC_LOOP_KOKORO_VOICE}"
             echo
             echo "git_commit=$(git rev-parse HEAD 2>/dev/null)"
             echo "git_branch=$(git branch --show-current 2>/dev/null)"
@@ -173,6 +190,7 @@ jobs:
           cp relic_loop_shorts_fixed.py run_diagnostics/relic_loop_shorts_fixed.py 2>/dev/null || true
           cp cloudflare_relic_loop_images.py run_diagnostics/cloudflare_relic_loop_images.py 2>/dev/null || true
           cp assemble_relic_loop_short.py run_diagnostics/assemble_relic_loop_short.py 2>/dev/null || true
+          cp edge_tts.py run_diagnostics/edge_tts.py 2>/dev/null || true
           cp .github/workflows/relic_loop_image_shorts.yml run_diagnostics/relic_loop_image_shorts.yml 2>/dev/null || true
 
           echo "Diagnostics bundle created."
@@ -192,7 +210,7 @@ jobs:
             echo "- **Repository:** ${GITHUB_REPOSITORY}"
             echo "- **Run URL:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo
-            echo "Story-first absurd Short: complete narration first, meaningful literal visual beats second, natural neural voice as the master timeline, and no fixed image cadence."
+            echo "Story-first absurd Short: complete narration first, meaningful literal visual beats second, Kokoro Liam voice as the master timeline, and no fixed image cadence."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
