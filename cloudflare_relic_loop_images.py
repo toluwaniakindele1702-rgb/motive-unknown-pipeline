@@ -1,4 +1,4 @@
-"""Generate Relic Loop story Short images with story-truth and narration-timing locks."""
+"""Generate Relic Loop story images; image count follows meaningful story beats."""
 from __future__ import annotations
 
 import base64
@@ -159,10 +159,7 @@ def _ocr_has_text(path: Path) -> bool:
     if not OCR_STRICT:
         return False
     try:
-        proc = subprocess.run(
-            ["tesseract", str(path), "stdout", "--psm", "11", "tsv"],
-            text=True, capture_output=True, timeout=30, check=False,
-        )
+        proc = subprocess.run(["tesseract", str(path), "stdout", "--psm", "11", "tsv"], text=True, capture_output=True, timeout=30, check=False)
         candidates = []
         for line in proc.stdout.splitlines()[1:]:
             parts = line.split("\t")
@@ -183,12 +180,10 @@ def _ocr_has_text(path: Path) -> bool:
 
 
 def _reference_blurb() -> str:
-    return (
-        "Use the supplied Relic Loop character reference as the identity anchor. Preserve "
-        "its round head, simple tapered torso, thin limbs, simple oval eyes, black expressive "
-        "ink linework, hand-drawn asymmetry, minimal facial marks, readable hands and "
-        "exaggerated poses. The same human protagonist must look like the same person in every beat."
-    )
+    return ("Use the supplied Relic Loop character reference as the identity anchor. Preserve "
+            "its round head, simple tapered torso, thin limbs, simple oval eyes, black expressive "
+            "ink linework, hand-drawn asymmetry, minimal facial marks, readable hands and "
+            "exaggerated poses. The same human protagonist must look like the same person in every beat.")
 
 
 def _scene_prompt(scene: dict, characters: list[dict], locations: list[str], previous_scene: dict | None = None, attempt: int = 1) -> str:
@@ -233,12 +228,12 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if not 10 <= len(scenes) <= 18:
-        raise SystemExit(f"Refusing to render {len(scenes)} beats; expected 10-18")
+    if not scenes:
+        raise SystemExit("Story contains no visual beats")
 
     refs = _load_reference()
     manifest = {
-        "type": "relic_loop_cloudflare_image_render", "version": 8,
+        "type": "relic_loop_cloudflare_image_render", "version": 9,
         "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
         "reference_mode": "character_reference_plus_canonical_style_lock" if refs else "canonical_style_lock",
         "character_reference": str(REFERENCE_B64) if refs else None,
@@ -248,6 +243,7 @@ def main() -> None:
         "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "beat durations are derived from contiguous narration excerpts; assembly recalculates from actual TTS duration",
+        "image_count_policy": "all meaningful story beats; no fixed minimum_target_maximum",
         "beats": [],
     }
 
