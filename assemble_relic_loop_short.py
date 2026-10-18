@@ -28,6 +28,8 @@ VOICE = "en-US-AndrewNeural"
 VOICE_RATE = "+0%"
 VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
+TTS_RETRIES = 3
+TTS_TIMEOUT_SECONDS = 120
 
 
 def run(cmd: list[str]) -> None:
@@ -49,7 +51,7 @@ def _norm(text: str) -> str:
 
 async def _synthesize(text: str) -> None:
     communicate = edge_tts.Communicate(text, VOICE, rate=VOICE_RATE, volume=VOICE_VOLUME, pitch=VOICE_PITCH)
-    await communicate.save(str(TTS_MP3))
+    await asyncio.wait_for(communicate.save(str(TTS_MP3)), timeout=TTS_TIMEOUT_SECONDS)
 
 
 def make_voiceover(text: str) -> None:
@@ -58,11 +60,28 @@ def make_voiceover(text: str) -> None:
         raise SystemExit("Narration is empty; refusing to create a silent Short")
     if len(text.split()) < 50:
         raise SystemExit("Narration is suspiciously short; refusing to create a broken Short")
+
     print(f"[VOICE] Generating natural neural narration with {VOICE}")
-    TTS_MP3.unlink(missing_ok=True)
-    asyncio.run(_synthesize(text))
-    if not TTS_MP3.exists() or TTS_MP3.stat().st_size < 1000:
-        raise SystemExit("Neural TTS produced no usable audio")
+    last: Exception | None = None
+    for attempt in range(1, TTS_RETRIES + 1):
+        TTS_MP3.unlink(missing_ok=True)
+        try:
+            print(f"[VOICE] TTS attempt {attempt}/{TTS_RETRIES}")
+            asyncio.run(_synthesize(text))
+            if not TTS_MP3.exists() or TTS_MP3.stat().st_size < 1000:
+                raise RuntimeError("Neural TTS produced no usable audio")
+            break
+        except Exception as exc:
+            last = exc
+            print(f"[VOICE] TTS attempt failed: {type(exc).__name__}: {exc}")
+            if attempt < TTS_RETRIES:
+                wait = 5 * attempt
+                print(f"[VOICE] Retrying TTS in {wait}s")
+                import time
+                time.sleep(wait)
+    else:
+        raise SystemExit(f"Neural TTS failed after {TTS_RETRIES} attempts: {last}")
+
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(TTS_MP3), "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(AUDIO)])
     if not AUDIO.exists() or AUDIO.stat().st_size < 10000:
         raise SystemExit("Neural TTS conversion produced no usable WAV")
