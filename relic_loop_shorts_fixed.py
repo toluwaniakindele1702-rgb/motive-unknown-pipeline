@@ -46,6 +46,12 @@ The absurdity must come from the situation becoming increasingly ridiculous, NOT
 things appearing. The audience should think: "How did this guy's stupid decision lead to THAT?"
 They should never think: "What the hell is happening?"
 
+HARD LENGTH LIMIT — ABSOLUTE:
+The complete spoken narration MUST be between 75 and 130 words.
+Aim for 95-115 words. NEVER exceed 130 words.
+Do not write a long story and hope validation trims it. Write the final short narration inside this limit.
+The title, scenes, visual prompts and metadata do NOT count toward the narration word limit.
+
 Before writing the narration, silently construct a causal chain:
 Problem -> Decision 1 -> Consequence 1 -> Decision 2 -> Consequence 2 -> Decision 3 ->
 Consequence 3 -> Twist -> Punchline.
@@ -61,7 +67,7 @@ HUMAN-CENTERED STORY:
 - Decisions must create consequences.
 - Keep the world mostly normal and believable at first.
 - Other people may appear when the story requires them.
-- Animals, unusual objects or bizarre situations may appear only when clearly motivated by the story.
+- Keep animals and fantasy creatures OUT of the story unless the user explicitly asks for one.
 - Never make an inanimate object the protagonist.
 
 ABSURDITY RULE:
@@ -70,14 +76,12 @@ BAD:
 "His phone started running away."
 "He got on a bus and suddenly discovered there were monkeys."
 "A random llama attacked him."
+"He restarted his laptop and somehow a random cat yoga livestream appeared."
 
 GOOD:
 A relatable mistake causes a second problem. The protagonist makes a desperate decision to fix it.
 That decision creates a larger problem. The protagonist tries again. The consequences compound until
 an unexpected but causally connected reveal or twist makes the whole situation ridiculous.
-
-The final twist must be traceable to something established earlier. The audience should be able to
-look back and say: "Ohhh, THAT'S why that happened."
 
 RELATABILITY:
 Start with something ordinary viewers understand: being late, losing something, saving money,
@@ -91,7 +95,8 @@ worse, stranger or more difficult because of what happened before. Do not escala
 adding disasters, animals, objects or unrelated characters.
 
 TWIST AND PAYOFF:
-The twist must recontextualize the situation or reveal an unexpected consequence of something earlier.
+The twist must be traceable to something established earlier. The audience should be able to
+look back and say: "Ohhh, THAT'S why that happened."
 End immediately after the funniest consequence. No moral, lesson, explanation or generic outro.
 The final sentence must land the punchline.
 
@@ -99,7 +104,8 @@ ABSOLUTE EXCLUSIONS:
 - No inanimate-object protagonists.
 - No mugs, phones, chairs, refrigerators, food, toilets, vehicles or other objects suddenly running,
   talking, attacking, dancing, forming armies or becoming characters.
-- No random llamas, dinosaurs, animals or fantasy creatures as disconnected gags.
+- No random llamas, dinosaurs, cats, dogs, monkeys, birds or other animals as disconnected gags.
+- No random livestreams, videos, websites, memes or unrelated digital content appearing as a joke.
 - No disconnected chain of random events.
 - No "and then suddenly" randomness.
 - No meaningless city-wide chaos.
@@ -216,8 +222,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
             errors.append(f"missing:{key}")
     narration = _norm_text(str(obj.get("narration", "")))
     wc = words(narration)
-    if not 70 <= wc <= 160:
-        errors.append(f"narration_words={wc}")
+    if not 75 <= wc <= 130:
+        errors.append(f"narration_words={wc}_hard_limit_75_130")
 
     chars = obj.get("characters")
     if not isinstance(chars, list) or not chars:
@@ -239,12 +245,14 @@ def validate(obj: dict[str, Any]) -> list[str]:
     bad_random_patterns = [
         r"mug .*\b(run|runs|sprint|sprints|attack|attacks|dance|dances|talk|talks)\b",
         r"(?:phone|chair|fridge|refrigerator|toilet|pizza|sandwich|coffee) .*\b(run|runs|walk|walks|talk|talks|attack|attacks|dance|dances|fight|fights)\b",
-        r"(?:llama|dinosaur) .*\b(run|runs|chase|chases|attack|attacks|dance|dances)\b",
+        r"(?:llama|dinosaur|cat|dog|monkey|bird) .*\b(run|runs|chase|chases|attack|attacks|dance|dances|teach|teaches|yoga|livestream|stream)\b",
         r"(?:objects?|mugs?|chairs?|phones?) .*\bform (?:an )?(?:army|band|crowd)\b",
+        r"random (?:cat|dog|monkey|bird|llama|dinosaur)\b",
+        r"random .*\b(?:livestream|yoga|video|website|meme)\b",
     ]
     for pattern in bad_random_patterns:
         if re.search(pattern, narration.lower()):
-            errors.append("random_object_or_creature_nonsense")
+            errors.append("random_object_or_creature_or_digital_nonsense")
             break
 
     scenes = obj.get("scenes")
@@ -276,7 +284,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         if len(str(s.get("beat_text", ""))) < 12 or len(str(s.get("action", ""))) < 8:
             errors.append(f"scene_{i}_too_vague")
         combined = " ".join(str(s.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action")).lower()
-        if re.search(r"\b(random|suddenly appears|for no reason|somehow,? a (?:mug|llama|dinosaur))\b", combined):
+        if re.search(r"\b(random|suddenly appears|for no reason|somehow,? a (?:mug|llama|dinosaur|cat|dog|monkey|bird))\b", combined):
             errors.append(f"scene_{i}_random_event")
     if runtime <= 0:
         errors.append("storyboard_runtime_invalid")
@@ -300,10 +308,15 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise involving an ordinary human person facing a clear everyday problem."
     requirement = (
         "RETRY HARDER: The previous package failed validation. Rebuild the causal chain before writing. "
+        "HARD REQUIREMENT: narration MUST be 75-130 words, aim for 95-115, and NEVER exceed 130. "
+        "If your draft is longer, rewrite it shorter before returning JSON. "
+        "Do not include random animals, random livestreams, random videos, or unrelated digital content. "
         "The scene narration must exactly partition the master narration. Do not add random events to fill visual beats. "
         "Do not force a runtime or image count. Let meaningful story actions determine the number of images."
         if retry else
-        "Build the causal chain first. Write the complete narration from that chain, then partition the exact narration into only the meaningful visual moments that actually occur. The story determines its own length and image count."
+        "Build the causal chain first. HARD REQUIREMENT: narration MUST be 75-130 words; aim for 95-115 and NEVER exceed 130. "
+        "Do not include random animals, random livestreams, random videos, or unrelated digital content. "
+        "Write the complete narration from that chain, then partition the exact narration into only the meaningful visual moments that actually occur. The story determines its own length and image count."
     )
     return f"{seed}\n{used}\n{requirement}\nWrite the complete package now."
 
@@ -315,7 +328,7 @@ def generate(topic: str | None) -> dict[str, Any]:
     last: Exception | None = None
     for attempt in range(3):
         try:
-            obj = parse_json(request(client, make_prompt(topic, retry=attempt > 0)))
+            obj = parse_json(request(client, make_prompt(topic, retry=attempt > 0), temperature=0.8 if attempt == 0 else 0.6))
             normalize_scenes(obj)
             errors = validate(obj)
             if not errors:
@@ -357,7 +370,7 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_story_image_short",
-        "version": 12,
+        "version": 13,
         "title": obj["title"],
         "story_word_count": words(obj["narration"]),
         "estimated_storyboard_seconds": runtime_estimate,
@@ -367,7 +380,6 @@ def write(obj: dict[str, Any]) -> None:
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
         "story_policy": "human_protagonist_causal_chain_absurd_comedy",
-        "visual_policy": "narration_is_source_of_truth_literal_scene_reenactment",
         "timing_policy": "narration_is_master_timeline",
         "media_generation": "cloudflare_images",
         "beat_policy": "meaningful_story_action_reaction_state_change_reveal_detail; story determines count",
@@ -378,13 +390,15 @@ def write(obj: dict[str, Any]) -> None:
     used = history()
     title = str(obj.get("title", "")).strip()
     if title and title.lower() not in {x.lower() for x in used}:
-        used.append(title)
-        save_history(used)
-    print(f"[SHORTS] {obj['title']}")
-    print(f"[SHORTS] {words(obj['narration'])} narration words")
-    print(f"[SHORTS] {len(scenes)} image beats / {runtime_estimate:.1f}s estimated storyboard")
+        save_history(used + [title])
+
+
+def main() -> None:
+    topic = os.environ.get("RELIC_LOOP_TOPIC", "").strip() or None
+    obj = generate(topic)
+    write(obj)
+    print(f"[SHORTS] generated: {obj['title']} | {words(obj['narration'])} narration words | {len(obj['scenes'])} visual beats")
 
 
 if __name__ == "__main__":
-    topic = os.environ.get("RELIC_LOOP_TOPIC", "").strip() or None
-    write(generate(topic))
+    main()
