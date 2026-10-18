@@ -1,0 +1,36 @@
+name: Relic Loop Kokoro Voice Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kokoro-voice-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Kokoro
+        run: |
+          python -m pip install --disable-pip-version-check "kokoro>=0.9.4" soundfile "misaki[en]"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng
+
+      - name: Generate Kokoro samples
+        run: python relic_loop_kokoro_voice_test.py
+
+      - name: Upload Kokoro samples
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-kokoro-voice-test
+          path: voice_samples_kokoro/
+          retention-days: 14
