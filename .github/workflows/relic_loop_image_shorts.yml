@@ -23,7 +23,9 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Image generation can legitimately take longer than one hour when Cloudflare
+    # retries transient failures. Keep the job alive long enough to finish a run.
+    timeout-minutes: 150
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_WRITER_MODEL: ${{ vars.GROQ_WRITER_MODEL || 'openai/gpt-oss-120b' }}
@@ -73,6 +75,7 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
           ffmpeg -version | head -n 1
           ffmpeg -filters | grep -q zoompan || { echo "FFmpeg zoompan filter is missing"; exit 1; }
+          ffprobe -version | head -n 1
           tesseract --version | head -n 1
           python - <<'PY'
           import edge_tts
