@@ -10,7 +10,7 @@ on:
         default: ""
         type: string
   schedule:
-    - cron: '23 14 * * *'
+    - cron: '50 12 * * *'
       timezone: 'Africa/Lagos'
 
 concurrency:
@@ -23,8 +23,6 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    # Image generation can legitimately take longer than one hour when Cloudflare
-    # retries transient failures. Keep the job alive long enough to finish a run.
     timeout-minutes: 150
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -43,12 +41,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-
       - name: Install lightweight dependencies
         run: |
           set -euo pipefail
@@ -56,7 +52,6 @@ jobs:
           python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow edge-tts
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
-
       - name: Decode approved Relic Loop character reference
         shell: bash
         run: |
@@ -65,7 +60,6 @@ jobs:
           base64 -d assets/relic_loop_character_reference.jpg.b64 > run_work/references/relic_loop_character_reference.jpg
           test -s run_work/references/relic_loop_character_reference.jpg
           file run_work/references/relic_loop_character_reference.jpg
-
       - name: Preflight
         shell: bash
         run: |
@@ -81,28 +75,23 @@ jobs:
           import edge_tts
           print('edge-tts:', getattr(edge_tts, '__version__', 'installed'))
           PY
-
       - name: Validate Python files before spending API quota
         run: |
           set -euo pipefail
           python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py
           echo "Python syntax check passed."
-
       - name: Generate story and story-driven storyboard
         run: |
           set -o pipefail
           python relic_loop_shorts_fixed.py 2>&1 | tee shorts_flow.log
-
       - name: Render every meaningful visual beat with Cloudflare
         run: |
           set -o pipefail
           python cloudflare_relic_loop_images.py 2>&1 | tee cloudflare_images.log
-
       - name: Assemble with narration as the master timeline
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
-
       - name: Write run summary
         if: always()
         run: |
@@ -126,7 +115,6 @@ jobs:
             echo
             if [ -f state/current_run/timing_manifest.json ]; then cat state/current_run/timing_manifest.json; fi
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload finished Short and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
