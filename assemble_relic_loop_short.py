@@ -84,8 +84,10 @@ def validate_image(image: Path, index: int) -> None:
 
 
 def make_clip(image: Path, duration: float, index: int) -> Path:
+    """Create a CFR clip whose measured duration is the requested beat duration."""
     out = FRAMES / f"clip_{index:03d}.mp4"
-    frames = max(1, round(duration * FPS))
+    frames = max(6, round(duration * FPS))
+    exact_duration = frames / FPS
     if index % 2:
         zoom = "min(zoom+0.0018,1.07)"
     else:
@@ -96,12 +98,15 @@ def make_clip(image: Path, duration: float, index: int) -> Path:
         f"d={frames}:s={W}x{H}:fps={FPS},format=yuv420p"
     )
     try:
-        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", vf, "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out)])
+        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", vf, "-frames:v", str(frames), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(out)])
     except subprocess.CalledProcessError:
         print(f"[ASSEMBLY] camera-motion filter failed on beat {index}; using safe static fallback")
         out.unlink(missing_ok=True)
         fallback = f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
-        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", fallback, "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out)])
+        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", fallback, "-frames:v", str(frames), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(out)])
+    measured = media_duration(out)
+    if abs(measured - exact_duration) > 0.08:
+        raise SystemExit(f"Beat {index} timing error: requested={exact_duration:.3f}s, clip={measured:.3f}s")
     return out
 
 
@@ -140,35 +145,36 @@ def main() -> None:
     if any(count <= 0 for count in beat_word_counts):
         raise SystemExit("Every visual beat must contain narration text")
 
-    # Proportional timing follows the actual TTS duration while preserving the story order.
     raw_durations = [audio_duration * count / total_words for count in beat_word_counts]
-    durations = []
-    for d in raw_durations:
-        # Do not force a cadence. This only prevents pathological sub-frame clips.
-        durations.append(max(0.20, d))
+    durations = [max(0.20, d) for d in raw_durations]
     scale = audio_duration / sum(durations)
     durations = [d * scale for d in durations]
 
     shutil.rmtree(FRAMES, ignore_errors=True)
     FRAMES.mkdir(parents=True, exist_ok=True)
     clips: list[Path] = []
+    actual_clip_durations: list[float] = []
     for i, (beat, duration) in enumerate(zip(beats, durations), 1):
         image = Path(beat["image"])
         if not image.exists():
             raise SystemExit(f"Missing image for beat {i}: {image}")
         validate_image(image, i)
-        clips.append(make_clip(image, duration, i))
-        print(f"[TIMING] beat {i}: {beat_word_counts[i-1]} words -> {duration:.2f}s")
+        clip = make_clip(image, duration, i)
+        clips.append(clip)
+        actual_clip_durations.append(media_duration(clip))
+        print(f"[TIMING] beat {i}: {beat_word_counts[i-1]} words -> target {duration:.2f}s -> clip {actual_clip_durations[-1]:.2f}s")
 
+    # Rebuild the timeline with FFmpeg re-encoding instead of concat stream-copy. Stream-copy
+    # can inherit timestamp rounding/offsets and make the combined visual timeline shorter.
     concat = RUN / "clips.txt"
     concat.write_text("\n".join(f"file '{p.resolve().as_posix()}'" for p in clips) + "\n", encoding="utf-8")
     silent = RUN / "silent_short.mp4"
-    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-fflags", "+genpts", "-c", "copy", str(silent)])
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(silent)])
     if not silent.exists() or silent.stat().st_size == 0:
         raise SystemExit("Silent video assembly produced no MP4")
 
     video_duration = media_duration(silent)
-    # The silent video must match the narration master duration, not an arbitrary storyboard target.
+    print(f"[TIMING] visual timeline={video_duration:.3f}s; narration master={audio_duration:.3f}s")
     if abs(video_duration - audio_duration) > 0.35:
         raise SystemExit(f"Story timing mismatch: narration={audio_duration:.2f}s, visual timeline={video_duration:.2f}s")
 
@@ -182,15 +188,15 @@ def main() -> None:
     if final_duration < 5:
         raise SystemExit("Final MP4 is unusably short")
 
-    # Record the actual timing used so the artifact is auditable.
     timing = {
         "timing_policy": "narration_is_master_timeline",
         "master_narration_seconds": audio_duration,
         "master_narration_words": total_words,
         "beats": [
-            {"number": i, "narration_words": beat_word_counts[i-1], "duration_seconds": round(durations[i-1], 3), "image": beats[i-1]["image"]}
+            {"number": i, "narration_words": beat_word_counts[i-1], "target_duration_seconds": round(durations[i-1], 3), "clip_duration_seconds": round(actual_clip_durations[i-1], 3), "image": beats[i-1]["image"]}
             for i in range(1, len(beats) + 1)
         ],
+        "visual_timeline_seconds": video_duration,
         "final_duration_seconds": final_duration,
     }
     (RUN / "timing_manifest.json").write_text(json.dumps(timing, indent=2), encoding="utf-8")
