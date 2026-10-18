@@ -1,4 +1,4 @@
-"""Relic Loop Shorts generator: story-first timing with literal visual beats."""
+"""Relic Loop Shorts generator: story-first causal absurd comedy."""
 from __future__ import annotations
 
 import json
@@ -27,71 +27,132 @@ STYLE = ("Modern expressive 2D hand-drawn stickman cartoon: round head, simple t
          "Consistent human protagonist identity. No photorealism, live action, stock photo, anime, "
          "manga, 3D/Pixar, glossy mascot or documentary art.")
 
-SYSTEM = f"""You are Relic Loop's story director and visual storyboard director. Create ONE original fictional absurd-comedy YouTube Short about a HUMAN PROTAGONIST.
+SYSTEM = f"""You are Relic Loop's head writer and visual storyboard director.
+Create ONE original fictional absurd-comedy YouTube Short centered on a HUMAN PROTAGONIST.
 
-RELlC LOOP STORY BIBLE — NON-NEGOTIABLE:
-- The protagonist must be a human person represented as a stickman. The human is the center of the story.
+THE RELIC LOOP STORY ENGINE — NON-NEGOTIABLE:
+The story must follow this causal chain:
+NORMAL HUMAN PROBLEM
+-> PROTAGONIST MAKES A DECISION
+-> IMMEDIATE CONSEQUENCE
+-> PROTAGONIST RESPONDS
+-> CONSEQUENCE ESCALATES
+-> ANOTHER DECISION
+-> BIGGER CONSEQUENCE
+-> ABSURD BUT LOGICALLY CONNECTED TWIST
+-> FUNNY PAYOFF
+
+The absurdity must come from the situation becoming increasingly ridiculous, NOT from random
+things appearing. The audience should think: "How did this guy's stupid decision lead to THAT?"
+They should never think: "What the hell is happening?"
+
+Before writing the narration, silently construct a causal chain:
+Problem -> Decision 1 -> Consequence 1 -> Decision 2 -> Consequence 2 -> Decision 3 ->
+Consequence 3 -> Twist -> Punchline.
+Then write the narration from that chain. Every major event must have a clear cause.
+
+For EVERY major event, silently ask: "Why is this happening RIGHT NOW?"
+If the answer is not caused by an earlier event or the protagonist's decision, REMOVE or REWRITE it.
+
+HUMAN-CENTERED STORY:
+- The protagonist is a normal human person represented as a stickman.
 - Give the protagonist a clear immediate problem or goal.
-- The protagonist must make decisions. Those decisions cause consequences.
-- Every major event must logically cause, worsen, reveal or resolve the next event.
-- Escalate through consequences 2-3 times, then deliver a specific twist/punchline.
-- Keep the world mostly normal and believable; the absurdity should come from the human situation spiraling out of control.
-- The narration must sound like someone telling a funny story to another person, not describing random images.
-- The story must remain understandable with the visuals removed.
-- The final sentence must land a payoff that connects to the setup.
+- The protagonist must actively make decisions.
+- Decisions must create consequences.
+- Keep the world mostly normal and believable at first.
+- Other people may appear when the story requires them.
+- Animals, unusual objects or bizarre situations may appear only when clearly motivated by the story.
+- Never make an inanimate object the protagonist.
 
-ABSOLUTE STORY EXCLUSIONS:
-- No inanimate-object protagonists or objects acting like humans.
-- No mugs, phones, chairs, refrigerators, food, toilets, vehicles or other objects suddenly running, talking, attacking, dancing, forming armies or becoming characters.
-- No random llamas, dinosaurs, animals or fantasy creatures unless a human encounters one as a clearly motivated part of an otherwise coherent story; never use one as a random gag.
+ABSURDITY RULE:
+BAD:
+"He missed the bus, then suddenly a dinosaur appeared."
+"His phone started running away."
+"He got on a bus and suddenly discovered there were monkeys."
+"A random llama attacked him."
+
+GOOD:
+A relatable mistake causes a second problem. The protagonist makes a desperate decision to fix it.
+That decision creates a larger problem. The protagonist tries again. The consequences compound until
+an unexpected but causally connected reveal or twist makes the whole situation ridiculous.
+
+The final twist must be traceable to something established earlier. The audience should be able to
+look back and say: "Ohhh, THAT'S why that happened."
+
+RELATABILITY:
+Start with something ordinary viewers understand: being late, losing something, saving money,
+trying to impress someone, avoiding embarrassment, fixing a small mistake, reaching somewhere,
+hiding something, beating a deadline, or escaping an awkward situation.
+Then spiral it into absurdity.
+
+ESCALATION:
+Use meaningful escalating consequences. Each escalation must make the protagonist's situation
+worse, stranger or more difficult because of what happened before. Do not escalate by randomly
+adding disasters, animals, objects or unrelated characters.
+
+TWIST AND PAYOFF:
+The twist must recontextualize the situation or reveal an unexpected consequence of something earlier.
+End immediately after the funniest consequence. No moral, lesson, explanation or generic outro.
+The final sentence must land the punchline.
+
+ABSOLUTE EXCLUSIONS:
+- No inanimate-object protagonists.
+- No mugs, phones, chairs, refrigerators, food, toilets, vehicles or other objects suddenly running,
+  talking, attacking, dancing, forming armies or becoming characters.
+- No random llamas, dinosaurs, animals or fantasy creatures as disconnected gags.
 - No disconnected chain of random events.
 - No "and then suddenly" randomness.
 - No meaningless city-wide chaos.
-- No visual gag that has no cause in the story.
+- No visual gag without a cause in the narration.
 - No story whose only joke is that something impossible happened.
-
-CAUSE-AND-EFFECT TEST:
-Before returning JSON, mentally trace the story from the first sentence to the punchline. For every scene, answer: "Why is this happening now?" If the answer is not caused by the previous event or the protagonist's decision, rewrite it.
+- No documentary, educational or explanatory story.
+- No generic "have you ever wondered" intro.
 
 VISUAL TRUTH RULE — NON-NEGOTIABLE:
-The narration is the source of truth. Images are a literal visual reenactment of the story, not independent jokes.
-For every scene, show exactly what is happening in that beat at that moment. Never generate a cool unrelated pose just because it looks funny.
+The narration is the source of truth. Images are literal visual reenactments of the narration.
+Every visual beat must show exactly WHO is present, WHERE they are, WHAT they are doing and
+WHAT caused that moment. Never invent a cool unrelated pose or visual joke.
 
-STORY-FIRST TIMING RULE — NON-NEGOTIABLE:
-The narration is the master timeline. The finished video must last exactly long enough for the complete narration to be spoken naturally.
-Do NOT target a fixed 25-40 second runtime. Do NOT make image count or image duration determine the story length.
-First write the complete 70-110 word narration. Then divide that narration into 10-18 meaningful visual beats based on what is actually happening, not equal time slices.
-Each beat's narration must be a contiguous excerpt of the full narration, in the same order, with no missing words and no duplicated words.
-The sum of beat narration word counts must equal the full narration word count.
-Beat duration_seconds is only an ESTIMATE used for storyboard planning; final assembly will measure the real neural narration and allocate time from the beat narration itself.
-A single image may remain on screen longer when the narration needs it. A fast action may have a shorter beat. There must be no fixed timer cadence.
-The story must be completely finished by the final beat. The final beat must contain the punchline/payoff.
+STORY-FIRST TIMING:
+The narration is the master timeline. The story itself determines the number of visual beats.
+There is NO fixed image count and NO target image count.
+Create exactly one visual beat whenever the story reaches a meaningful visual change: a new action,
+reaction, consequence, object state, location, reveal or punchline detail.
+Do NOT split every phrase or comma into a beat. Do NOT combine distinct actions merely to hit a target.
+A longer story may naturally require more images; a compact story may require fewer.
+Do not pad or compress the story to satisfy an image quota.
+Each beat's narration must be a contiguous exact excerpt of the master narration, in order, with no
+missing or duplicated words. The concatenated beat narration must reproduce the complete narration.
+Beat duration_seconds is only an estimate. Final assembly measures real neural TTS and allocates time
+from the beat narration. Never let image timing determine the story.
 
 STORY QUALITY:
 - Immediate hook in the first sentence.
-- Clear protagonist + problem/goal.
-- 2-3 escalating consequences.
-- Specific twist and punchline.
-- Natural spoken English, contractions, punchy sentence lengths and conversational rhythm.
-- No generic intro, no "have you ever wondered", no filler, no moral, no lesson.
+- Clear human protagonist + problem/goal.
+- Strong decisions and cause/effect.
+- Meaningful escalating consequences.
+- Specific causally connected twist.
+- Strong final punchline.
+- Natural spoken English with contractions and conversational rhythm.
+- Story must make sense with visuals removed.
 
 STYLE: {STYLE}
 
 Return ONLY JSON.
-Create 10-18 visual beats for the complete story. TARGET 14, but choose the number based on story actions. NEVER split every phrase or comma into a new image.
 
 JSON shape:
-{{"title":"...","hook":"...","narration":"70-110 words","characters":[{{"name":"A","role":"human protagonist","appearance":"..."}}],"locations":["..."],"story_structure":{{"problem":"...","goal":"...","escalations":["...","..."],"twist":"...","punchline":"..."}},"scenes":[{{"number":1,"duration_seconds":2.0,"beat_text":"literal event happening now","narration":"CONTIGUOUS EXACT EXCERPT FROM THE FULL NARRATION","visual_prompt":"literal visible shot, no interpretation","camera":"...","action":"exact visible action"}}],"flow_prompt":"...","youtube_description":"...","tags":["...","..."]}}
+{{"title":"...","hook":"...","narration":"complete spoken narration","characters":[{{"name":"A","role":"human protagonist","appearance":"..."}}],"locations":["..."],"story_structure":{{"problem":"...","goal":"...","causal_chain":["problem -> decision -> consequence -> escalation -> twist"],"escalations":["..."],"twist":"...","punchline":"..."}},"scenes":[{{"number":1,"duration_seconds":2.0,"beat_text":"literal event happening now","narration":"CONTIGUOUS EXACT EXCERPT FROM FULL NARRATION","visual_prompt":"literal visible shot, no interpretation","camera":"...","action":"exact visible action"}}],"flow_prompt":"...","youtube_description":"...","tags":["...","..."]}}
 
 SCENE RULES:
-- Scene narration must be copied from the full narration, in order, with no rewriting.
-- Concatenating scene narration fields with single spaces must reproduce the full narration, apart from harmless whitespace differences.
-- Each scene must describe one literal moment from the continuous story.
-- beat_text, narration, visual_prompt and action must describe the SAME event.
-- visual_prompt must explicitly say "human stickman" or "stickman protagonist" and describe only visible things.
-- Every scene must contain the protagonist or a directly relevant visible consequence of his previous action.
-- Do not introduce a new prop, character, location or event unless the narration/story requires it.
-- Do not invent visual jokes that are absent from the narration.
+- Scene count is determined ONLY by meaningful story beats. Never target, pad or cap a count.
+- Scene narration must be copied from the full narration in order, with no rewriting.
+- Concatenating scene narration fields with single spaces must reproduce the full narration.
+- Each scene describes one literal moment from the continuous story.
+- beat_text, narration, visual_prompt and action describe the SAME event.
+- visual_prompt explicitly says "human stickman" or "stickman protagonist".
+- Every scene contains the protagonist or a directly relevant visible consequence.
+- Never introduce a prop, character, location or event unless the narration requires it.
+- Never invent visual jokes absent from the narration.
 - No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
 """
 
@@ -155,7 +216,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
             errors.append(f"missing:{key}")
     narration = _norm_text(str(obj.get("narration", "")))
     wc = words(narration)
-    if not 70 <= wc <= 110:
+    if not 70 <= wc <= 160:
         errors.append(f"narration_words={wc}")
 
     chars = obj.get("characters")
@@ -187,11 +248,10 @@ def validate(obj: dict[str, Any]) -> list[str]:
             break
 
     scenes = obj.get("scenes")
-    if not isinstance(scenes, list) or not 10 <= len(scenes) <= 18:
-        errors.append("scene_count")
+    if not isinstance(scenes, list) or not scenes:
+        errors.append("no_visual_beats")
         return errors
 
-    # Story-first timing: the scene narration must partition the master narration exactly.
     reconstructed = " ".join(_norm_text(str(s.get("narration", ""))) for s in scenes if isinstance(s, dict))
     if reconstructed != narration:
         errors.append("scene_narration_does_not_exactly_partition_master_narration")
@@ -206,7 +266,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError):
             d = 0
         runtime += d
-        if not 0.5 <= d <= 8.0:
+        if not 0.25 <= d <= 12.0:
             errors.append(f"scene_{i}_duration_estimate")
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not str(s.get(field, "")).strip():
@@ -218,8 +278,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
         combined = " ".join(str(s.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action")).lower()
         if re.search(r"\b(random|suddenly appears|for no reason|somehow,? a (?:mug|llama|dinosaur))\b", combined):
             errors.append(f"scene_{i}_random_event")
-    if not 20 <= runtime <= 70:
-        errors.append(f"storyboard_estimated_runtime={runtime:.1f}")
+    if runtime <= 0:
+        errors.append("storyboard_runtime_invalid")
     return errors
 
 
@@ -228,7 +288,7 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.8) -> str:
         model=MODEL,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
-        max_completion_tokens=5000,
+        max_completion_tokens=6500,
         response_format={"type": "json_object"},
     )
     return result.choices[0].message.content or ""
@@ -239,11 +299,11 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     used = "" if not old else "Avoid these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent a highly shareable absurd premise involving an ordinary human person facing a clear everyday problem."
     requirement = (
-        "RETRY HARDER: The previous package failed validation. Return a complete coherent human story. "
-        "Most importantly, the scene narration fields must be an exact ordered partition of the master narration, with no missing or duplicated words. "
-        "Do not force a fixed runtime or fixed beat duration. Let the story's narration determine the final video length."
+        "RETRY HARDER: The previous package failed validation. Rebuild the causal chain before writing. "
+        "The scene narration must exactly partition the master narration. Do not add random events to fill visual beats. "
+        "Do not force a runtime or image count. Let meaningful story actions determine the number of images."
         if retry else
-        "Return a coherent human-centered story. Write the complete narration first, then partition that exact narration into meaningful visual moments. The narration determines the final video length; images never determine it."
+        "Build the causal chain first. Write the complete narration from that chain, then partition the exact narration into only the meaningful visual moments that actually occur. The story determines its own length and image count."
     )
     return f"{seed}\n{used}\n{requirement}\nWrite the complete package now."
 
@@ -261,8 +321,8 @@ def generate(topic: str | None) -> dict[str, Any]:
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
                 obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-                obj["timing_policy"] = "Narration is master timeline; final video duration is measured from complete neural narration; beat durations are derived from narration segments, never the other way around."
-                obj["story_policy"] = "human_protagonist_cause_effect_absurd_comedy"
+                obj["timing_policy"] = "Narration is master timeline; final video duration is measured from complete neural narration; meaningful story beats determine image count and beat durations are derived from narration segments."
+                obj["story_policy"] = "human_protagonist_causal_chain_absurd_comedy"
                 obj["style_policy"] = STYLE
                 return obj
             last = ValueError("validation failed: " + ", ".join(errors[:16]))
@@ -287,7 +347,7 @@ def write(obj: dict[str, Any]) -> None:
     runtime_estimate = round(sum(float(s["duration_seconds"]) for s in obj["scenes"]), 2)
     json_path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     scenes = obj["scenes"]
-    lines = ["RELIC LOOP — STORY SHORT", "", "STORY POLICY: HUMAN PROTAGONIST + CAUSE/EFFECT ABSURD COMEDY", "TIMING POLICY: NARRATION IS MASTER TIMELINE; IMAGE BEATS FOLLOW NARRATION", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
+    lines = ["RELIC LOOP — STORY SHORT", "", "STORY POLICY: HUMAN PROTAGONIST + CAUSAL CHAIN ABSURD COMEDY", "TIMING POLICY: NARRATION IS MASTER TIMELINE; MEANINGFUL STORY BEATS DETERMINE IMAGE COUNT", "", obj["flow_prompt"], "", "CANONICAL STYLE:", STYLE, "", "CAST:"]
     for c in obj["characters"]:
         lines.append(f"- {c['name']}: {c['appearance']}")
     lines += ["", "STORY STRUCTURE:", json.dumps(obj["story_structure"], ensure_ascii=False), "", "LOCATIONS:"] + [f"- {x}" for x in obj["locations"]] + ["", "IMAGE BEATS — NARRATION IS SOURCE OF TRUTH:"]
@@ -297,22 +357,20 @@ def write(obj: dict[str, Any]) -> None:
     flow_path.write_text("\n".join(lines), encoding="utf-8")
     manifest = {
         "type": "relic_loop_story_image_short",
-        "version": 11,
+        "version": 12,
         "title": obj["title"],
         "story_word_count": words(obj["narration"]),
         "estimated_storyboard_seconds": runtime_estimate,
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 10,
-        "target_image_beats": 14,
-        "maximum_image_beats": 18,
+        "image_count_policy": "determined_by_meaningful_story_beats; no fixed minimum_target_maximum",
         "flow_template": "Storyboard Studio",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
-        "story_policy": "human_protagonist_cause_effect_absurd_comedy",
+        "story_policy": "human_protagonist_causal_chain_absurd_comedy",
         "visual_policy": "narration_is_source_of_truth_literal_scene_reenactment",
         "timing_policy": "narration_is_master_timeline",
         "media_generation": "cloudflare_images",
-        "beat_policy": "meaningful_story_action_reaction_state_change_reveal_detail; no fixed cadence",
+        "beat_policy": "meaningful_story_action_reaction_state_change_reveal_detail; story determines count",
         "voice_policy": "natural_neural_narrator",
         "files": [str(json_path), str(flow_path)],
     }
