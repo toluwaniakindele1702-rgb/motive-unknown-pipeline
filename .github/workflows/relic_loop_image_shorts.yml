@@ -92,6 +92,93 @@ jobs:
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
+      - name: Collect complete run diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p run_diagnostics
+
+          {
+            echo "RELlC LOOP RUN DIAGNOSTICS"
+            echo "==========================="
+            echo "run_number=${GITHUB_RUN_NUMBER}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "workflow=${GITHUB_WORKFLOW}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=${GITHUB_SHA}"
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "actor=${GITHUB_ACTOR}"
+            echo "server_url=${GITHUB_SERVER_URL}"
+            echo "topic=${RELIC_LOOP_TOPIC}"
+            echo "writer_model=${GROQ_WRITER_MODEL}"
+            echo "image_model=${CLOUDFLARE_IMAGE_MODEL}"
+            echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
+            echo "voice=${RELIC_LOOP_VOICE}"
+            echo
+            echo "git_commit=$(git rev-parse HEAD 2>/dev/null)"
+            echo "git_branch=$(git branch --show-current 2>/dev/null)"
+            echo
+            echo "PYTHON:"
+            python --version 2>&1
+            echo
+            echo "INSTALLED PYTHON PACKAGES:"
+            python -m pip freeze 2>&1
+            echo
+            echo "SYSTEM:"
+            uname -a 2>&1
+            echo
+            echo "FFMPEG:"
+            ffmpeg -version 2>&1 | head -n 2
+            echo
+            echo "TESSERACT:"
+            tesseract --version 2>&1 | head -n 2
+            echo
+            echo "DIRECTORY SNAPSHOT:"
+            find state/current_run -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort
+          } > run_diagnostics/run_metadata.txt
+
+          # Never copy secrets into diagnostics. These files contain only sanitized runtime information.
+          {
+            echo "=== STORY GENERATION LOG ==="
+            cat shorts_flow.log 2>/dev/null || echo "shorts_flow.log was not created"
+            echo
+            echo "=== CLOUDFLARE IMAGE LOG ==="
+            cat cloudflare_images.log 2>/dev/null || echo "cloudflare_images.log was not created"
+            echo
+            echo "=== ASSEMBLY LOG ==="
+            cat assemble.log 2>/dev/null || echo "assemble.log was not created"
+          } > run_diagnostics/complete_logs.txt
+
+          {
+            echo "=== AVAILABLE RUN OUTPUTS ==="
+            for f in \
+              state/current_run/relic_loop_short.json \
+              state/current_run/flow_storyboard_prompt.txt \
+              state/current_run/flow_manifest.json \
+              state/current_run/cloudflare_image_manifest.json \
+              state/current_run/timing_manifest.json; do
+              if [ -f "$f" ]; then
+                echo
+                echo "--- $f ---"
+                cat "$f"
+              else
+                echo
+                echo "--- $f: NOT CREATED ---"
+              fi
+            done
+          } > run_diagnostics/run_outputs.txt
+
+          # Keep source snapshots in the artifact so a failed run can be diagnosed against
+          # the exact code that executed, without exposing any repository secrets.
+          cp relic_loop_shorts_fixed.py run_diagnostics/relic_loop_shorts_fixed.py 2>/dev/null || true
+          cp cloudflare_relic_loop_images.py run_diagnostics/cloudflare_relic_loop_images.py 2>/dev/null || true
+          cp assemble_relic_loop_short.py run_diagnostics/assemble_relic_loop_short.py 2>/dev/null || true
+          cp .github/workflows/relic_loop_image_shorts.yml run_diagnostics/relic_loop_image_shorts.yml 2>/dev/null || true
+
+          echo "Diagnostics bundle created."
       - name: Write run summary
         if: always()
         run: |
@@ -132,5 +219,6 @@ jobs:
             shorts_flow.log
             cloudflare_images.log
             assemble.log
+            run_diagnostics/
           if-no-files-found: warn
           retention-days: 14
