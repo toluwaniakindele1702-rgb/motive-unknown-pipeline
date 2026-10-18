@@ -98,9 +98,10 @@ def validate_image(image: Path, index: int) -> None:
         raise SystemExit(f"Invalid Cloudflare image for beat {index}: {exc}") from exc
 
 
-def _ease(frame: str) -> str:
-    """Smoothstep/ease-in-out progress for zoom/pan expressions."""
-    return f"(0.5-0.5*cos({frame}/(frames-1)*{math.pi:.12f}))"
+def _ease(frame: str, frames: int) -> str:
+    """Smoothstep/ease-in-out progress with a literal frame denominator."""
+    denom = max(frames - 1, 1)
+    return f"(0.5-0.5*cos({frame}/{denom}*{math.pi:.12f}))"
 
 
 def _camera_filter(profile: str, frames: int) -> str:
@@ -110,7 +111,7 @@ def _camera_filter(profile: str, frames: int) -> str:
     These profiles deliberately vary direction and framing so consecutive stills
     feel like animated shots instead of a slideshow.
     """
-    p = _ease("on")
+    p = _ease("on", frames)
     margin = "(iw-iw/zoom)"
     vertical_margin = "(ih-ih/zoom)"
 
@@ -125,11 +126,11 @@ def _camera_filter(profile: str, frames: int) -> str:
     elif profile == "pan_right":
         z = "1.07"
         x = f"{margin}*{p}"
-        y = f"{vertical_margin}/2-0.025*{vertical_margin}*sin(on/(frames-1)*3.14159265359)"
+        y = f"{vertical_margin}/2-0.025*{vertical_margin}*sin(on/{max(frames - 1, 1)}*3.14159265359)"
     elif profile == "pan_left":
         z = "1.07"
         x = f"{margin}*(1-{p})"
-        y = f"{vertical_margin}/2+0.025*{vertical_margin}*sin(on/(frames-1)*3.14159265359)"
+        y = f"{vertical_margin}/2+0.025*{vertical_margin}*sin(on/{max(frames - 1, 1)}*3.14159265359)"
     elif profile == "diagonal_right":
         z = f"1.03+0.08*{p}"
         x = f"{margin}*{p}"
@@ -139,7 +140,7 @@ def _camera_filter(profile: str, frames: int) -> str:
         x = f"{margin}*(1-{p})"
         y = f"{vertical_margin}*(0.36+0.28*{p})"
     elif profile == "punch_in":
-        fast = "min(on/((frames-1)*0.22),1)"
+        fast = f"min(on/({max(frames - 1, 1)}*0.22),1)"
         z = f"1.00+0.12*({fast})"
         x = f"{margin}/2"
         y = f"{vertical_margin}/2"
@@ -149,8 +150,8 @@ def _camera_filter(profile: str, frames: int) -> str:
         y = f"{vertical_margin}*(0.35+0.30*{p})"
     else:  # subtle handheld/drift
         z = f"1.04+0.025*{p}"
-        x = f"{margin}/2+0.10*{margin}*sin(on/(frames-1)*6.28318530718)"
-        y = f"{vertical_margin}/2+0.07*{vertical_margin}*sin(on/(frames-1)*4.71238898038)"
+        x = f"{margin}/2+0.10*{margin}*sin(on/{max(frames - 1, 1)}*6.28318530718)"
+        y = f"{vertical_margin}/2+0.07*{vertical_margin}*sin(on/{max(frames - 1, 1)}*4.71238898038)"
 
     return (
         f"scale=ceil(iw*1.25/2)*2:ceil(ih*1.25/2)*2,"
@@ -187,11 +188,9 @@ def make_clip(image: Path, duration: float, index: int, action: str = "", mood: 
     print(f"[CAMERA] beat {index}: profile={profile}; duration={exact_duration:.2f}s")
     try:
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", vf, "-frames:v", str(frames), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(out)])
-    except subprocess.CalledProcessError:
-        print(f"[ASSEMBLY] camera-motion filter failed on beat {index}; using safe static fallback")
+    except subprocess.CalledProcessError as exc:
         out.unlink(missing_ok=True)
-        fallback = f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
-        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", fallback, "-frames:v", str(frames), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(out)])
+        raise SystemExit(f"Camera-motion render failed on beat {index} (profile={profile}); refusing to silently fall back to a static shot") from exc
     measured = media_duration(out)
     if abs(measured - exact_duration) > 0.08:
         raise SystemExit(f"Beat {index} timing error: requested={exact_duration:.3f}s, clip={measured:.3f}s")
