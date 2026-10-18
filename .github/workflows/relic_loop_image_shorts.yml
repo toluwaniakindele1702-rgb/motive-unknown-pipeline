@@ -140,7 +140,6 @@ jobs:
             find state/current_run -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort
           } > run_diagnostics/run_metadata.txt
 
-          # Never copy secrets into diagnostics. These files contain only sanitized runtime information.
           {
             echo "=== STORY GENERATION LOG ==="
             cat shorts_flow.log 2>/dev/null || echo "shorts_flow.log was not created"
@@ -171,8 +170,6 @@ jobs:
             done
           } > run_diagnostics/run_outputs.txt
 
-          # Keep source snapshots in the artifact so a failed run can be diagnosed against
-          # the exact code that executed, without exposing any repository secrets.
           cp relic_loop_shorts_fixed.py run_diagnostics/relic_loop_shorts_fixed.py 2>/dev/null || true
           cp cloudflare_relic_loop_images.py run_diagnostics/cloudflare_relic_loop_images.py 2>/dev/null || true
           cp assemble_relic_loop_short.py run_diagnostics/assemble_relic_loop_short.py 2>/dev/null || true
@@ -183,7 +180,17 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Relic Loop Image Short"
+            echo "# Relic Loop Image Short"
+            echo
+            echo "## RUN IDENTIFIERS"
+            echo "- **GitHub Run Number:** ${GITHUB_RUN_NUMBER}"
+            echo "- **GitHub Internal Run ID:** ${GITHUB_RUN_ID}"
+            echo "- **Run Attempt:** ${GITHUB_RUN_ATTEMPT}"
+            echo "- **Workflow:** ${GITHUB_WORKFLOW}"
+            echo "- **Event:** ${GITHUB_EVENT_NAME}"
+            echo "- **Commit SHA:** ${GITHUB_SHA}"
+            echo "- **Repository:** ${GITHUB_REPOSITORY}"
+            echo "- **Run URL:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo
             echo "Story-first absurd Short: complete narration first, meaningful literal visual beats second, natural neural voice as the master timeline, and no fixed image cadence."
             echo
