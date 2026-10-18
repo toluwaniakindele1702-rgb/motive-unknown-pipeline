@@ -1,0 +1,33 @@
+name: Relic Loop Voice Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  voice-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Edge TTS
+        run: python -m pip install --disable-pip-version-check edge-tts
+
+      - name: Generate voice samples
+        run: python relic_loop_voice_test.py
+
+      - name: Upload voice samples
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-voice-test
+          path: voice_samples/
+          retention-days: 14
