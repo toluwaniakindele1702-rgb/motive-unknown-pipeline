@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import edge_tts
@@ -73,7 +75,6 @@ def make_voiceover(text: str) -> None:
             if attempt < TTS_RETRIES:
                 wait = 5 * attempt
                 print(f"[VOICE] Retrying TTS in {wait}s")
-                import time
                 time.sleep(wait)
     else:
         raise SystemExit(f"Neural TTS failed after {TTS_RETRIES} attempts: {last}")
@@ -97,17 +98,93 @@ def validate_image(image: Path, index: int) -> None:
         raise SystemExit(f"Invalid Cloudflare image for beat {index}: {exc}") from exc
 
 
-def make_clip(image: Path, duration: float, index: int) -> Path:
+def _ease(frame: str) -> str:
+    """Smoothstep/ease-in-out progress for zoom/pan expressions."""
+    return f"(0.5-0.5*cos({frame}/(frames-1)*{math.pi:.12f}))"
+
+
+def _camera_filter(profile: str, frames: int) -> str:
+    """Return a story-oriented 2D camera move for one still image.
+
+    The old implementation only alternated a centered 1.00 -> 1.07 zoom.
+    These profiles deliberately vary direction and framing so consecutive stills
+    feel like animated shots instead of a slideshow.
+    """
+    p = _ease("on")
+    margin = "(iw-iw/zoom)"
+    vertical_margin = "(ih-ih/zoom)"
+
+    if profile == "push_in":
+        z = f"1.00+0.10*{p}"
+        x = f"{margin}/2"
+        y = f"{vertical_margin}/2"
+    elif profile == "pull_out":
+        z = f"1.11-0.09*{p}"
+        x = f"{margin}/2"
+        y = f"{vertical_margin}/2"
+    elif profile == "pan_right":
+        z = "1.07"
+        x = f"{margin}*{p}"
+        y = f"{vertical_margin}/2-0.025*{vertical_margin}*sin(on/(frames-1)*3.14159265359)"
+    elif profile == "pan_left":
+        z = "1.07"
+        x = f"{margin}*(1-{p})"
+        y = f"{vertical_margin}/2+0.025*{vertical_margin}*sin(on/(frames-1)*3.14159265359)"
+    elif profile == "diagonal_right":
+        z = f"1.03+0.08*{p}"
+        x = f"{margin}*{p}"
+        y = f"{vertical_margin}*(0.64-0.28*{p})"
+    elif profile == "diagonal_left":
+        z = f"1.03+0.08*{p}"
+        x = f"{margin}*(1-{p})"
+        y = f"{vertical_margin}*(0.36+0.28*{p})"
+    elif profile == "punch_in":
+        fast = "min(on/((frames-1)*0.22),1)"
+        z = f"1.00+0.12*({fast})"
+        x = f"{margin}/2"
+        y = f"{vertical_margin}/2"
+    elif profile == "reveal":
+        z = f"1.12-0.10*{p}"
+        x = f"{margin}*(0.78-0.28*{p})"
+        y = f"{vertical_margin}*(0.35+0.30*{p})"
+    else:  # subtle handheld/drift
+        z = f"1.04+0.025*{p}"
+        x = f"{margin}/2+0.10*{margin}*sin(on/(frames-1)*6.28318530718)"
+        y = f"{vertical_margin}/2+0.07*{vertical_margin}*sin(on/(frames-1)*4.71238898038)"
+
+    return (
+        f"scale=ceil(iw*1.25/2)*2:ceil(ih*1.25/2)*2,"
+        f"zoompan=z='{z}':x='{x}':y='{y}':"
+        f"d={frames}:s={W}x{H}:fps={FPS},format=yuv420p"
+    )
+
+
+def _camera_profile(index: int, duration: float, action: str, mood: str) -> str:
+    """Choose a deterministic camera move from story-beat semantics plus index.
+
+    We use the beat's action/mood when available, then rotate through profiles so
+    adjacent shots do not repeat the same camera behavior.
+    """
+    text = f"{action} {mood}".lower()
+    if any(word in text for word in ("reveal", "discover", "realize", "twist", "surprise")):
+        return "reveal"
+    if any(word in text for word in ("run", "chase", "rush", "move", "walk", "drive", "escape")):
+        return "pan_right" if index % 2 else "pan_left"
+    if any(word in text for word in ("shock", "panic", "reaction", "confused", "angry", "excited")):
+        return "punch_in"
+    if any(word in text for word in ("look", "watch", "notice", "wait", "think")):
+        return "push_in"
+    profiles = ("push_in", "pan_right", "pull_out", "diagonal_left", "pan_left", "punch_in", "diagonal_right", "handheld")
+    return profiles[(index - 1) % len(profiles)]
+
+
+def make_clip(image: Path, duration: float, index: int, action: str = "", mood: str = "") -> Path:
     out = FRAMES / f"clip_{index:03d}.mp4"
     frames = max(6, round(duration * FPS))
     exact_duration = frames / FPS
-    if index % 2:
-        zoom = "min(zoom+0.0018,1.07)"
-    else:
-        zoom = "if(lte(zoom,1.0),1.07,max(zoom-0.0018,1.0))"
-    vf = (f"scale=ceil(iw*1.12/2)*2:ceil(ih*1.12/2)*2,"
-          f"zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-          f"d={frames}:s={W}x{H}:fps={FPS},format=yuv420p")
+    profile = _camera_profile(index, duration, action, mood)
+    vf = _camera_filter(profile, frames)
+    print(f"[CAMERA] beat {index}: profile={profile}; duration={exact_duration:.2f}s")
     try:
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", str(image), "-vf", vf, "-frames:v", str(frames), "-an", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", str(out)])
     except subprocess.CalledProcessError:
@@ -164,7 +241,7 @@ def main() -> None:
         if not image.exists():
             raise SystemExit(f"Missing image for beat {i}: {image}")
         validate_image(image, i)
-        clip = make_clip(image, duration, i)
+        clip = make_clip(image, duration, i, str(beat.get("action", "")), str(beat.get("mood", "")))
         clips.append(clip)
         actual_clip_durations.append(media_duration(clip))
         print(f"[TIMING] beat {i}: {beat_word_counts[i-1]} words -> target {duration:.2f}s -> clip {actual_clip_durations[-1]:.2f}s")
@@ -194,9 +271,10 @@ def main() -> None:
     timing = {
         "timing_policy": "narration_is_master_timeline",
         "image_count_policy": "meaningful_story_beats_determine_count",
+        "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
         "master_narration_words": total_words,
-        "beats": [{"number": i, "narration_words": beat_word_counts[i-1], "target_duration_seconds": round(durations[i-1], 3), "clip_duration_seconds": round(actual_clip_durations[i-1], 3), "image": beats[i-1]["image"]} for i in range(1, len(beats) + 1)],
+        "beats": [{"number": i, "narration_words": beat_word_counts[i-1], "target_duration_seconds": round(durations[i-1], 3), "clip_duration_seconds": round(actual_clip_durations[i-1], 3), "camera_profile": _camera_profile(i, durations[i-1], str(beats[i-1].get("action", "")), str(beats[i-1].get("mood", ""))), "image": beats[i-1]["image"]} for i in range(1, len(beats) + 1)],
         "visual_timeline_seconds": video_duration,
         "final_duration_seconds": final_duration,
     }
