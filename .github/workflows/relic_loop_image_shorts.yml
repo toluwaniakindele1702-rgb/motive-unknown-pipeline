@@ -38,6 +38,10 @@ jobs:
       RELIC_LOOP_OCR_STRICT: '1'
       RELIC_LOOP_VOICE: 'am_liam'
       RELIC_LOOP_KOKORO_VOICE: 'am_liam'
+      CHANNEL_NAME: 'Chispa-Pifia'
+      YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
+      YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+      YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
       PYTHONUNBUFFERED: '1'
     steps:
       - name: Checkout
@@ -50,7 +54,14 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install --retries 5 --timeout 120 --prefer-binary 'kokoro>=0.9.4,<1.0' 'soundfile>=0.13,<1.0' 'numpy>=2.0,<3'
+          python -m pip install --retries 5 --timeout 120 --prefer-binary \
+            'kokoro>=0.9.4,<1.0' \
+            'soundfile>=0.13,<1.0' \
+            'numpy>=2.0,<3' \
+            'google-api-python-client>=2.180,<3' \
+            'google-auth>=2.40,<3' \
+            'google-auth-httplib2>=0.2,<1' \
+            'google-auth-oauthlib>=1.2,<2'
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr espeak-ng
       - name: Decode approved Relic Loop character reference
@@ -68,6 +79,8 @@ jobs:
           test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          test -n "$YOUTUBE_TOKEN_JSON" || { echo "YOUTUBE_TOKEN_JSON is missing"; exit 1; }
+          test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           ffmpeg -version | head -n 1
           ffmpeg -filters | grep -q zoompan || { echo "FFmpeg zoompan filter is missing"; exit 1; }
           ffprobe -version | head -n 1
@@ -91,10 +104,26 @@ jobs:
               raise SystemExit('Kokoro Liam preflight produced no usable audio')
           print('Kokoro Liam preflight passed:', out.stat().st_size, 'bytes')
           PY
+          python - <<'PY'
+          import json, os
+          from google.auth.transport.requests import Request
+          from google.oauth2.credentials import Credentials
+          token = json.loads(os.environ['YOUTUBE_TOKEN_JSON'])
+          client = json.loads(os.environ['YOUTUBE_CLIENT_SECRET_JSON'])
+          if not isinstance(token, dict) or not isinstance(client, dict):
+              raise SystemExit('YouTube OAuth secrets must contain JSON objects')
+          creds = Credentials.from_authorized_user_info(token, scopes=['https://www.googleapis.com/auth/youtube.upload'])
+          if not creds.valid:
+              if creds.expired and creds.refresh_token:
+                  creds.refresh(Request())
+              else:
+                  raise SystemExit('Stored YouTube OAuth credentials are invalid and cannot be refreshed')
+          print('YouTube OAuth preflight passed.')
+          PY
       - name: Validate Python files before spending API quota
         run: |
           set -euo pipefail
-          python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py edge_tts.py
+          python -m py_compile relic_loop_shorts_fixed.py cloudflare_relic_loop_images.py assemble_relic_loop_short.py edge_tts.py youtube_upload.py
           echo "Python syntax check passed."
       - name: Generate story and story-driven storyboard
         run: |
@@ -108,6 +137,11 @@ jobs:
         run: |
           set -o pipefail
           python assemble_relic_loop_short.py 2>&1 | tee assemble.log
+      - name: Upload finished Short to Chispa-Pifia
+        if: success()
+        run: |
+          set -o pipefail
+          python youtube_upload.py 2>&1 | tee youtube_upload.log
       - name: Collect complete run diagnostics
         if: always()
         shell: bash
@@ -134,6 +168,8 @@ jobs:
             echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
             echo "voice=${RELIC_LOOP_VOICE}"
             echo "kokoro_voice=${RELIC_LOOP_KOKORO_VOICE}"
+            echo "youtube_channel=${CHANNEL_NAME}"
+            echo "youtube_privacy=${YOUTUBE_PRIVACY_STATUS}"
             echo
             echo "git_commit=$(git rev-parse HEAD 2>/dev/null)"
             echo "git_branch=$(git branch --show-current 2>/dev/null)"
@@ -166,6 +202,9 @@ jobs:
             echo
             echo "=== ASSEMBLY LOG ==="
             cat assemble.log 2>/dev/null || echo "assemble.log was not created"
+            echo
+            echo "=== YOUTUBE UPLOAD LOG ==="
+            cat youtube_upload.log 2>/dev/null || echo "youtube_upload.log was not created"
           } > run_diagnostics/complete_logs.txt
 
           {
@@ -175,7 +214,8 @@ jobs:
               state/current_run/flow_storyboard_prompt.txt \
               state/current_run/flow_manifest.json \
               state/current_run/cloudflare_image_manifest.json \
-              state/current_run/timing_manifest.json; do
+              state/current_run/timing_manifest.json \
+              state/current_run/youtube_upload.json; do
               if [ -f "$f" ]; then
                 echo
                 echo "--- $f ---"
@@ -191,6 +231,7 @@ jobs:
           cp cloudflare_relic_loop_images.py run_diagnostics/cloudflare_relic_loop_images.py 2>/dev/null || true
           cp assemble_relic_loop_short.py run_diagnostics/assemble_relic_loop_short.py 2>/dev/null || true
           cp edge_tts.py run_diagnostics/edge_tts.py 2>/dev/null || true
+          cp youtube_upload.py run_diagnostics/youtube_upload.py 2>/dev/null || true
           cp .github/workflows/relic_loop_image_shorts.yml run_diagnostics/relic_loop_image_shorts.yml 2>/dev/null || true
 
           echo "Diagnostics bundle created."
@@ -198,7 +239,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "# Relic Loop Image Short"
+            echo "# Chispa-Pifia Image Short"
             echo
             echo "## RUN IDENTIFIERS"
             echo "- **GitHub Run Number:** ${GITHUB_RUN_NUMBER}"
@@ -226,6 +267,8 @@ jobs:
             fi
             echo
             if [ -f state/current_run/timing_manifest.json ]; then cat state/current_run/timing_manifest.json; fi
+            echo
+            if [ -f state/current_run/youtube_upload.json ]; then cat state/current_run/youtube_upload.json; fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload finished Short and diagnostics
         if: always()
@@ -238,12 +281,14 @@ jobs:
             state/current_run/flow_manifest.json
             state/current_run/cloudflare_image_manifest.json
             state/current_run/timing_manifest.json
+            state/current_run/youtube_upload.json
             state/current_run/relic_loop_short.mp4
             state/current_run/voiceover.wav
             state/current_run/voiceover_neural.mp3
             shorts_flow.log
             cloudflare_images.log
             assemble.log
+            youtube_upload.log
             run_diagnostics/
           if-no-files-found: warn
           retention-days: 14
