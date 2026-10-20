@@ -93,17 +93,17 @@ Keep it safe, non-graphic, and visually understandable without subtitles or capt
 
 {VISUAL_TEXT_POLICY}
 
-FAST-CUT IMAGE REQUIREMENTS:
-- This is an IMAGE-BASED Short, not a small number of long shots.
-- REQUIRED: minimum 20 visual beats per Short.
-- TARGET: 25-40 visual beats per Short whenever the narration supports it.
-- ALLOWED: more than 30 beats; do NOT cap a Short at 30 or 24 beats.
-- A new image should be created at EVERY meaningful phrase, clause, comma, full stop,
-  sudden tone change, reaction, action change, reveal, or important detail.
-- If a sentence contains several distinct actions or details, split them into separate beats.
-- Do NOT hold one image for several unrelated phrases.
-- Prefer many short beats over 6-10 long scenes.
-- Typical image duration: 0.6-1.8 seconds; use up to 2.5 seconds only when a beat genuinely needs it.
+FAST-CUT STORYBOARD REQUIREMENTS:
+- This is an image-based Short unless a real video-generation provider is explicitly configured.
+- Do not claim still images are full character animation. Compose each beat so it can be cut tightly.
+- Target 18-28 meaningful visual beats for 20-45 seconds; do not split every comma into a redundant image.
+- Each beat must show a distinct action, reaction, consequence, reveal, or punchline detail.
+- Typical beat duration: 0.7-1.8 seconds; hold up to 2.5 seconds only for a deliberate reaction or reveal.
+- The first 1-2 seconds must show the problem and an unusual visual immediately.
+- Every 2-4 seconds, introduce a new piece of information, action, escalation, or reaction.
+- Use a clear causal chain: problem -> bad decision -> consequence -> desperate response -> bigger consequence -> twist -> punchline.
+- Include explicit close reaction shots, readable action poses, and a final visual payoff.
+- Never pad the story with nearly identical shots just to hit a beat quota.
 - Two adjacent beats must differ visibly in action, expression, framing, object state,
   camera angle, or story information. If the narration changes, the visual should change too.
 - The first 1-2 seconds must contain a strong visual hook.
@@ -190,8 +190,8 @@ def _validate(data: dict[str, Any]) -> list[str]:
     if not 55 <= _words(narration) <= 115:
         errors.append(f"narration_words={_words(narration)}")
     scenes = data.get("scenes")
-    if not isinstance(scenes, list) or not 20 <= len(scenes) <= 45:
-        errors.append("scene_count_fast_cut")
+    if not isinstance(scenes, list) or not 16 <= len(scenes) <= 32:
+        errors.append("scene_count_storyboard_range")
         return errors
     total = 0.0
     forbidden = re.compile(r"\b(?:caption|subtitle|title card|watermark|speech bubble|typography|logo|written explanation)\b", re.I)
@@ -221,7 +221,7 @@ def _validate(data: dict[str, Any]) -> list[str]:
 def _prompt_for(topic: str | None = None) -> str:
     history = _topic_context()
     if topic:
-        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into at least 20 immediate visual beats, preferably 25-40, at phrases, commas, full stops, tone changes and reactions. Do not cap the beat count at 24 or 30.\n\n{SYSTEM}"
+        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into 18-28 distinct meaningful visual beats. Do not split every comma into a redundant image; each beat must change action, reaction, consequence, framing, or story information.\n\n{SYSTEM}"
     return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\nBreak the narration into at least 20 immediate visual beats, preferably 25-40, at phrases, commas, full stops, tone changes and reactions. Do not cap the beat count at 24 or 30.\n\n{SYSTEM}"
 
 
@@ -308,13 +308,13 @@ def write_package(data: dict[str, Any]) -> None:
         "title": data["title"],
         "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 20,
-        "target_image_beats": "25-40",
+        "minimum_image_beats": 16,
+        "target_image_beats": "18-28 meaningful beats",
         "flow_template": "Storyboard Studio",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
         "media_generation": "cloudflare_images",
-        "beat_policy": "new_image_at_phrase_comma_full_stop_tone_change_action_reaction_detail",
+        "beat_policy": "distinct_action_reaction_consequence_reveal_punchline_not_comma_splitting",
         "files": [str(json_path), str(flow_path)],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
