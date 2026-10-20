@@ -23,35 +23,28 @@ MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
 STYLE = """
-RELIC LOOP — CANONICAL CLOUDFLARE IMAGE STYLE:
-- expressive 2D stickman cartoon illustration for YouTube Shorts
-- hand-drawn feel with bold, clean black linework and simple graphic shapes
-- stickman characters have simple heads/bodies/limbs but highly expressive faces,
-  eyes, mouths, eyebrows, hands and poses; body language carries the comedy
-- flat-to-soft 2D shading, crisp readable silhouettes, strong foreground/background separation
-- colorful but controlled cartoon palette; simple believable environments with enough detail
-  to explain the action without becoming visually cluttered
-- dynamic compositions, exaggerated perspective, dramatic close-ups, wide shots,
-  reaction shots, action poses and visual cause/effect
-- every image must SHOW the exact beat being narrated; never use a generic portrait
-  or a character simply looking at camera
-- preserve character identity, clothing, proportions and recurring props across beats
-- vertical 9:16 composition, designed for fast-cut Shorts editing
-- playful absurd comedy, energetic and visually punchy, non-graphic
-- NOT photorealistic, NOT live action, NOT stock photography, NOT anime,
-  NOT Pixar/3D, NOT realistic human photography, NOT old documentary art
-- NO captions, subtitles, title cards, speech bubbles, logos, watermarks,
-  UI overlays or deliberate typography
-- incidental environmental writing may exist only if naturally part of the setting
-  and never carries the joke or plot
+RELIC LOOP / CHISPA-PIFIA CANONICAL VISUAL STYLE:
+- expressive 2D stickman cartoon illustration for vertical comedy Shorts
+- one canonical human protagonist: round white head, thin black limbs, simple tapered torso,
+  minimal black facial marks, expressive eyebrows/mouth, readable hands and exaggerated poses
+- hand-drawn feel with bold clean black linework and simple graphic shapes
+- flat-to-soft 2D shading, restrained vivid palette, crisp silhouettes, strong foreground/background separation
+- simple believable environments with enough detail to explain the action without visual clutter
+- dynamic wide shots, medium action shots, close reactions, extreme details and dramatic perspective
+- every frame shows the exact current story beat in progress; never a generic portrait
+- preserve protagonist identity, clothing silhouette, proportions, line weight and recurring props
+- vertical 9:16 composition with safe crop margins
+- playful absurd comedy, energetic, non-graphic
+- NOT photorealistic, NOT live action, NOT stock photography, NOT anime, NOT manga, NOT Pixar/3D
+- NO captions, subtitles, title cards, speech bubbles, logos, watermarks, UI overlays or deliberate typography
 """.strip()
 
 VISUAL_TEXT_POLICY = """
-NO STORY TEXT IN IMAGES: Cloudflare image prompts must not request captions,
-subtitles, title cards, speech bubbles, watermarks, logos, labels, UI text or
-written explanations. The visual must communicate through action, expression,
-objects, composition and cause/effect. Incidental real-world environmental writing
-is allowed only when it naturally belongs in the scene and is not plot-bearing.
+ZERO STORY TEXT POLICY: generated images must not contain deliberate captions, subtitles,
+title cards, speech bubbles, logos, watermarks, labels, UI text, readable signs, written
+explanations, letters or numbers added for the story. The joke must work entirely through
+visible action, expression, objects and composition. Natural environmental marks may exist
+only when tiny, non-readable and non-plot-bearing; the renderer's OCR gate remains authoritative.
 """.strip()
 
 SCHEMA_PROMPT = """
@@ -68,50 +61,52 @@ Schema:
   "scenes": [
     {
       "number": 1,
-      "duration_seconds": 1.2,
-      "beat_text": "the exact tiny narration beat, usually one phrase/clause",
+      "duration_seconds": 1.0,
+      "beat_text": "one tiny narration beat",
       "narration": "exact narration for this beat",
-      "visual_prompt": "detailed Cloudflare-ready 2D stickman image prompt",
-      "camera": "camera/composition for this single image",
-      "action": "the exact visible action or reaction",
-      "transition": "immediate visual change into the next beat"
+      "visual_prompt": "detailed 2D stickman image prompt showing this exact action",
+      "camera": "specific framing/composition",
+      "action": "exact visible action or reaction",
+      "transition": "what changes into the next beat"
     }
   ],
-  "flow_prompt": "one complete prompt describing the same cast and visual style",
+  "flow_prompt": "complete prompt describing the same cast and visual style",
   "youtube_description": "short description",
   "tags": ["...", "..."]
 }
 """
 
-SYSTEM = f"""You are the creative director for Relic Loop, a Shorts-only YouTube animation channel.
-Create original absurd/funny micro-stories designed for retention. Start immediately,
-escalate quickly, contain a clear visual joke or unexpected turn, and end with a punchline.
-Do not make documentaries, explainers, listicles, curiosity explainers, or motivational stories.
-Keep it safe, non-graphic, and visually understandable without subtitles or captions.
+SYSTEM = f"""You are the creative director for Relic Loop, the production system behind Chispa-Pifia's absurd stickman comedy Shorts.
+Create original, highly visual micro-stories for 20-45 second vertical videos.
+
+CORE FORMAT:
+1. HOOK: the first 1-2 seconds must show a strange visual problem immediately.
+2. GOAL: establish what the protagonist wants.
+3. BAD DECISION: give them a simple, understandable but foolish solution.
+4. CONSEQUENCE: show the direct result of that decision.
+5. ESCALATION: each new problem must be caused by the previous one.
+6. TWIST: introduce a reveal that is surprising but supported by an earlier detail.
+7. PUNCHLINE: land the joke visually and end immediately; no outro or moral.
+
+RETENTION RULES:
+- Do not begin with greetings, explanations, setup narration or empty establishing shots.
+- Introduce a new action, reaction, consequence, object state, reveal or useful story detail every 1-2 seconds.
+- Prefer 18-28 meaningful visual beats. Never pad the story with redundant images.
+- Most beats should be 0.7-1.8 seconds. A deliberate reaction/reveal may reach 2.5 seconds.
+- Every adjacent beat must visibly change action, expression, framing, object state or story information.
+- Use close reaction shots after major failures and before the punchline.
+- The final beat must visually contain the payoff.
+- The story must be understandable with audio muted; images cannot depend on captions.
+
+WRITING RULES:
+- Original absurd causal-chain comedy, not generic motivational content, explainers, listicles or documentaries.
+- Avoid repetitive POV/mom/falling-asleep/phone-at-1%-style premises unless transformed into a genuinely original mechanism.
+- Prefer concrete physical problems that create escalating visual consequences.
+- Keep stories safe and non-graphic.
 
 {STYLE}
 
 {VISUAL_TEXT_POLICY}
-
-FAST-CUT STORYBOARD REQUIREMENTS:
-- This is an image-based Short unless a real video-generation provider is explicitly configured.
-- Do not claim still images are full character animation. Compose each beat so it can be cut tightly.
-- Target 18-28 meaningful visual beats for 20-45 seconds; do not split every comma into a redundant image.
-- Each beat must show a distinct action, reaction, consequence, reveal, or punchline detail.
-- Typical beat duration: 0.7-1.8 seconds; hold up to 2.5 seconds only for a deliberate reaction or reveal.
-- The first 1-2 seconds must show the problem and an unusual visual immediately.
-- Every 2-4 seconds, introduce a new piece of information, action, escalation, or reaction.
-- Use a clear causal chain: problem -> bad decision -> consequence -> desperate response -> bigger consequence -> twist -> punchline.
-- Include explicit close reaction shots, readable action poses, and a final visual payoff.
-- Never pad the story with nearly identical shots just to hit a beat quota.
-- Two adjacent beats must differ visibly in action, expression, framing, object state,
-  camera angle, or story information. If the narration changes, the visual should change too.
-- The first 1-2 seconds must contain a strong visual hook.
-- Tiny details matter: if narration mentions an object, expression, movement, location,
-  reaction, or consequence, show it in the corresponding image.
-- Use extreme close-ups and reaction shots when a phrase calls for them.
-- Keep recurring characters visually consistent across all images.
-- Every image prompt must describe the exact action for that beat, not a generic scene.
 
 {SCHEMA_PROMPT}
 """
@@ -138,8 +133,7 @@ def _topic_context() -> str:
         return "No previous Relic Loop topics are recorded yet."
     recent = "\n".join(f"- {x}" for x in history[-40:])
     return (
-        "These topics/titles have already been used by Relic Loop. Do NOT repeat them, "
-        "and do not make a near-duplicate that merely changes a few words:\n" + recent
+        "These titles/topics have already been used. Do NOT repeat them or create near-duplicates:\n" + recent
     )
 
 
@@ -186,43 +180,76 @@ def _validate(data: dict[str, Any]) -> list[str]:
     for key in required:
         if not data.get(key):
             errors.append(f"missing:{key}")
+
     narration = str(data.get("narration", ""))
-    if not 55 <= _words(narration) <= 115:
-        errors.append(f"narration_words={_words(narration)}")
+    word_count = _words(narration)
+    if not 55 <= word_count <= 105:
+        errors.append(f"narration_words={word_count}")
+
     scenes = data.get("scenes")
-    if not isinstance(scenes, list) or not 16 <= len(scenes) <= 32:
-        errors.append("scene_count_storyboard_range")
+    if not isinstance(scenes, list) or not 18 <= len(scenes) <= 28:
+        errors.append(f"scene_count={len(scenes) if isinstance(scenes, list) else 'invalid'}")
         return errors
+
     total = 0.0
-    forbidden = re.compile(r"\b(?:caption|subtitle|title card|watermark|speech bubble|typography|logo|written explanation)\b", re.I)
+    forbidden = re.compile(
+        r"\b(?:caption|subtitle|title card|watermark|speech bubble|typography|logo|written explanation|text overlay|readable text|letters|numbers)\b",
+        re.I,
+    )
+    previous_action = ""
+    narration_parts: list[str] = []
+
     for i, scene in enumerate(scenes, 1):
         if not isinstance(scene, dict):
             errors.append(f"scene_{i}_not_object")
             continue
-        d = float(scene.get("duration_seconds", 0) or 0)
+        try:
+            d = float(scene.get("duration_seconds", 0) or 0)
+        except (TypeError, ValueError):
+            d = 0
         total += d
         if not 0.5 <= d <= 2.5:
             errors.append(f"scene_{i}_duration")
-        for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
-            if not scene.get(field):
+        for field in ("beat_text", "visual_prompt", "camera", "action", "transition", "narration"):
+            if not str(scene.get(field, "")).strip():
                 errors.append(f"scene_{i}_missing_{field}")
         vp = str(scene.get("visual_prompt", ""))
+        action = str(scene.get("action", ""))
+        beat_text = str(scene.get("beat_text", ""))
+        narration_parts.append(str(scene.get("narration", "")))
         if forbidden.search(vp):
             errors.append(f"scene_{i}_text_dependency")
-        if re.search(r"\b(?:photorealistic|live[- ]action|stock photo|portrait of a smiling man|anime|pixar|3d render)\b", vp, re.I):
+        if re.search(r"\b(?:photorealistic|live[- ]action|stock photo|anime|pixar|3d render|realistic human)\b", vp, re.I):
             errors.append(f"scene_{i}_wrong_visual_style")
         if "stickman" not in vp.lower():
             errors.append(f"scene_{i}_missing_stickman")
+        if i == 1 and not re.search(r"\b(?:immediately|suddenly|already|stuck|falling|running|exploding|flying|crashing|chasing|hanging|covered|trapped|racing|escaping)\b", action, re.I):
+            errors.append("weak_first_visual_hook")
+        if i > 1 and action.strip().lower() == previous_action.strip().lower():
+            errors.append(f"scene_{i}_duplicate_action")
+        previous_action = action
+
     if not 20 <= total <= 45:
         errors.append(f"runtime={total:.1f}")
+
+    scene_text = " ".join(narration_parts).strip()
+    if scene_text != narration.strip():
+        errors.append("beat_narration_mismatch")
+    if scenes and scenes[-1].get("number") != len(scenes):
+        errors.append("scene_numbering")
     return errors
 
 
 def _prompt_for(topic: str | None = None) -> str:
     history = _topic_context()
+    beat_instruction = (
+        "Build exactly 18-28 meaningful beats. Give the first 2-3 beats an immediate visual hook, "
+        "then use short action/reaction/consequence beats. Do not split every comma. Every beat must "
+        "change what is visibly happening. Make the final 1-2 beats the payoff and stop immediately."
+    )
     if topic:
-        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\nBreak the narration into 18-28 distinct meaningful visual beats. Do not split every comma into a redundant image; each beat must change action, reaction, consequence, framing, or story information.\n\n{SYSTEM}"
-    return f"Invent a highly shareable absurd Relic Loop Short premise with an immediate hook and strong visual punchline. Avoid overused meme formats and ALL previously used topics.\n\n{history}\n\nBreak the narration into at least 20 immediate visual beats, preferably 25-40, at phrases, commas, full stops, tone changes and reactions. Do not cap the beat count at 24 or 30.\n\n{SYSTEM}"
+        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\n{beat_instruction}\n\n{SYSTEM}"
+    return f"Invent ONE original absurd Relic Loop Short premise that is visually ridiculous and easy to understand in a scrolling feed. Avoid all used topics and near-duplicates.\n\n{history}\n\n{beat_instruction}\n\n{SYSTEM}"
 
 
 def generate(topic: str | None = None) -> dict[str, Any]:
@@ -238,8 +265,8 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                     {"role": "system", "content": SYSTEM},
                     {"role": "user", "content": _prompt_for(topic)},
                 ],
-                temperature=0.95,
-                max_completion_tokens=6000,
+                temperature=0.92,
+                max_completion_tokens=7000,
             )
             data = _extract_json(response.choices[0].message.content or "")
             errors = _validate(data)
@@ -248,10 +275,13 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                     model=MODEL,
                     messages=[
                         {"role": "system", "content": SYSTEM},
-                        {"role": "user", "content": "Repair this JSON so it passes every requirement. Return ONLY JSON.\nErrors: " + ", ".join(errors) + "\nJSON:\n" + json.dumps(data, ensure_ascii=False)},
+                        {
+                            "role": "user",
+                            "content": "Repair this JSON so it passes EVERY validation requirement. Do not merely remove errors; improve weak hooks, duplicate beats and causal continuity. Return ONLY JSON.\nErrors: " + ", ".join(errors) + "\nJSON:\n" + json.dumps(data, ensure_ascii=False),
+                        },
                     ],
-                    temperature=0.25,
-                    max_completion_tokens=6000,
+                    temperature=0.18,
+                    max_completion_tokens=7000,
                 )
                 data = _extract_json(repair.choices[0].message.content or "")
                 errors = _validate(data)
@@ -304,17 +334,18 @@ def write_package(data: dict[str, Any]) -> None:
 
     manifest = {
         "type": "relic_loop_fast_cut_image_short",
-        "version": 3,
+        "version": 4,
         "title": data["title"],
         "runtime_seconds": round(sum(float(s["duration_seconds"]) for s in scenes), 2),
         "image_beat_count": len(scenes),
-        "minimum_image_beats": 16,
+        "minimum_image_beats": 18,
         "target_image_beats": "18-28 meaningful beats",
         "flow_template": "Storyboard Studio",
-        "zero_text_gate": False,
-        "text_policy": "no_deliberate_story_text",
+        "zero_text_gate": True,
+        "text_policy": "reject_story_text_and_ocr_suspects",
         "media_generation": "cloudflare_images",
-        "beat_policy": "distinct_action_reaction_consequence_reveal_punchline_not_comma_splitting",
+        "beat_policy": "causal_action_reaction_consequence_reveal_punchline",
+        "quality_gate": "strict_storyboard_validation_before_image_quota_spend",
         "files": [str(json_path), str(flow_path)],
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
