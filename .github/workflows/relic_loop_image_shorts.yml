@@ -55,6 +55,9 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install --retries 5 --timeout 120 --prefer-binary \
+            'groq>=0.31,<1.0' \
+            'requests>=2.32,<3' \
+            'Pillow>=10,<13' \
             'kokoro>=0.9.4,<1.0' \
             'soundfile>=0.13,<1.0' \
             'numpy>=2.0,<3' \
@@ -88,6 +91,10 @@ jobs:
           espeak-ng --version | head -n 1
           python - <<'PY'
           import edge_tts
+          import groq
+          import requests
+          from PIL import Image
+          print('Pipeline Python imports passed: edge_tts, groq, requests, Pillow')
           print('Kokoro compatibility voice backend:', getattr(edge_tts, '__version__', 'installed'))
           print('Voice:', __import__('os').environ.get('RELIC_LOOP_KOKORO_VOICE'))
           PY
@@ -149,7 +156,6 @@ jobs:
         run: |
           set +e
           mkdir -p run_diagnostics
-
           {
             echo "RELlC LOOP RUN DIAGNOSTICS"
             echo "==========================="
@@ -193,7 +199,6 @@ jobs:
             echo "DIRECTORY SNAPSHOT:"
             find state/current_run -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort
           } > run_diagnostics/run_metadata.txt
-
           {
             echo "=== STORY GENERATION LOG ==="
             cat shorts_flow.log 2>/dev/null || echo "shorts_flow.log was not created"
@@ -207,7 +212,6 @@ jobs:
             echo "=== YOUTUBE UPLOAD LOG ==="
             cat youtube_upload.log 2>/dev/null || echo "youtube_upload.log was not created"
           } > run_diagnostics/complete_logs.txt
-
           {
             echo "=== AVAILABLE RUN OUTPUTS ==="
             for f in \
@@ -227,14 +231,12 @@ jobs:
               fi
             done
           } > run_diagnostics/run_outputs.txt
-
           cp relic_loop_shorts_fixed.py run_diagnostics/relic_loop_shorts_fixed.py 2>/dev/null || true
           cp cloudflare_relic_loop_images.py run_diagnostics/cloudflare_relic_loop_images.py 2>/dev/null || true
           cp assemble_relic_loop_short.py run_diagnostics/assemble_relic_loop_short.py 2>/dev/null || true
           cp edge_tts.py run_diagnostics/edge_tts.py 2>/dev/null || true
           cp youtube_upload.py run_diagnostics/youtube_upload.py 2>/dev/null || true
           cp .github/workflows/relic_loop_image_shorts.yml run_diagnostics/relic_loop_image_shorts.yml 2>/dev/null || true
-
           echo "Diagnostics bundle created."
       - name: Write run summary
         if: always()
