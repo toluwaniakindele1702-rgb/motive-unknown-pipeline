@@ -28,16 +28,19 @@ REFERENCE_B64 = ROOT / "assets" / "relic_loop_character_reference.jpg.b64"
 
 STYLE_LOCK = """
 RELIC LOOP MASTER VISUAL STYLE — DO NOT REDESIGN:
-modern hand-drawn 2D stickman animation illustration, based on the supplied Relic Loop
-stickman character reference: simple round head, simple tapered torso, thin expressive
-limbs, clean slightly imperfect black ink linework, minimal oval eyes, highly expressive
-mouth/eyebrow shapes, readable hands and exaggerated body language. Keep the human
-protagonist simple; spend visual complexity on the exact action, environment, perspective
-and composition. Clean graphic cartoon rendering with subtle flat-to-soft 2D shading,
-restrained color, clear silhouettes, believable but simplified environments, strong
-foreground/background separation, energetic comedy timing, dynamic perspective and
-polished Shorts storyboard quality. Vertical 9:16 composition. Character identity must
-remain stable between beats; do not redesign head, body proportions or line language.
+modern expressive 2D stickman cartoon illustration, not a generic AI illustration. Use
+one canonical protagonist design across the entire video: same round white head, same
+simple black facial marks, same thin black limbs, same torso/clothing silhouette and
+same line thickness in every scene. Keep the protagonist recognizably a stickman even
+inside detailed environments. Bold clean black outlines, expressive eyebrows and mouth,
+clear hands and exaggerated readable poses. Flat-to-soft 2D shading, restrained vivid
+palette, clean silhouettes, uncluttered backgrounds, strong foreground/background
+separation. Compose for fast comedic editing: obvious subject, clear action, readable
+cause-and-effect, varied wide/medium/close reaction framing, and room around the subject
+for safe vertical crop. Show the exact narrated action in progress, not a static character
+portrait. For motion beats, show a dynamic mid-action pose with directional energy and
+environmental reaction. Vertical 9:16 Shorts storyboard quality. Preserve character identity,
+clothing, proportions, line language and recurring props between beats.
 
 SHOT LANGUAGE:
 Use purposeful variation such as wide establishing, medium action, close reaction,
@@ -46,6 +49,7 @@ when it makes the current story action clearer. Framing must serve the exact bea
 
 ABSOLUTE STYLE EXCLUSIONS:
 no photorealism, no live action, no stock photography, no anime, no manga, no Pixar/3D,
+no realistic human anatomy, no style switching between scenes, no duplicate protagonist,
 no glossy 3D mascot, no realistic human, no generic corporate illustration, no old
 history-documentary art, no generic smiling portrait, no static character pose.
 """.strip()
