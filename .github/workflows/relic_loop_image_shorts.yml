@@ -99,7 +99,8 @@ jobs:
           import edge_tts
           out = Path(tempfile.gettempdir()) / 'relic_loop_kokoro_preflight.mp3'
           out.unlink(missing_ok=True)
-          asyncio.run(edge_tts.Communicate('This is a Kokoro Liam preflight test.').save(str(out)))
+          voice = os.environ.get('RELIC_LOOP_KOKORO_VOICE', 'am_liam')
+          asyncio.run(edge_tts.Communicate('This is a Kokoro Liam preflight test.', voice=voice).save(str(out)))
           if not out.exists() or out.stat().st_size < 1000:
               raise SystemExit('Kokoro Liam preflight produced no usable audio')
           print('Kokoro Liam preflight passed:', out.stat().st_size, 'bytes')
