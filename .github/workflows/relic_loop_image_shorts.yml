@@ -10,7 +10,9 @@ on:
         default: ""
         type: string
   schedule:
-    - cron: '50 12 * * *'
+    - cron: '0 19 * * *'
+      timezone: 'Africa/Lagos'
+    - cron: '0 1 * * *'
       timezone: 'Africa/Lagos'
 
 concurrency:
