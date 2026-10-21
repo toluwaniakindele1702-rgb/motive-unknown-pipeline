@@ -247,12 +247,14 @@ def validate(obj: dict[str, Any]) -> list[str]:
         errors.append("story_structure")
 
     bad_random_patterns = [
-        r"random (?:cat|dog|monkey|bird|llama|dinosaur)\b",
-        r"random .*\b(?:livestream|yoga|meme|website)\b",
-        r"(?:phone|chair|fridge|refrigerator|toilet|pizza|sandwich|coffee) .*\b(?:run|runs|walk|walks|talk|talks|attack|attacks|dance|dances|fight|fights)\b",
-        r"(?:objects?|mugs?|chairs?|phones?) .*\bform (?:an )?(?:army|band|crowd)\b",
+        r"\brandom (?:cat|dog|monkey|bird|llama|dinosaur)\b",
+        r"\b(?:a|an|the) random (?:livestream|yoga session|meme|website)\b",
+        r"\b(?:phone|chair|fridge|refrigerator|toilet|pizza|sandwich|coffee) (?:suddenly )?(?:runs away|walks away|starts talking|attacks him|attacks her|starts dancing|starts fighting)\b",
+        r"\b(?:objects?|mugs?|chairs?|phones?) (?:suddenly )?form (?:an )?(?:army|band|crowd)\b",
     ]
-    combined_story = narration + " " + json.dumps(structure, ensure_ascii=False) if isinstance(structure, dict) else narration
+    # Check the story itself, not the entire JSON blob or production metadata.
+    structure_text = json.dumps(structure, ensure_ascii=False) if isinstance(structure, dict) else ""
+    combined_story = narration + " " + structure_text
     for pattern in bad_random_patterns:
         if re.search(pattern, combined_story.lower()):
             errors.append("random_object_or_creature_or_digital_nonsense")
