@@ -269,7 +269,7 @@ def main() -> None:
 
     timing = {
         "timing_policy": "narration_is_master_timeline",
-        "image_count_policy": "meaningful_story_beats_determine_count",
+        "image_count_policy": "8_to_10_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
         "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
         "master_narration_words": total_words,
