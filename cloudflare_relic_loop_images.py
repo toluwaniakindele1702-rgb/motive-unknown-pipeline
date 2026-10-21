@@ -265,8 +265,8 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if not 18 <= len(scenes) <= 28:
-        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the strict 18-28 range")
+    if not 8 <= len(scenes) <= 10:
+        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the required 8-10 range")
 
     refs = _load_reference()
     manifest = {
@@ -280,7 +280,7 @@ def main() -> None:
         "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "assembly recalculates beat durations from actual TTS duration",
-        "image_count_policy": "18-28 meaningful story beats",
+        "image_count_policy": "8-10 meaningful phrase-aligned story beats",
         "continuity_policy": "canonical_character_reference_plus_previous_accepted_frame",
         "beats": [],
     }
