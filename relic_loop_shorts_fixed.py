@@ -238,8 +238,18 @@ def validate(obj: dict[str, Any]) -> list[str]:
             if not structure.get(key):
                 errors.append(f"missing_structure:{key}")
         chain = structure.get("causal_chain")
-        if isinstance(chain, list) and len(chain) < 4:
-            errors.append("causal_chain_too_short")
+        if isinstance(chain, list):
+            # Accept a compact arrow-separated chain only if it clearly names multiple stages.
+            chain_text = " ".join(str(item) for item in chain)
+            stages = [part.strip() for part in re.split(r"\s*(?:->|→|\n|;|\|)\s*", chain_text) if part.strip()]
+            if len(chain) < 4 and len(stages) < 5:
+                errors.append("causal_chain_too_short")
+        elif isinstance(chain, str):
+            stages = [part.strip() for part in re.split(r"\s*(?:->|→|\n|;|\|)\s*", chain) if part.strip()]
+            if len(stages) < 5:
+                errors.append("causal_chain_too_short")
+        else:
+            errors.append("causal_chain_invalid")
         escalations = structure.get("escalations")
         if isinstance(escalations, list) and len(escalations) < 3:
             errors.append("too_few_meaningful_escalations")
