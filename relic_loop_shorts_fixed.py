@@ -139,8 +139,16 @@ Return ONLY valid JSON with this shape:
   "story_structure":{{
     "problem":"...",
     "goal":"...",
-    "causal_chain":["problem -> decision -> consequence -> decision -> escalation -> twist -> payoff"],
-    "escalations":["...","...","..."],
+    "causal_chain":[
+      "1. Initial problem",
+      "2. Protagonist decision",
+      "3. Immediate consequence",
+      "4. Attempt to fix it",
+      "5. Further escalation",
+      "6. Foreshadowed twist",
+      "7. Punchline payoff"
+    ],
+    "escalations":["first cause-and-effect escalation","second escalation caused by the protagonist's response","third escalation that sets up the twist"],
     "twist":"...",
     "punchline":"..."
   }},
@@ -324,10 +332,13 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     seed = f"Story seed: {topic}." if topic else "Invent an original, highly relatable everyday human problem that can naturally spiral into absurd comedy."
     retry_note = (
         "The previous package failed validation. Rebuild it from scratch. Do not patch the failed story. "
-        "Make the causal chain clearer, make the protagonist's goal matter, and remove every event that exists only because it is weird. "
+        "Write causal_chain as a JSON ARRAY of at least 5 separate short strings, one causal stage per item; never put the entire chain in one array item. "
+        "Write at least 3 separate escalations, each caused by the protagonist's response to the previous problem. "
+        "Make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is foreshadowed. "
         "The final narration must be 105-145 words and every scene narration must exactly partition it."
         if retry else
-        "Build the causal chain silently before writing. The story must be meaningful first and absurd second. "
+        "Build the causal chain silently before writing. Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. "
+        "Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
         "Do not force extra events to reach length; if the premise is weak, replace it with a stronger premise."
     )
     return f"{seed}\n{used}\n{retry_note}\nWrite the complete JSON package now."
