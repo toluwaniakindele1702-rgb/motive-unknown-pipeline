@@ -363,7 +363,7 @@ def generate(topic: str | None) -> dict[str, Any]:
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
                 obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-                obj["timing_policy"] = "Narration is the master timeline; final video duration follows neural narration; meaningful story beats determine image count."
+                obj["timing_policy"] = "Narration is the master timeline; final video duration follows neural narration; exactly 18-28 meaningful visual beats are required."
                 obj["story_policy"] = "meaningful_human_goal_causal_chain_absurd_comedy_45_60_seconds"
                 obj["style_policy"] = STYLE
                 return obj
