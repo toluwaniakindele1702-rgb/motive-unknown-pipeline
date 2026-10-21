@@ -108,10 +108,11 @@ Narration is the source of truth. Every image is a literal reenactment of one me
 Each visual beat must answer: WHO is there, WHERE are they, WHAT are they doing, and WHY is it happening now?
 Never invent visual jokes that are absent from the story.
 
-STORY-FIRST TIMING:
-There is NO fixed image count. Create one beat whenever the story reaches a meaningful visual change: new action, reaction, consequence, location, object state, reveal or punchline detail.
-Do not split every comma into an image. Do not combine distinct actions merely to reduce image count.
-The narration is the master timeline. Scene narration fields must be contiguous exact excerpts from the master narration, in order, with no missing or duplicated words.
+STORYBOARD BEAT COUNT — HARD REQUIREMENT:
+Every Short MUST contain 18-28 distinct visual beats/scenes. This is a hard production requirement, not a suggestion. A 45-60 second narration with 7 scenes is invalid and must never reach image rendering.
+Plan roughly 18-24 beats for a normal 45-60 second story, with each beat showing one distinct, meaningful on-screen moment: hook, goal, reaction, decision, physical action, consequence, changed prop/state, escalation, reveal, or punchline. Most beats will cover a short contiguous narration excerpt of roughly 3-8 words; vary naturally when a complete action needs more words.
+Do NOT pad with meaningless filler, duplicate poses, or split one unchanged moment arbitrarily. Instead, storyboard the actual micro-actions and reactions already present or clearly implied by the narration. Keep the causal story intact while showing its meaningful visual changes.
+The narration is the master timeline. Scene narration fields must be contiguous exact excerpts from the master narration, in order, with no missing, duplicated, paraphrased, or reordered words.
 Final assembly uses the actual neural narration duration; scene duration values are only estimates.
 
 CHARACTERS:
@@ -123,6 +124,7 @@ CHARACTERS:
 VISUAL STYLE: {STYLE}
 
 SCENE RULES:
+- The complete storyboard MUST have 18-28 scenes; fewer than 18 or more than 28 is invalid.
 - Every scene describes exactly one meaningful moment.
 - Every scene contains the protagonist or a directly relevant visible consequence.
 - beat_text, narration, visual_prompt and action describe the same event.
@@ -282,6 +284,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not isinstance(scenes, list) or not scenes:
         errors.append("no_visual_beats")
         return errors
+    if not 18 <= len(scenes) <= 28:
+        errors.append(f"visual_beat_count={len(scenes)}_hard_limit_18_28")
 
     reconstructed = " ".join(_norm_text(str(s.get("narration", ""))) for s in scenes if isinstance(s, dict))
     if reconstructed != narration:
@@ -335,11 +339,13 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
         "Write causal_chain as a JSON ARRAY of at least 5 separate short strings, one causal stage per item; never put the entire chain in one array item. "
         "Write at least 3 separate escalations, each caused by the protagonist's response to the previous problem. "
         "Make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is foreshadowed. "
-        "The final narration must be 105-145 words and every scene narration must exactly partition it."
+        "The final narration must be 105-145 words and every scene narration must exactly partition it. "
+        "The storyboard MUST contain 18-28 separate scenes. Seven scenes is a hard failure. Split the narration into 18-28 distinct meaningful visual moments, each with a short exact contiguous narration excerpt; do not use filler or repeat the same moment."
         if retry else
         "Build the causal chain silently before writing. Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. "
         "Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
-        "Do not force extra events to reach length; if the premise is weak, replace it with a stronger premise."
+        "The storyboard MUST contain 18-28 separate scenes for the 45-60 second narration. Seven scenes is invalid. Make each scene a distinct, meaningful action/reaction/consequence/reveal with a short exact contiguous narration excerpt; do not add filler or duplicate moments. "
+        "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
     )
     return f"{seed}\n{used}\n{retry_note}\nWrite the complete JSON package now."
 
@@ -387,7 +393,7 @@ def write(obj: dict[str, Any]) -> None:
         "CHISPA-PIFIA — MEANINGFUL STORY SHORT",
         "",
         "STORY POLICY: HUMAN PROTAGONIST + CLEAR GOAL + CAUSAL ABSURD COMEDY",
-        "TIMING POLICY: NARRATION IS MASTER TIMELINE; MEANINGFUL STORY BEATS DETERMINE IMAGE COUNT",
+        "TIMING POLICY: NARRATION IS MASTER TIMELINE; EXACTLY 18-28 MEANINGFUL VISUAL BEATS",
         "",
         obj["flow_prompt"],
         "",
@@ -419,7 +425,7 @@ def write(obj: dict[str, Any]) -> None:
         "story_word_count": words(obj["narration"]),
         "estimated_storyboard_seconds": runtime_estimate,
         "image_beat_count": len(scenes),
-        "image_count_policy": "determined_by_meaningful_story_beats; no fixed count",
+        "image_count_policy": "hard_limit_18_28_meaningful_visual_beats",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
         "story_policy": "meaningful_human_goal_causal_chain_absurd_comedy_45_60_seconds",
