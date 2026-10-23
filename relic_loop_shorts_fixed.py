@@ -44,11 +44,22 @@ CORE STORY ENGINE — NON-NEGOTIABLE:
 7. A surprising but foreshadowed twist changes how the earlier events are understood.
 8. A short, funny final payoff ends the story.
 
-MEANING TEST:
-Before writing, silently explain the story in ONE sentence using cause and effect.
-If you cannot explain why each major event happens, reject the idea and create a better one.
-The viewer should be able to summarize the story afterward and understand what the protagonist was trying to accomplish.
-Absurd does NOT mean meaningless. Every major event must have a reason.
+MEANING + CAUSAL-INTEGRITY TEST — NON-NEGOTIABLE:
+Before writing, silently summarize the whole story in ONE sentence using cause and effect. If that summary sounds like a list of unrelated events, discard the premise.
+For EVERY major beat, silently answer:
+- What exactly caused this event?
+- How does it follow from the previous action or established situation?
+- What does the protagonist do in response, and how does that response create the next problem?
+- Would the event make sense under the story's own rules and ordinary real-world logic?
+If any answer is weak, rewrite the beat or replace the premise. Do not rely on coincidence to move the plot forward.
+The viewer must understand the protagonist's goal, why each escalation happens, and how the ending connects to earlier details. Absurd does NOT mean meaningless.
+CONTINUITY / PLAUSIBILITY AUDIT:
+- Never create an obstacle that contradicts the setting's established rules without explaining the cause.
+- Do not use implausible safety or building behavior as a cheap gag (for example, an exit inexplicably locked during a fire alarm/drill).
+- Track where the protagonist, important objects, and other characters are; do not teleport or forget them between beats.
+- If a character loses an object, becomes trapped, misses a deadline, or triggers an alarm, show the action or established rule that caused it.
+- The twist must be surprising but fair: seed the key detail earlier, then reveal its meaning. Do not introduce a brand-new coincidence in the last sentence.
+- Prefer one tightly connected chain of 3-5 escalations over adding extra events just to make the story feel bigger.
 
 LENGTH — HARD LIMIT:
 The complete spoken narration MUST be 105-145 words, targeting roughly 120-135 words.
@@ -56,20 +67,24 @@ This should normally produce about 45-60 seconds of natural narration.
 Do not pad the story. Do not rush it to hit a word count. If the idea cannot support a meaningful 45-60 second story, discard it and create a stronger premise.
 
 STORY QUALITY:
-- Start with an immediate concrete hook.
-- Give the protagonist a clear goal that matters in the situation.
-- Establish enough context that the viewer understands the stakes.
-- Use 3-5 meaningful cause-and-effect escalations.
-- Give the protagonist agency: their decisions should drive the story.
-- Keep the world mostly normal until the absurdity grows naturally.
-- Make the twist connected to something established earlier.
-- End immediately after the strongest payoff.
-- Natural conversational spoken English.
-- No moral, lesson, explanation, generic outro or "subscribe" line.
+- Open in the first sentence with a concrete, instantly understandable problem AND a specific constraint, deadline, risk, or goal where useful. Avoid slow introductions.
+- Make the viewer understand what the protagonist wants and why it matters within the first 1-2 sentences.
+- Start the chain quickly: the protagonist makes a clear choice early, and that choice has a visible consequence.
+- Use 3-5 meaningful escalations; each must be caused by the protagonist's prior action, the direct consequence of that action, or a clearly established rule.
+- Escalate the COST or difficulty of the original goal; do not merely increase spectacle.
+- Give the protagonist agency: their decisions should drive the story, including failed attempts to recover the situation.
+- Keep the world mostly normal until the absurdity grows naturally from the chain.
+- Keep continuity of people, locations, objects, time, and cause-and-effect.
+- Make the twist connected to an earlier detail and make it feel inevitable in hindsight.
+- Check for plot holes, contradictory rules, implausible coincidences, forgotten objects, unexplained escapes, and obstacles that exist only to force the next scene. Repair every one before returning JSON.
+- End immediately after the strongest payoff; do not explain the joke afterward.
+- Use natural conversational spoken English and short, clear sentences that are easy to narrate.
+- No moral, lesson, generic outro or "subscribe" line.
 - The story must still make sense if all visuals are removed.
 
 GOOD PREMISE PATTERN:
-A normal person wants something simple, makes a shortcut or bad decision, creates a practical problem, tries to repair it, creates a bigger practical problem, keeps improvising, and finally discovers an absurd consequence that was logically hiding in the original situation.
+A normal person wants something simple under a clear constraint (like a deadline or limited time), makes a shortcut or bad decision, causes a specific practical problem, tries to repair it, causes a worse practical problem, improvises again, and finally discovers an absurd consequence that was seeded in the original situation.
+Every link must be explicit enough for a viewer to follow on first watch. The ending should pay off the original goal, not abandon it for an unrelated gag.
 
 GOOD EXAMPLES OF PREMISE TYPES:
 - returning something before a deadline
@@ -337,14 +352,16 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
     seed = f"Story seed: {topic}." if topic else "Invent an original, highly relatable everyday human problem that can naturally spiral into absurd comedy."
     retry_note = (
         "The previous package failed validation. Rebuild it from scratch. Do not patch the failed story. "
+        "Audit cause and effect beat by beat: every event needs an established cause, every attempted fix must change the situation, and the ending must pay off the original goal. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. Do not use implausible safety/building behavior as a cheap gag (for example, an exit inexplicably locked during a fire alarm/drill). "
         "Write causal_chain as a JSON ARRAY of at least 5 separate short strings, one causal stage per item; never put the entire chain in one array item. "
         "Write at least 3 separate escalations, each caused by the protagonist's response to the previous problem. "
-        "Make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is foreshadowed. "
+        "Make the first sentence an immediate concrete hook, make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is seeded earlier. "
         "The final narration must be 105-145 words and every scene narration must exactly partition it. "
         "The storyboard MUST contain 8-10 separate scenes. Seven or fewer is too sparse; more than ten is invalid. Divide narration at natural sentence boundaries and then meaningful phrase/clause boundaries, with each image showing the phrase currently being spoken. Keep exact contiguous narration excerpts; do not use filler or duplicate moments. Do not set a fixed seconds-per-image duration."
         if retry else
-        "Build the causal chain silently before writing. Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. "
-        "Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
+        "Build and audit the full causal chain silently before writing. For every beat, verify what caused it, how it follows from the prior beat, and how it changes the protagonist's next decision. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. "
+        "Use a concrete first-sentence hook with a clear goal and constraint; start the protagonist's first consequential decision early. Each escalation must worsen the original problem because of an established cause, not merely add spectacle. The twist must be seeded earlier and pay off the original goal. "
+        "Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
         "The storyboard MUST contain 8-10 separate scenes for the 45-60 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
         "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
     )
