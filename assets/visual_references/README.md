@@ -3,8 +3,8 @@
 ## Canonical reference files
 Put the two approved reference images in this folder using these exact filenames:
 
-- `chispa_character_standing_poses.png` — character identity, proportions, outfit, front/side/back views, expressions and pose range.
-- `chispa_environment_style_reference.png` — detailed locations, cinematic lighting, colour palette, camera language and overall rendering mood.
+- `chispa_character_standing_poses.jpg` — character identity, proportions, outfit, front/side/back views, expressions and pose range.
+- `chispa_environment_style_reference.jpg` — detailed locations, cinematic lighting, colour palette, camera language and overall rendering mood.
 
 The image renderer loads both files and sends them with each image-generation request. The first image anchors the character; the second anchors environments and cinematography. The previously accepted frame is also supplied to help preserve continuity from beat to beat.
 
@@ -30,4 +30,4 @@ The image renderer loads both files and sends them with each image-generation re
 - The story is the source of truth. Reference-sheet example scenes are style examples only and must not leak into unrelated stories.
 
 ## Important limitations
-Reference images improve consistency but do not guarantee perfect image identity. The pipeline must be checked by rendering several adjacent scenes and visually reviewing them before trusting a full production run. If the canonical PNGs are absent, the script falls back to the legacy embedded reference; that fallback is not the final approved setup.
+Reference images improve consistency but do not guarantee perfect image identity. The pipeline must be checked by rendering several adjacent scenes and visually reviewing them before trusting a full production run. If the canonical JPEGs are absent, the script falls back to the legacy embedded reference; that fallback is not the final approved setup.
