@@ -101,7 +101,7 @@ GOOD EXAMPLES OF PREMISE TYPES:
 - trying to finish a simple job before a deadline
 - trying to hide an embarrassing mistake while fixing it
 
-ABSURDITY RULE:
+CURIOSITY AND PAYOFF RULE:
 The audience should think: "I need to know what happens next" and, at the ending, "That makes sense now" or "I didn't see that coming, but the clues were there."
 Never make the audience think: "The writer just put a random thing here because it is weird."
 
