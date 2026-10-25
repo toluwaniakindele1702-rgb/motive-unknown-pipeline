@@ -3,8 +3,8 @@
 ## Canonical reference files
 Put the two approved reference images in this folder using these exact filenames:
 
-- `chispa_character_standing_poses.jpg` — character identity, proportions, outfit, front/side/back views, expressions and pose range.
-- `chispa_environment_style_reference.jpg` — detailed locations, cinematic lighting, colour palette, camera language and overall rendering mood.
+- `file_00000000078881f486600a6d2d8ccc89.png` — uploaded character reference image.
+- `file_000000008bfc81f480840c507c90542b.png` — uploaded environment/style reference image.
 
 The image renderer loads both files and sends them with each image-generation request. The production workflow fails preflight if either canonical JPEG is missing; upload both actual image files before running production. The first image anchors the character; the second anchors environments and cinematography. The previously accepted frame is also supplied to help preserve continuity from beat to beat.
 
