@@ -73,10 +73,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s assets/visual_references/chispa_character_standing_poses.jpg || { echo "::error::Missing assets/visual_references/chispa_character_standing_poses.jpg. Upload the approved standing-pose reference sheet before generating videos."; exit 1; }
-          test -s assets/visual_references/chispa_environment_style_reference.jpg || { echo "::error::Missing assets/visual_references/chispa_environment_style_reference.jpg. Upload the approved environment/style reference sheet before generating videos."; exit 1; }
-          file assets/visual_references/chispa_character_standing_poses.jpg
-          file assets/visual_references/chispa_environment_style_reference.jpg
+          test -s assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png || { echo "::error::Missing assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png. Upload the uploaded character reference image before generating videos."; exit 1; }
+          test -s assets/visual_references/file_000000008bfc81f480840c507c90542b.png || { echo "::error::Missing assets/visual_references/file_000000008bfc81f480840c507c90542b.png. Upload the uploaded environment/style reference image before generating videos."; exit 1; }
+          file assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png
+          file assets/visual_references/file_000000008bfc81f480840c507c90542b.png
       - name: Preflight
         shell: bash
         run: |
