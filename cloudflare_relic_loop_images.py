@@ -27,31 +27,54 @@ OCR_STRICT = os.environ.get("RELIC_LOOP_OCR_STRICT", "1") != "0"
 REFERENCE_B64 = ROOT / "assets" / "relic_loop_character_reference.jpg.b64"
 
 STYLE_LOCK = """
-RELIC LOOP / CHISPA-PIFIA MASTER VISUAL STYLE — DO NOT REDESIGN:
-modern expressive 2D stickman cartoon illustration, not a generic AI illustration. Use
-one canonical protagonist design across the entire video: same round white head, same
-simple black facial marks, same thin black limbs, same torso/clothing silhouette and
-same line thickness in every scene. Keep the protagonist recognizably a stickman even
-inside detailed environments. Bold clean black outlines, expressive eyebrows and mouth,
-clear hands and exaggerated readable poses. Flat-to-soft 2D shading, restrained vivid
-palette, clean silhouettes, uncluttered backgrounds, strong foreground/background
-separation. Compose for fast comedic editing: obvious subject, clear action, readable
-cause-and-effect, varied wide/medium/close reaction framing, and room around the subject
-for safe vertical crop. Show the exact narrated action in progress, not a static character
-portrait. For motion beats, show a dynamic mid-action pose with directional energy and
-environmental reaction. Vertical 9:16 Shorts storyboard quality. Preserve character identity,
-clothing, proportions, line language and recurring props between beats.
+CHISPA-PIFIA MASTER VISUAL STYLE — HARD LOCK, DO NOT REDESIGN:
+Follow the supplied canonical standing-pose reference as the exact character model sheet,
+not merely as loose inspiration. The main character is a stylized stickman with a large
+smooth pale round head, large expressive oval black eyes, bold black eyebrows, small simple
+mouth, tiny neck, compact developed dark-clothed torso, articulated arms, hands, legs and
+feet. The body is more developed than line-only stick figures, but it must remain unmistakably
+a round-headed stickman—not a realistic human, not a chibi child, and not an ordinary human
+cartoon. Keep the head-to-body ratio, facial spacing, eye shape, limb thickness, silhouette,
+hoodie, black cargo trousers, black-and-white high-top sneakers, and dark backpack when present.
+Default outfit: black/dark charcoal hoodie with drawstrings, dark cargo trousers and black/white
+sneakers; backpack appears only when the story establishes that the character carries it. Do not
+add facial hair, nose detail, skin texture, logos, accessories or clothing changes without story need.
+
+RENDERING AND ENVIRONMENTS:
+Use cinematic stylized animation with polished soft dimensional shading on the character,
+clean dark outlines, readable hands, strong facial acting, subtle material detail, and rich,
+detailed environments. Environments may be more realistic and intricate than the character:
+believable bedrooms, apartments, corridors, streets, classrooms and outdoor spaces, with depth,
+practical objects, reflections, shadows and atmospheric perspective. Do not flatten the background
+into a blank cartoon setting. Keep the character stylized against the detailed environment; never
+turn the character photorealistic. Maintain a dark cinematic base palette (charcoal, black, cool
+blue/steel grey) with controlled warm amber/orange practical-light accents. Lighting must match
+time of day and story mood while keeping the face and action readable.
+
+IDENTITY AND CONTINUITY RULES:
+Use the standing-pose sheet for character shape, outfit, proportions and pose vocabulary. Use
+the environment reference sheet for location detail, cinematic lighting, palette and camera
+language. Treat both as canonical constraints. Do not copy the reference-sheet layout, captions,
+labels or example story panels into a generated scene. Render only one full-frame story shot.
+The same protagonist must retain the same head, eyes, brows, outfit, body proportions and footwear
+in every scene. Preserve room layout, door/window positions, time of night, lighting direction,
+prop placement and object state across adjacent shots unless narration explicitly changes them.
+The prior accepted frame is a continuity aid, but never overrides the canonical character model
+or story facts.
 
 SHOT LANGUAGE:
-Use purposeful variation such as wide establishing, medium action, close reaction,
-extreme detail, over-the-shoulder reveal, low/high angle or dramatic perspective only
-when it makes the current story action clearer. Framing must serve the exact beat.
+Create vertical 9:16 cinematic story frames with deliberate composition. Vary wide establishing
+shots, medium action shots, face close-ups, over-the-shoulder reveals, point-of-view inserts,
+low/high angles and detail shots according to the exact beat. Expressions and pose must show
+the narrated emotion and action. Keep the protagonist clearly readable and leave safe margins
+around important subjects. Every frame must show a specific story moment, not a model-sheet pose.
 
-ABSOLUTE STYLE EXCLUSIONS:
-no photorealism, no live action, no stock photography, no anime, no manga, no Pixar/3D,
-no realistic human anatomy, no style switching between scenes, no duplicate protagonist,
-no glossy 3D mascot, no realistic human, no generic corporate illustration, no old
-history-documentary art, no generic smiling portrait, no static character pose.
+ABSOLUTE EXCLUSIONS:
+no photorealistic character, no live-action look, no anime/manga, no generic stick figure made
+only of lines, no realistic human anatomy, no Pixar-like character redesign, no glossy mascot,
+no style changes between shots, no changing eye shape or head size, no random outfit changes,
+no extra fingers/limbs, no duplicate protagonist unless the story establishes one, no copying
+reference-sheet panels, no text or typography, no watermark, no logo.
 """.strip()
 
 NO_TEXT = """
@@ -69,11 +92,30 @@ STORY_TEXT_REQUEST_RE = re.compile(
 )
 
 
+VISUAL_REFERENCE_DIR = ROOT / "assets" / "visual_references"
+CANONICAL_REFERENCE_PATHS = (
+    ("chispa_character_standing_poses.png", "image/png"),
+    ("chispa_environment_style_reference.png", "image/png"),
+)
+
+
 def _load_reference() -> list[tuple[str, bytes, str]]:
-    if not REFERENCE_B64.exists():
-        return []
-    blob = base64.b64decode(REFERENCE_B64.read_text(encoding="utf-8").strip())
-    return [("relic_loop_character_reference.jpg", blob, "image/jpeg")] if blob else []
+    """Load canonical visual guides first; keep legacy reference as fallback."""
+    loaded: list[tuple[str, bytes, str]] = []
+    for filename, mime in CANONICAL_REFERENCE_PATHS:
+        path = VISUAL_REFERENCE_DIR / filename
+        if path.is_file() and path.stat().st_size > 0:
+            loaded.append((filename, path.read_bytes(), mime))
+    if loaded:
+        print("[REFERENCE] Loaded canonical visual references: " + ", ".join(x[0] for x in loaded))
+        return loaded
+    if REFERENCE_B64.exists():
+        blob = base64.b64decode(REFERENCE_B64.read_text(encoding="utf-8").strip())
+        if blob:
+            print("[REFERENCE] WARNING: canonical Chispa-Pifia reference images are missing; using legacy reference only.")
+            return [("relic_loop_character_reference.jpg", blob, "image/jpeg")]
+    print("[REFERENCE] WARNING: no character reference image found; prompt-only mode.")
+    return []
 
 
 def _response_diagnostic(response: requests.Response) -> str:
@@ -200,10 +242,14 @@ def _ocr_has_text(path: Path) -> bool:
 
 def _reference_blurb() -> str:
     return (
-        "Use the supplied Relic Loop character reference as the identity anchor. Preserve its "
-        "round head, simple tapered torso, thin limbs, simple oval eyes, black expressive ink "
-        "linework, hand-drawn asymmetry, minimal facial marks, readable hands and exaggerated "
-        "poses. The same human protagonist must look like the same person in every beat."
+        "REFERENCE IMAGE PRIORITY: Image reference 1 is the canonical main-character model sheet. "
+        "Match its round pale head, oval eyes, eyebrow design, head/body ratio, dark hoodie, cargo "
+        "trousers, sneakers, backpack design and silhouette closely. Image reference 2, when present, "
+        "is the environment/style guide: match its detailed cinematic locations, dark cool palette, "
+        "warm amber accents, lighting and camera language. Do not recreate either sheet as a collage "
+        "and do not copy words or panels from them. Render one single edge-to-edge vertical scene. "
+        "The reference images take priority over vague stylistic interpretation; story facts take "
+        "priority over unrelated example scenes shown inside a reference sheet."
     )
 
 
@@ -270,10 +316,10 @@ def main() -> None:
 
     refs = _load_reference()
     manifest = {
-        "type": "relic_loop_cloudflare_image_render", "version": 10,
+        "type": "relic_loop_cloudflare_image_render", "version": 11,
         "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
-        "reference_mode": "character_reference_plus_previous_beat" if refs else "previous_beat_only",
-        "character_reference": str(REFERENCE_B64) if refs else None,
+        "reference_mode": "canonical_character_and_environment_references_plus_previous_beat" if len(refs) >= 2 else ("legacy_reference_plus_previous_beat" if refs else "prompt_only"),
+        "character_references": [name for name, _, _ in refs],
         "text_gate": "strict_ocr_reject_after_retry",
         "ocr_retries": OCR_RETRIES,
         "ocr_policy": "regenerate_then_fail_if_text_suspected",
