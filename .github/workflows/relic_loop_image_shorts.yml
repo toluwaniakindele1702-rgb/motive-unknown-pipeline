@@ -77,6 +77,19 @@ jobs:
           test -s assets/visual_references/file_000000008bfc81f480840c507c90542b.png || { echo "::error::Missing assets/visual_references/file_000000008bfc81f480840c507c90542b.png. Upload the uploaded environment/style reference image before generating videos."; exit 1; }
           file assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png
           file assets/visual_references/file_000000008bfc81f480840c507c90542b.png
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          paths = [
+              Path("assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png"),
+              Path("assets/visual_references/file_000000008bfc81f480840c507c90542b.png"),
+          ]
+          for path in paths:
+              with Image.open(path) as im:
+                  im.verify()
+              with Image.open(path) as im:
+                  print(f"Reference valid: {path.name}; format={im.format}; size={im.width}x{im.height}")
+          PY
       - name: Preflight
         shell: bash
         run: |
