@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import json
 import os
 import re
@@ -10,6 +11,7 @@ import time
 from pathlib import Path
 
 import requests
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
 RUN = ROOT / "state" / "current_run"
@@ -148,7 +150,24 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -
     }
     if refs:
         for idx, (name, blob, mime) in enumerate(refs[:4]):
-            files[f"input_image_{idx}"] = (name, blob, mime)
+            # FLUX.2 Klein reference inputs must be smaller than 512x512.
+            # Canonical sheets and generated frames can be much larger, so
+            # normalize every reference to a 511px maximum edge before upload.
+            try:
+                with Image.open(BytesIO(blob)) as source:
+                    image = source.convert("RGB")
+                    image.thumbnail((511, 511), Image.Resampling.LANCZOS)
+                    prepared = BytesIO()
+                    image.save(prepared, format="JPEG", quality=88, optimize=True)
+                    ref_blob = prepared.getvalue()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not decode/prepare reference image {name!r}: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            if not ref_blob:
+                raise RuntimeError(f"Reference image {name!r} became empty after preprocessing")
+            files[f"input_image_{idx}"] = (f"reference_{idx}.jpg", ref_blob, "image/jpeg")
     headers = {"Authorization": f"Bearer {TOKEN}"}
     last = None
     for attempt in range(1, MAX_RETRIES + 1):
