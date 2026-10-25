@@ -20,12 +20,12 @@ VIDEO_PATH = ROOT / "state" / "current_run" / "relic_loop_short.mp4"
 OUTPUT_PATH = ROOT / "state" / "current_run" / "youtube_upload.json"
 TOKEN_JSON = os.environ.get("YOUTUBE_TOKEN_JSON", "").strip()
 CLIENT_SECRET_JSON = os.environ.get("YOUTUBE_CLIENT_SECRET_JSON", "").strip()
-PRIVACY = os.environ.get("YOUTUBE_PRIVACY_STATUS", "public").strip().lower()
+PRIVACY = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private").strip().lower()
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Chispa-Pifia").strip() or "Chispa-Pifia"
 SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 
 if PRIVACY not in {"public", "private", "unlisted"}:
-    PRIVACY = "public"
+    PRIVACY = "private"
 
 
 def load_json(path: Path) -> Any:
