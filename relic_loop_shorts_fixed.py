@@ -1,4 +1,4 @@
-"""Chispa-Pifia story generator: meaningful 45-60 second absurd comedy."""
+"""Chispa-Pifia story generator: story-first 60-90 second mystery, suspense, dilemma and twist Shorts."""
 from __future__ import annotations
 
 import json
@@ -34,10 +34,10 @@ STYLE = (
     "switching, random outfit changes, extra limbs/fingers, text, captions, logos or watermarks."
 )
 
-SYSTEM = f"""You are the head writer and visual storyboard director for Chispa-Pifia, an absurd-comedy stickman Shorts channel.
+SYSTEM = f"""You are the head writer and visual storyboard director for Chispa-Pifia, an story-first stickman Shorts channel focused on mini-mysteries, suspense, dilemmas, problem-solving and fair twists; absurd comedy is optional.
 
 Create ONE ORIGINAL, MEANINGFUL fictional story centered on a normal HUMAN PROTAGONIST.
-The comedy must come from a believable human goal becoming increasingly ridiculous through the protagonist's own decisions.
+Prioritize genuinely engaging mini-mysteries, suspense, dilemmas, problem-solving and fair plot twists. Absurd comedy is optional, not mandatory. Stories should feel compelling to watch, not merely weird.
 The story must feel like a real mini-story, not a list of random jokes.
 
 CORE STORY ENGINE — NON-NEGOTIABLE:
@@ -48,7 +48,7 @@ CORE STORY ENGINE — NON-NEGOTIABLE:
 5. The new decision makes the problem worse.
 6. A second escalation follows logically.
 7. A surprising but foreshadowed twist changes how the earlier events are understood.
-8. A short, funny final payoff ends the story.
+8. A satisfying reveal, consequence or payoff ends the story; it may be eerie, clever, emotional, ironic or funny, depending on the premise.
 
 MEANING + CAUSAL-INTEGRITY TEST — NON-NEGOTIABLE:
 Before writing, silently summarize the whole story in ONE sentence using cause and effect. If that summary sounds like a list of unrelated events, discard the premise.
@@ -68,9 +68,8 @@ CONTINUITY / PLAUSIBILITY AUDIT:
 - Prefer one tightly connected chain of 3-5 escalations over adding extra events just to make the story feel bigger.
 
 LENGTH — HARD LIMIT:
-The complete spoken narration MUST be 105-145 words, targeting roughly 120-135 words.
-This should normally produce about 45-60 seconds of natural narration.
-Do not pad the story. Do not rush it to hit a word count. If the idea cannot support a meaningful 45-60 second story, discard it and create a stronger premise.
+The complete spoken narration MUST be 150-210 words, targeting roughly 165-195 words for 60-90 seconds of natural narration.
+Do not pad the story. Do not rush it to hit a word count. If the idea cannot support a meaningful 60-90 second story, discard it and create a stronger premise.
 
 STORY QUALITY:
 - Open in the first sentence with a concrete, instantly understandable problem AND a specific constraint, deadline, risk, or goal where useful. Avoid slow introductions.
@@ -130,8 +129,8 @@ Each visual beat must answer: WHO is there, WHERE are they, WHAT are they doing,
 Never invent visual jokes that are absent from the story.
 
 STORYBOARD BEAT COUNT — VISUAL PACING:
-Create 8-10 distinct visual beats/scenes for a normal 45-60 second Short. This is a practical range, not a fixed duration per image. Seven or fewer is too sparse; more than 10 is not allowed.
-Split the narration at natural sentence endings first, then at meaningful phrase/clause boundaries when a sentence contains multiple visible actions. Each image should cover one short spoken phrase or one compact sentence, not a whole paragraph. Aim for a new image as the spoken narration moves to the next meaningful phrase/action, roughly 10-16 words per beat on average for a 105-145 word narration, but use shorter phrases when a meaningful visual change happens and longer excerpts when one sentence describes a single continuous moment.
+Create 10-14 distinct visual beats/scenes for a normal 60-90 second Short. This is a practical range, not a fixed duration per image. Nine or fewer is too sparse; more than 14 is not allowed.
+Split the narration at natural sentence endings first, then at meaningful phrase/clause boundaries when a sentence contains multiple visible actions. Each image should cover one short spoken phrase or one compact sentence, not a whole paragraph. Aim for a new image as the spoken narration moves to the next meaningful phrase/action, roughly 12-18 words per beat on average for a 150-210 word narration, but use shorter phrases when a meaningful visual change happens and longer excerpts when one sentence describes a single continuous moment.
 Do not assign every image the same number of seconds. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased, or reordered words. The editor must time each image to its own spoken excerpt, so shorter phrases display for less time and longer phrases display for longer time.
 Do not pad with meaningless filler, duplicate poses, or split one unchanged moment arbitrarily. Preserve the coherent causal story while showing its meaningful visual changes.
 Final assembly uses the actual neural narration as the master timeline; scene duration values are estimates only and must not control final image timing.
@@ -252,8 +251,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
 
     narration = _norm_text(str(obj.get("narration", "")))
     wc = words(narration)
-    if not 105 <= wc <= 145:
-        errors.append(f"narration_words={wc}_hard_limit_105_145")
+    if not 150 <= wc <= 210:
+        errors.append(f"narration_words={wc}_hard_limit_150_210")
 
     chars = obj.get("characters")
     if not isinstance(chars, list) or not chars:
@@ -362,13 +361,13 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
         "Write causal_chain as a JSON ARRAY of at least 5 separate short strings, one causal stage per item; never put the entire chain in one array item. "
         "Write at least 3 separate escalations, each caused by the protagonist's response to the previous problem. "
         "Make the first sentence an immediate concrete hook, make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is seeded earlier. "
-        "The final narration must be 105-145 words and every scene narration must exactly partition it. "
-        "The storyboard MUST contain 8-10 separate scenes. Seven or fewer is too sparse; more than ten is invalid. Divide narration at natural sentence boundaries and then meaningful phrase/clause boundaries, with each image showing the phrase currently being spoken. Keep exact contiguous narration excerpts; do not use filler or duplicate moments. Do not set a fixed seconds-per-image duration."
+        "The final narration must be 150-210 words and every scene narration must exactly partition it. "
+        "The storyboard MUST contain 10-14 separate scenes. Nine or fewer is too sparse; more than fourteen is invalid. Divide narration at natural sentence boundaries and then meaningful phrase/clause boundaries, with each image showing the phrase currently being spoken. Keep exact contiguous narration excerpts; do not use filler or duplicate moments. Do not set a fixed seconds-per-image duration."
         if retry else
         "Build and audit the full causal chain silently before writing. For every beat, verify what caused it, how it follows from the prior beat, and how it changes the protagonist's next decision. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. "
         "Use a concrete first-sentence hook with a clear goal and constraint; start the protagonist's first consequential decision early. Each escalation must worsen the original problem because of an established cause, not merely add spectacle. The twist must be seeded earlier and pay off the original goal. "
         "Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
-        "The storyboard MUST contain 8-10 separate scenes for the 45-60 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
+        "The storyboard MUST contain 10-14 separate scenes for the 60-90 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
         "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
     )
     return f"{seed}\n{used}\n{retry_note}\nWrite the complete JSON package now."
@@ -387,8 +386,8 @@ def generate(topic: str | None) -> dict[str, Any]:
             if not errors:
                 obj["generated_at"] = datetime.now(timezone.utc).isoformat()
                 obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-                obj["timing_policy"] = "Narration is the master timeline; 8-10 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-                obj["story_policy"] = "meaningful_human_goal_causal_chain_absurd_comedy_45_60_seconds"
+                obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
+                obj["story_policy"] = "story_first_mystery_suspense_dilemma_twist_60_90_seconds"
                 obj["style_policy"] = STYLE
                 return obj
             last = ValueError("validation failed: " + ", ".join(errors[:20]))
@@ -452,7 +451,7 @@ def write(obj: dict[str, Any]) -> None:
         "image_count_policy": "8_to_10_phrase_aligned_visual_beats",
         "zero_text_gate": False,
         "text_policy": "no_deliberate_story_text",
-        "story_policy": "meaningful_human_goal_causal_chain_absurd_comedy_45_60_seconds",
+        "story_policy": "story_first_mystery_suspense_dilemma_twist_60_90_seconds",
         "timing_policy": "narration_is_master_timeline",
         "media_generation": "cloudflare_images",
         "beat_policy": "meaningful_action_reaction_consequence_decision_reveal_payoff",
