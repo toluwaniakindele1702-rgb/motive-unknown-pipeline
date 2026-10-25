@@ -264,12 +264,14 @@ def main() -> None:
     final_duration = media_duration(OUTPUT)
     if abs(final_duration - audio_duration) > 0.35:
         raise SystemExit(f"Final duration mismatch: narration={audio_duration:.2f}s, final={final_duration:.2f}s")
+    if not 55 <= final_duration <= 100:
+        raise SystemExit(f"Final MP4 duration {final_duration:.2f}s is outside the 60-90s target tolerance (55-100s); review narration speed and story length")
     if final_duration < 5:
         raise SystemExit("Final MP4 is unusably short")
 
     timing = {
         "timing_policy": "narration_is_master_timeline",
-        "image_count_policy": "8_to_10_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
+        "image_count_policy": "10_to_14_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
         "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
         "master_narration_words": total_words,
