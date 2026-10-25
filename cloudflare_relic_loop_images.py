@@ -277,7 +277,7 @@ def _scene_prompt(
             "\nSTRICT TEXT-CLEAN RETRY: blank surfaces only. No signs, labels, menus, posters, packaging, "
             "screens, letters, numbers, symbols or readable marks anywhere in frame.\n"
         )
-    return f"""Create ONE vertical 9:16 image for a Relic Loop / Chispa-Pifia absurd-comedy Short.
+    return f"""Create ONE vertical 9:16 image for a Chispa-Pifia story-first Short: mini-mystery, suspense, dilemma, problem-solving or a fair twist. Absurd comedy is optional, never the default.
 
 {STYLE_LOCK}
 
@@ -311,8 +311,8 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if not 8 <= len(scenes) <= 10:
-        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the required 8-10 range")
+    if not 10 <= len(scenes) <= 14:
+        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the required 10-14 range")
 
     refs = _load_reference()
     manifest = {
@@ -326,8 +326,8 @@ def main() -> None:
         "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "assembly recalculates beat durations from actual TTS duration",
-        "image_count_policy": "8-10 meaningful phrase-aligned story beats",
-        "continuity_policy": "canonical_character_reference_plus_previous_accepted_frame",
+        "image_count_policy": "10-14 meaningful phrase-aligned story beats",
+        "continuity_policy": "canonical_character_and_environment_references_plus_previous_accepted_frame",
         "beats": [],
     }
 
