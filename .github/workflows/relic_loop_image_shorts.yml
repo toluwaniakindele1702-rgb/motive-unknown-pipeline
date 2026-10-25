@@ -256,7 +256,7 @@ jobs:
             echo "- **Repository:** ${GITHUB_REPOSITORY}"
             echo "- **Run URL:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo
-            echo "Story-first absurd Short: complete narration first, meaningful literal visual beats second, Kokoro Liam voice as the master timeline, and no fixed image cadence."
+            echo "Story-first Short: mini-mystery/suspense/dilemma/problem-solving/fair twist; narration first, 10-14 meaningful literal visual beats, Kokoro Liam voice as master timeline, strict OCR text rejection, no fixed image cadence."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
