@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       topic:
-        description: "Optional story seed; leave blank for an original absurd story"
+        description: "Optional story seed; leave blank for an original story-first mini-mystery, suspense, dilemma or twist"
         required: false
         default: ""
         type: string
