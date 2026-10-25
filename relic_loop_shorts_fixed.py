@@ -78,7 +78,7 @@ STORY QUALITY:
 - Use 3-5 meaningful escalations; each must be caused by the protagonist's prior action, the direct consequence of that action, or a clearly established rule.
 - Escalate the COST or difficulty of the original goal; do not merely increase spectacle.
 - Give the protagonist agency: their decisions should drive the story, including failed attempts to recover the situation.
-- Keep the world mostly normal until the absurdity grows naturally from the chain.
+- Keep the world grounded and internally consistent. Use humor only when it naturally serves the premise; do not force absurdity.
 - Keep continuity of people, locations, objects, time, and cause-and-effect.
 - Make the twist connected to an earlier detail and make it feel inevitable in hindsight.
 - Check for plot holes, contradictory rules, implausible coincidences, forgotten objects, unexplained escapes, and obstacles that exist only to force the next scene. Repair every one before returning JSON.
@@ -88,7 +88,7 @@ STORY QUALITY:
 - The story must still make sense if all visuals are removed.
 
 GOOD PREMISE PATTERN:
-A normal person wants something simple under a clear constraint (like a deadline or limited time), makes a shortcut or bad decision, causes a specific practical problem, tries to repair it, causes a worse practical problem, improvises again, and finally discovers an absurd consequence that was seeded in the original situation.
+A protagonist faces a clear goal, mystery, risk or dilemma, follows clues or makes consequential decisions, encounters logically connected complications, and reaches a satisfying reveal or payoff. The ending may be clever, eerie, emotional, ironic or funny, but must be earned by the setup.
 Every link must be explicit enough for a viewer to follow on first watch. The ending should pay off the original goal, not abandon it for an unrelated gag.
 
 GOOD EXAMPLES OF PREMISE TYPES:
@@ -102,7 +102,7 @@ GOOD EXAMPLES OF PREMISE TYPES:
 - trying to hide an embarrassing mistake while fixing it
 
 ABSURDITY RULE:
-The audience should think: "That is ridiculous, but I can see how one stupid decision caused the next thing."
+The audience should think: "I need to know what happens next" and, at the ending, "That makes sense now" or "I didn't see that coming, but the clues were there."
 Never make the audience think: "The writer just put a random thing here because it is weird."
 
 ABSOLUTE NO-RANDOMNESS RULES:
@@ -354,7 +354,7 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
 def make_prompt(topic: str | None, retry: bool = False) -> str:
     old = history()
     used = "" if not old else "Avoid repeating these previous titles: " + "; ".join(old[-25:])
-    seed = f"Story seed: {topic}." if topic else "Invent an original, highly relatable everyday human problem that can naturally spiral into absurd comedy."
+    seed = f"Story seed: {topic}." if topic else "Invent an original, highly engaging story-first Short built around a mini-mystery, suspenseful situation, dilemma, problem-solving challenge or fair twist. Absurd comedy is optional, not the default."
     retry_note = (
         "The previous package failed validation. Rebuild it from scratch. Do not patch the failed story. "
         "Audit cause and effect beat by beat: every event needs an established cause, every attempted fix must change the situation, and the ending must pay off the original goal. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. Do not use implausible safety/building behavior as a cheap gag (for example, an exit inexplicably locked during a fire alarm/drill). "
@@ -366,7 +366,7 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
         if retry else
         "Build and audit the full causal chain silently before writing. For every beat, verify what caused it, how it follows from the prior beat, and how it changes the protagonist's next decision. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. "
         "Use a concrete first-sentence hook with a clear goal and constraint; start the protagonist's first consequential decision early. Each escalation must worsen the original problem because of an established cause, not merely add spectacle. The twist must be seeded earlier and pay off the original goal. "
-        "Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. Output at least 3 separate escalation items. The story must be meaningful first and absurd second. "
+        "Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. Output at least 3 separate escalation items. The story must be meaningful and compelling first; comedy is optional and must never replace coherence. "
         "The storyboard MUST contain 10-14 separate scenes for the 60-90 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
         "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
     )
