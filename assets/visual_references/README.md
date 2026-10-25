@@ -6,7 +6,7 @@ Put the two approved reference images in this folder using these exact filenames
 - `chispa_character_standing_poses.jpg` — character identity, proportions, outfit, front/side/back views, expressions and pose range.
 - `chispa_environment_style_reference.jpg` — detailed locations, cinematic lighting, colour palette, camera language and overall rendering mood.
 
-The image renderer loads both files and sends them with each image-generation request. The first image anchors the character; the second anchors environments and cinematography. The previously accepted frame is also supplied to help preserve continuity from beat to beat.
+The image renderer loads both files and sends them with each image-generation request. The production workflow fails preflight if either canonical JPEG is missing; upload both actual image files before running production. The first image anchors the character; the second anchors environments and cinematography. The previously accepted frame is also supplied to help preserve continuity from beat to beat.
 
 ## Main character identity lock
 - Large smooth pale round head; large oval black eyes; expressive bold black eyebrows; small simple mouth.
@@ -27,7 +27,7 @@ The image renderer loads both files and sends them with each image-generation re
 - Choose the camera angle for the beat: wide establishing, medium action, face close-up, over-the-shoulder, POV insert, high/low angle or detail shot.
 - Pose and expression must communicate the exact narrated action and emotion.
 - No text, captions, subtitles, labels, readable signs, logos, watermarks or typography in generated images.
-- The story is the source of truth. Reference-sheet example scenes are style examples only and must not leak into unrelated stories.
+- The story is the source of truth. Reference-sheet example scenes are style examples only and must not leak into unrelated stories. Content should prioritise mini-mysteries, suspense, dilemmas, problem-solving and fair twists; absurd comedy is optional, not the default.
 
 ## Important limitations
 Reference images improve consistency but do not guarantee perfect image identity. The pipeline must be checked by rendering several adjacent scenes and visually reviewing them before trusting a full production run. If the canonical JPEGs are absent, the script falls back to the legacy embedded reference; that fallback is not the final approved setup.
