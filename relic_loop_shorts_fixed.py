@@ -21,11 +21,17 @@ MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
 KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
 STYLE = (
-    "Modern expressive 2D hand-drawn stickman cartoon: round head, simple tapered torso, "
-    "thin expressive limbs, clean black ink linework, minimal eyes, expressive mouth and eyebrows, "
-    "readable hands, exaggerated poses, flat-to-soft 2D shading, restrained color, clear silhouettes, "
-    "believable simple environments, dynamic perspective, vertical 9:16. Consistent human protagonist identity. "
-    "No photorealism, live action, stock photo, anime, manga, 3D/Pixar, glossy mascot or documentary art."
+    "CHISPA-PIFIA canonical style: a recognizable round-headed stickman character, not a line-only "
+    "stick figure and not a realistic human. Large smooth pale round head, large oval black eyes, bold "
+    "expressive eyebrows, small simple mouth, tiny neck, developed compact torso, articulated arms/hands/"
+    "legs/feet. Fixed default outfit: dark charcoal hoodie with drawstrings, dark cargo trousers, black-and-white "
+    "high-top sneakers; dark backpack only when story continuity says he has it. Keep identical head/body ratio, "
+    "eye spacing, limb thickness, clothing silhouette and footwear across every scene. Cinematic stylized animation "
+    "with soft dimensional shading and clean dark outlines on the character, paired with richly detailed, believable "
+    "environments. Dark charcoal/cool blue/steel-grey base palette with restrained warm amber practical-light accents. "
+    "Vertical 9:16. Use model-sheet and environment references as canonical constraints; show one specific story moment "
+    "per frame. No photorealistic character, live action, anime/manga, Pixar redesign, generic line-stickman, style "
+    "switching, random outfit changes, extra limbs/fingers, text, captions, logos or watermarks."
 )
 
 SYSTEM = f"""You are the head writer and visual storyboard director for Chispa-Pifia, an absurd-comedy stickman Shorts channel.
