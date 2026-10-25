@@ -144,7 +144,7 @@ CHARACTERS:
 VISUAL STYLE: {STYLE}
 
 SCENE RULES:
-- The complete storyboard MUST have 8-10 scenes; fewer than 8 or more than 10 is invalid.
+- The complete storyboard MUST have 10-14 scenes; fewer than 10 or more than 14 is invalid.
 - Divide scenes at natural sentence/phrase boundaries so each image changes with the spoken text; never use a fixed seconds-per-image rule.
 - Every scene describes exactly one meaningful moment.
 - Every scene contains the protagonist or a directly relevant visible consequence.
@@ -305,8 +305,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not isinstance(scenes, list) or not scenes:
         errors.append("no_visual_beats")
         return errors
-    if not 8 <= len(scenes) <= 10:
-        errors.append(f"visual_beat_count={len(scenes)}_hard_limit_8_10")
+    if not 10 <= len(scenes) <= 14:
+        errors.append(f"visual_beat_count={len(scenes)}_hard_limit_10_14")
 
     reconstructed = " ".join(_norm_text(str(s.get("narration", ""))) for s in scenes if isinstance(s, dict))
     if reconstructed != narration:
@@ -416,7 +416,7 @@ def write(obj: dict[str, Any]) -> None:
         "CHISPA-PIFIA — MEANINGFUL STORY SHORT",
         "",
         "STORY POLICY: HUMAN PROTAGONIST + CLEAR GOAL + CAUSAL ABSURD COMEDY",
-        "TIMING POLICY: 8-10 IMAGES; EACH IMAGE FOLLOWS ITS SPOKEN PHRASE; NO FIXED IMAGE DURATION",
+        "TIMING POLICY: 10-14 IMAGES; EACH IMAGE FOLLOWS ITS SPOKEN PHRASE; NO FIXED IMAGE DURATION",
         "",
         obj["flow_prompt"],
         "",
