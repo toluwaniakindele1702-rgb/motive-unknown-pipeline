@@ -94,8 +94,8 @@ STORY_TEXT_REQUEST_RE = re.compile(
 
 VISUAL_REFERENCE_DIR = ROOT / "assets" / "visual_references"
 CANONICAL_REFERENCE_PATHS = (
-    ("chispa_character_standing_poses.jpg", "image/jpeg"),
-    ("chispa_environment_style_reference.jpg", "image/jpeg"),
+    ("file_00000000078881f486600a6d2d8ccc89.png", "image/png"),
+    ("file_000000008bfc81f480840c507c90542b.png", "image/png"),
 )
 
 
