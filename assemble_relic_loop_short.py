@@ -112,7 +112,29 @@ def make_voiceover(text: str) -> float:
             rates.append(next_rate)
             print(f"[VOICE] Duration outside 60-90s; retiming narration toward {target:.0f}s with rate={next_rate}")
 
-    raise SystemExit(f"Neural narration could not be brought into the required 60-90s range after automatic rate correction; last duration={measured_duration:.2f}s")
+    # Last-resort duration guard: if Kokoro's speed response is nonlinear or
+    # a correction still misses the window, time-stretch the already-generated
+    # audio locally. This uses no additional Cloudflare calls and prevents a
+    # usable story from being discarded solely because narration is too short/long.
+    if measured_duration is None or measured_duration <= 0:
+        raise SystemExit("Narration duration could not be measured")
+    target = min(MAX_SHORT_SECONDS, max(MIN_SHORT_SECONDS, TARGET_SHORT_SECONDS))
+    tempo = measured_duration / target
+    # FFmpeg atempo supports 0.5-2.0; this range is safely within those limits.
+    tempo = max(0.75, min(1.25, tempo))
+    print(f"[VOICE] Applying local atempo fallback: factor={tempo:.3f}; target={target:.0f}s")
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(AUDIO),
+         "-filter:a", f"atempo={tempo:.6f}", "-ac", "1", "-ar", "48000",
+         "-c:a", "pcm_s16le", str(AUDIO.with_suffix(".retimed.wav"))])
+    retimed = AUDIO.with_suffix(".retimed.wav")
+    if not retimed.exists() or retimed.stat().st_size < 10000:
+        raise SystemExit("Local narration retiming fallback produced no usable audio")
+    retimed.replace(AUDIO)
+    final_duration = media_duration(AUDIO)
+    if not MIN_SHORT_SECONDS <= final_duration <= MAX_SHORT_SECONDS:
+        raise SystemExit(f"Local narration retiming fallback still outside 60-90s: {final_duration:.2f}s")
+    print(f"[VOICE] Local retiming fallback passed: {final_duration:.2f}s")
+    return final_duration
 
 
 def validate_image(image: Path, index: int) -> None:
