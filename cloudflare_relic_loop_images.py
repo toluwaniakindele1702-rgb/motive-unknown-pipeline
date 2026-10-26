@@ -380,9 +380,11 @@ def main() -> None:
                 break
             ocr_suspected = True
             print(f"[IMAGE {index}/{len(scenes)}] OCR suspected text; regenerating ({attempt}/{OCR_RETRIES})")
-            output.unlink(missing_ok=True)
             if attempt < OCR_RETRIES:
+                output.unlink(missing_ok=True)
                 time.sleep(2 * attempt)
+            else:
+                print(f"[OCR] Final retry for beat {index} will be retained if still flagged.")
 
         if not accepted:
             # Preserve pipeline progress: keep the final generated frame and flag it.
