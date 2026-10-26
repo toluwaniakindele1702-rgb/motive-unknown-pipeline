@@ -38,7 +38,6 @@ jobs:
       RELIC_LOOP_IMAGE_RETRIES: '3'
       RELIC_LOOP_OCR_RETRIES: '2'
       RELIC_LOOP_OCR_STRICT: '1'
-      RELIC_LOOP_VOICE: 'am_liam'
       RELIC_LOOP_KOKORO_VOICE: 'am_liam'
       CHANNEL_NAME: 'Chispa-Pifia'
       YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
@@ -192,7 +191,6 @@ jobs:
             echo "writer_model=${GROQ_WRITER_MODEL}"
             echo "image_model=${CLOUDFLARE_IMAGE_MODEL}"
             echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
-            echo "voice=${RELIC_LOOP_VOICE}"
             echo "kokoro_voice=${RELIC_LOOP_KOKORO_VOICE}"
             echo "youtube_channel=${CHANNEL_NAME}"
             echo "youtube_privacy=${YOUTUBE_PRIVACY_STATUS}"
@@ -273,7 +271,7 @@ jobs:
             echo "- **Repository:** ${GITHUB_REPOSITORY}"
             echo "- **Run URL:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo
-            echo "Story-first Short: mini-mystery/suspense/dilemma/problem-solving/fair twist; narration first, 10-14 meaningful literal visual beats, Kokoro Liam voice as master timeline, strict OCR text rejection, no fixed image cadence."
+            echo "Story-first Short: mini-mystery/suspense/dilemma/problem-solving/fair twist; narration first, 10-14 meaningful literal visual beats, Kokoro Liam voice as master timeline, OCR text detection with retry and non-fatal fallback, no fixed image cadence."
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
             echo
