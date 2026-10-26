@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -32,10 +33,17 @@ def _get_pipeline() -> KPipeline:
     return _pipeline
 
 
-def _synthesize(text: str) -> np.ndarray:
+def _synthesize(text: str, rate: str = "+0%") -> np.ndarray:
     pipeline = _get_pipeline()
+    # The assembler supplies Edge-TTS-style percentage rates. Kokoro's speed
+    # parameter must actually receive that rate; previously it was hardcoded
+    # to 1.0, making every duration-correction retry identical.
+    match = re.fullmatch(r"\s*([+-]?)\s*(\d+(?:\.\d+)?)\s*%\s*", str(rate))
+    percent = float(match.group(2)) * (-1.0 if match and match.group(1) == "-" else 1.0) if match else 0.0
+    speed = max(0.75, min(1.25, 1.0 + percent / 100.0))
+    print(f"[KOKORO] Requested rate={rate}; effective speed={speed:.3f}")
     chunks: list[np.ndarray] = []
-    for _, _, audio in pipeline(text, voice=VOICE_ID, speed=1.0):
+    for _, _, audio in pipeline(text, voice=VOICE_ID, speed=speed):
         if hasattr(audio, "detach"):
             audio = audio.detach().cpu().numpy()
         arr = np.asarray(audio, dtype=np.float32).reshape(-1)
@@ -60,7 +68,7 @@ class Communicate:
         if not self.text.strip():
             raise ValueError("Cannot synthesize empty narration")
         print(f"[KOKORO] Voice={VOICE_ID}; requested_voice={self.requested_voice}; generating narration")
-        audio = await asyncio.to_thread(_synthesize, self.text)
+        audio = await asyncio.to_thread(_synthesize, self.text, self.rate)
         target = Path(output_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="kokoro_") as td:
