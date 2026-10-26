@@ -27,11 +27,13 @@ FPS = 30
 W = 576
 H = 1024
 VOICE = "en-US-AndrewNeural"
-VOICE_RATE = "+0%"
 VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
 TTS_RETRIES = 3
 TTS_TIMEOUT_SECONDS = 120
+MIN_SHORT_SECONDS = 60.0
+MAX_SHORT_SECONDS = 90.0
+TARGET_SHORT_SECONDS = 65.0
 
 
 def run(cmd: list[str]) -> None:
@@ -48,43 +50,69 @@ def _norm(text: str) -> str:
     return " ".join(str(text or "").split())
 
 
-async def _synthesize(text: str) -> None:
-    communicate = edge_tts.Communicate(text, VOICE, rate=VOICE_RATE, volume=VOICE_VOLUME, pitch=VOICE_PITCH)
+async def _synthesize(text: str, rate: str) -> None:
+    communicate = edge_tts.Communicate(text, VOICE, rate=rate, volume=VOICE_VOLUME, pitch=VOICE_PITCH)
     await asyncio.wait_for(communicate.save(str(TTS_MP3)), timeout=TTS_TIMEOUT_SECONDS)
 
 
-def make_voiceover(text: str) -> None:
+def _rate_for_target(current_duration: float, target: float) -> str:
+    """Estimate an Edge-TTS rate adjustment needed to move toward target duration."""
+    adjustment = (current_duration / target - 1.0) * 100.0
+    adjustment = max(-25.0, min(25.0, adjustment))
+    return f"{int(round(adjustment)):+d}%"
+
+
+def make_voiceover(text: str) -> float:
     text = _norm(text)
     if not text:
         raise SystemExit("Narration is empty; refusing to create a silent Short")
     if len(text.split()) < 50:
         raise SystemExit("Narration is suspiciously short; refusing to create a broken Short")
+
     print(f"[VOICE] Generating natural neural narration with {VOICE}")
     last: Exception | None = None
-    for attempt in range(1, TTS_RETRIES + 1):
-        TTS_MP3.unlink(missing_ok=True)
-        try:
-            print(f"[VOICE] TTS attempt {attempt}/{TTS_RETRIES}")
-            asyncio.run(_synthesize(text))
-            if not TTS_MP3.exists() or TTS_MP3.stat().st_size < 1000:
-                raise RuntimeError("Neural TTS produced no usable audio")
-            break
-        except Exception as exc:
-            last = exc
-            print(f"[VOICE] TTS attempt failed: {type(exc).__name__}: {exc}")
-            if attempt < TTS_RETRIES:
-                wait = 5 * attempt
-                print(f"[VOICE] Retrying TTS in {wait}s")
-                time.sleep(wait)
-    else:
-        raise SystemExit(f"Neural TTS failed after {TTS_RETRIES} attempts: {last}")
-    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(TTS_MP3), "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(AUDIO)])
-    if not AUDIO.exists() or AUDIO.stat().st_size < 10000:
-        raise SystemExit("Neural TTS conversion produced no usable WAV")
-    duration = media_duration(AUDIO)
-    if duration < 5:
-        raise SystemExit(f"Neural narration is only {duration:.2f}s; refusing to publish a broken Short")
-    print(f"[VOICE] Ready: {duration:.2f}s")
+    rates: list[str] = ["+0%"]
+    measured_duration: float | None = None
+
+    for correction_attempt in range(3):
+        rate = rates[-1]
+        for attempt in range(1, TTS_RETRIES + 1):
+            TTS_MP3.unlink(missing_ok=True)
+            try:
+                print(f"[VOICE] TTS attempt {attempt}/{TTS_RETRIES}; rate={rate}")
+                asyncio.run(_synthesize(text, rate))
+                if not TTS_MP3.exists() or TTS_MP3.stat().st_size < 1000:
+                    raise RuntimeError("Neural TTS produced no usable audio")
+                break
+            except Exception as exc:
+                last = exc
+                print(f"[VOICE] TTS attempt failed: {type(exc).__name__}: {exc}")
+                if attempt < TTS_RETRIES:
+                    wait = 5 * attempt
+                    print(f"[VOICE] Retrying TTS in {wait}s")
+                    time.sleep(wait)
+        else:
+            raise SystemExit(f"Neural TTS failed after {TTS_RETRIES} attempts: {last}")
+
+        run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(TTS_MP3), "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(AUDIO)])
+        if not AUDIO.exists() or AUDIO.stat().st_size < 10000:
+            raise SystemExit("Neural TTS conversion produced no usable WAV")
+
+        measured_duration = media_duration(AUDIO)
+        print(f"[VOICE] Candidate duration: {measured_duration:.2f}s at rate={rate}")
+        if MIN_SHORT_SECONDS <= measured_duration <= MAX_SHORT_SECONDS:
+            print(f"[VOICE] Ready: {measured_duration:.2f}s; inside required 60-90s target")
+            return measured_duration
+
+        if correction_attempt < 2:
+            target = TARGET_SHORT_SECONDS if measured_duration < MIN_SHORT_SECONDS else 85.0
+            next_rate = _rate_for_target(measured_duration, target)
+            if next_rate == rate:
+                next_rate = "-10%" if measured_duration < MIN_SHORT_SECONDS else "+10%"
+            rates.append(next_rate)
+            print(f"[VOICE] Duration outside 60-90s; retiming narration toward {target:.0f}s with rate={next_rate}")
+
+    raise SystemExit(f"Neural narration could not be brought into the required 60-90s range after automatic rate correction; last duration={measured_duration:.2f}s")
 
 
 def validate_image(image: Path, index: int) -> None:
@@ -105,12 +133,7 @@ def _ease(frame: str, frames: int) -> str:
 
 
 def _camera_filter(profile: str, frames: int) -> str:
-    """Return a story-oriented 2D camera move for one still image.
-
-    The old implementation only alternated a centered 1.00 -> 1.07 zoom.
-    These profiles deliberately vary direction and framing so consecutive stills
-    feel like animated shots instead of a slideshow.
-    """
+    """Return a story-oriented 2D camera move for one still image."""
     p = _ease("on", frames)
     margin = "(iw-iw/zoom)"
     vertical_margin = "(ih-ih/zoom)"
@@ -148,7 +171,7 @@ def _camera_filter(profile: str, frames: int) -> str:
         z = f"1.12-0.10*{p}"
         x = f"{margin}*(0.78-0.28*{p})"
         y = f"{vertical_margin}*(0.35+0.30*{p})"
-    else:  # subtle handheld/drift
+    else:
         z = f"1.04+0.025*{p}"
         x = f"{margin}/2+0.10*{margin}*sin(on/{max(frames - 1, 1)}*6.28318530718)"
         y = f"{vertical_margin}/2+0.07*{vertical_margin}*sin(on/{max(frames - 1, 1)}*4.71238898038)"
@@ -161,11 +184,6 @@ def _camera_filter(profile: str, frames: int) -> str:
 
 
 def _camera_profile(index: int, duration: float, action: str, mood: str) -> str:
-    """Choose a deterministic camera move from story-beat semantics plus index.
-
-    We use the beat's action/mood when available, then rotate through profiles so
-    adjacent shots do not repeat the same camera behavior.
-    """
     text = f"{action} {mood}".lower()
     if any(word in text for word in ("reveal", "discover", "realize", "twist", "surprise")):
         return "reveal"
@@ -216,8 +234,7 @@ def main() -> None:
     if _word_count(narration) < 50:
         raise SystemExit("Master narration is too short")
 
-    make_voiceover(narration)
-    audio_duration = media_duration(AUDIO)
+    audio_duration = make_voiceover(narration)
     total_words = _word_count(narration)
 
     beat_word_counts = [_word_count(str(b.get("narration", ""))) for b in beats]
@@ -264,13 +281,14 @@ def main() -> None:
     final_duration = media_duration(OUTPUT)
     if abs(final_duration - audio_duration) > 0.35:
         raise SystemExit(f"Final duration mismatch: narration={audio_duration:.2f}s, final={final_duration:.2f}s")
-    if not 55 <= final_duration <= 100:
-        raise SystemExit(f"Final MP4 duration {final_duration:.2f}s is outside the 60-90s target tolerance (55-100s); review narration speed and story length")
+    if not MIN_SHORT_SECONDS <= final_duration <= MAX_SHORT_SECONDS:
+        raise SystemExit(f"Final MP4 duration {final_duration:.2f}s is outside the required 60-90s range after narration retiming")
     if final_duration < 5:
         raise SystemExit("Final MP4 is unusably short")
 
     timing = {
         "timing_policy": "narration_is_master_timeline",
+        "duration_policy": "neural_narration_is_automatically_retimed_to_60_90_seconds_before_visual_assembly",
         "image_count_policy": "10_to_14_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
         "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
