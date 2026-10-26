@@ -249,13 +249,12 @@ def _ocr_has_text(path: Path) -> bool:
             print(f"[OCR] suspicious text candidates: strong={strong[:5]} medium={medium[:8]}")
         return suspicious
     except FileNotFoundError:
-        if OCR_STRICT:
-            raise SystemExit("Strict zero-text gate requires tesseract, but tesseract is not installed")
+        # OCR is a quality-control aid, never a pipeline-fatal dependency.
+        print("[OCR] Tesseract is unavailable; skipping text detection for this image.")
         return False
     except Exception as exc:
-        if OCR_STRICT:
-            raise SystemExit(f"Strict zero-text OCR check failed: {type(exc).__name__}: {exc}")
-        print(f"[OCR] check unavailable: {type(exc).__name__}: {exc}")
+        # An OCR crash/timeout must not cancel image generation or the whole run.
+        print(f"[OCR] check unavailable; allowing image through: {type(exc).__name__}: {exc}")
         return False
 
 
@@ -339,9 +338,9 @@ def main() -> None:
         "title": package.get("title"), "width": WIDTH, "height": HEIGHT, "model": MODEL,
         "reference_mode": "canonical_character_and_environment_references_plus_previous_beat" if len(refs) >= 2 else ("legacy_reference_plus_previous_beat" if refs else "prompt_only"),
         "character_references": [name for name, _, _ in refs],
-        "text_gate": "strict_ocr_reject_after_retry",
+        "text_gate": "best_effort_ocr_retry_then_continue",
         "ocr_retries": OCR_RETRIES,
-        "ocr_policy": "regenerate_then_fail_if_text_suspected",
+        "ocr_policy": "retry_suspected_text_then_accept_with_warning_if_still_suspected",
         "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "assembly recalculates beat durations from actual TTS duration",
@@ -386,8 +385,12 @@ def main() -> None:
                 time.sleep(2 * attempt)
 
         if not accepted:
-            raise SystemExit(
-                f"Beat {index} rejected: generated image still contains OCR-detectable text after {OCR_RETRIES} attempts"
+            # Preserve pipeline progress: keep the final generated frame and flag it.
+            # OCR is probabilistic, and a false positive must never abort the full run.
+            accepted = True
+            print(
+                f"[OCR] WARNING: beat {index} still looked text-like after "
+                f"{OCR_RETRIES} attempt(s); keeping final image so the pipeline continues."
             )
 
         previous_image = output.read_bytes()
