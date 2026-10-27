@@ -1,33 +1,34 @@
 # Chispa-Pifia Visual Bible
 
 ## Canonical reference files
-Put the two approved reference images in this folder using these exact filenames:
+The approved visual references currently used by production are:
 
-- `file_00000000078881f486600a6d2d8ccc89.png` — uploaded character reference image.
-- `file_000000008bfc81f480840c507c90542b.png` — uploaded environment/style reference image.
+- `Generate_modern_stickman_character_20261027121745.jpg` — primary character identity reference.
+- `Remove_bag_and_animate_image_20261027125028.jpg` — secondary character/style/action reference.
 
-The image renderer loads both files and sends them with each image-generation request. The production workflow fails preflight if either canonical JPEG is missing; upload both actual image files before running production. The first image anchors the character; the second anchors environments and cinematography. The previously accepted frame is also supplied to help preserve continuity from beat to beat.
+The production renderer sends both approved references to Cloudflare FLUX.2 [dev] on every image-generation request, together with the previously accepted beat when available for continuity.
 
-## Main character identity lock
-- Large smooth pale round head; large oval black eyes; expressive bold black eyebrows; small simple mouth.
-- Tiny neck, developed compact torso, articulated arms/hands/legs/feet: more developed than line-only stick figures, but unmistakably a round-headed stickman.
-- Default outfit: dark charcoal/black hoodie with drawstrings, dark cargo trousers, black-and-white high-top sneakers.
-- Dark backpack only when the story establishes that the character is carrying it.
-- Preserve head-to-body ratio, eye spacing, limb thickness, silhouette, clothing and footwear across all scenes.
-- Do not invent facial hair, realistic nose/skin detail, logos, random accessories or unexplained outfit changes.
+## Character identity lock
+- Follow the approved references as the highest-priority character authority.
+- Preserve the same simple, expressive 2D stickman construction, head shape, eyes, eyebrows, mouth, body proportions, limb construction and outline language.
+- Clothing is not a defining requirement. Do not add the previous hoodie/cargo-trousers/sneakers identity unless the story itself requires an item.
+- Keep the character unmistakably 2D and hand-drawn/digitally illustrated rather than photorealistic, 3D, anime or a detailed human cartoon.
+- Expressions, poses and camera angles may change with the story; character identity must not.
 
-## Environment and rendering
-- Detailed, believable locations with depth, practical objects, reflections, shadows and atmospheric perspective.
-- Cinematic stylized animation: soft dimensional shading and clean outlines on the character; detailed cinematic environments.
-- Dark charcoal, black, cool blue and steel-grey base palette with restrained warm amber/orange light accents.
-- Light direction, room layout, doors/windows, prop placement, time of day and object state must persist between adjacent shots unless the story changes them.
+## Scene rendering
+- One coherent vertical 9:16 story frame per beat.
+- Never reproduce the reference sheet as a collage, turnaround, contact sheet or model sheet during production.
+- The current narration beat is the only event to illustrate.
+- Backgrounds should support the story and remain visually compatible with the approved references.
+- No captions, subtitles, speech bubbles, labels, logos, watermarks, UI, readable signs, letters, numbers or typography.
 
-## Story-frame rules
-- Output one full-frame vertical 9:16 image per beat, never a reference-sheet collage.
-- Choose the camera angle for the beat: wide establishing, medium action, face close-up, over-the-shoulder, POV insert, high/low angle or detail shot.
-- Pose and expression must communicate the exact narrated action and emotion.
-- No text, captions, subtitles, labels, readable signs, logos, watermarks or typography in generated images.
-- The story is the source of truth. Reference-sheet example scenes are style examples only and must not leak into unrelated stories. Content should prioritise mini-mysteries, suspense, dilemmas, problem-solving and fair twists; absurd comedy is optional, not the default.
+## Story relationship
+The story generator remains responsible for mini-mysteries, suspense, dilemmas, problem-solving and fair twists. Absurd comedy is optional, not the default. The image renderer must literally reenact the narration beat and must not invent unrelated visual jokes.
 
-## Important limitations
-Reference images improve consistency but do not guarantee perfect image identity. The pipeline must be checked by rendering several adjacent scenes and visually reviewing them before trusting a full production run. If both canonical PNGs are absent, the script falls back to the legacy embedded reference; that fallback is not the final approved setup. If only one canonical PNG is present, the current loader uses that one and does not combine it with the legacy reference.
+## Production model policy
+- Story writer: `openai/gpt-oss-120b` on Groq.
+- Independent story reviewer: `openai/gpt-oss-120b` on Groq.
+- Image generation: `@cf/black-forest-labs/flux-2-dev` on Cloudflare Workers AI.
+- Text detection: Tesseract with regeneration retries.
+
+Reference images improve consistency but cannot mathematically guarantee identical characters. The pipeline therefore also supplies the previous accepted frame as a continuity reference for each subsequent scene.
