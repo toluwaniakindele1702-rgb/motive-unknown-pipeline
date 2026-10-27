@@ -351,7 +351,56 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
     return result.choices[0].message.content or ""
 
 
-def make_prompt(topic: str | None, retry: bool = False) -> str:
+
+
+def review_story(client: Groq, obj: dict[str, Any]) -> dict[str, Any]:
+    """Independent semantic quality gate; structural validity alone is not enough."""
+    review_system = """You are a demanding senior story editor for short-form animated storytelling.
+You are NOT the writer and must not praise weak work to be polite. Evaluate whether a real viewer would want to keep watching.
+Judge only the actual story and narration, not how many required fields it fills.
+
+Score each category from 1 to 10:
+1. HOOK: immediate, specific curiosity; no generic setup.
+2. CAUSALITY: each event follows from a previous choice, consequence, clue, or established rule.
+3. CHARACTER AGENCY: the protagonist makes understandable choices that drive the story.
+4. ESCALATION: stakes or difficulty meaningfully rise; beats are not repetitive.
+5. ORIGINALITY: premise and execution feel specific, not like a stock AI story or a familiar trope with names swapped.
+6. PAYOFF: ending is surprising but fair, emotionally or comically satisfying, and resolves the central goal.
+7. NATURALNESS: sounds like a human storyteller, not a checklist, synopsis, or awkward AI-generated prose.
+8. VISUAL STORYTELLING: actions and reveals can be understood clearly in images without relying on text.
+9. COHERENCE: no plot holes, arbitrary coincidences, unexplained behavior, missing objects, or contradictions.
+10. SHORTS RETENTION: each beat creates a reason to keep watching; no padding.
+
+Be strict. A story that merely follows the requested structure is NOT automatically good.
+Reject vague stakes, predictable or unearned twists, random events, fake complexity, repetitive failed attempts, characters acting irrationally for convenience, and endings that explain rather than deliver a payoff.
+Do not reward a story for including a twist if the twist is obvious, unsupported, or irrelevant to the original problem.
+Return ONLY JSON:
+{"approved":true|false,"overall_score":1,"scores":{"hook":1,"causality":1,"agency":1,"escalation":1,"originality":1,"payoff":1,"naturalness":1,"visual_storytelling":1,"coherence":1,"retention":1},"fatal_flaws":["specific flaw"],"rewrite_instructions":["specific actionable fix"]}
+Approve only if overall_score is at least 8 and no major flaw remains. Be honest; do not inflate scores."""
+    review_input = {
+        "title": obj.get("title", ""),
+        "hook": obj.get("hook", ""),
+        "narration": obj.get("narration", ""),
+        "story_structure": obj.get("story_structure", {}),
+        "scenes": [
+            {"beat_text": s.get("beat_text", ""), "narration": s.get("narration", ""), "action": s.get("action", "")}
+            for s in obj.get("scenes", []) if isinstance(s, dict)
+        ],
+    }
+    result = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": review_system},
+            {"role": "user", "content": json.dumps(review_input, ensure_ascii=False)},
+        ],
+        temperature=0.15,
+        max_completion_tokens=1400,
+        response_format={"type": "json_object"},
+    )
+    return parse_json(result.choices[0].message.content or "")
+
+
+def make_prompt(topic: str | None, retry: bool = False, feedback: str = "") -> str:
     old = history()
     used = "" if not old else "Avoid repeating these previous titles: " + "; ".join(old[-25:])
     seed = f"Story seed: {topic}." if topic else "Invent an original, highly engaging story-first Short built around a mini-mystery, suspenseful situation, dilemma, problem-solving challenge or fair twist. Absurd comedy is optional, not the default."
@@ -370,7 +419,8 @@ def make_prompt(topic: str | None, retry: bool = False) -> str:
         "The storyboard MUST contain 10-14 separate scenes for the 60-90 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
         "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
     )
-    return f"{seed}\n{used}\n{retry_note}\nWrite the complete JSON package now."
+    feedback_block = ("\nINDEPENDENT STORY-QUALITY REVIEW FEEDBACK — FIX EVERY POINT, DO NOT DEFEND THE OLD DRAFT:\n" + feedback + "\n" if feedback else "")
+    return f"{seed}\n{used}\n{retry_note}{feedback_block}\nWrite the complete JSON package now."
 
 
 def generate(topic: str | None) -> dict[str, Any]:
@@ -378,22 +428,61 @@ def generate(topic: str | None) -> dict[str, Any]:
         raise RuntimeError("GROQ_API_KEY is required")
     client = Groq(api_key=KEY)
     last: Exception | None = None
+    feedback = ""
     for attempt in range(3):
         try:
-            obj = parse_json(request(client, make_prompt(topic, retry=attempt > 0), temperature=0.78 if attempt == 0 else 0.58))
+            obj = parse_json(request(
+                client,
+                make_prompt(topic, retry=attempt > 0, feedback=feedback),
+                temperature=0.82 if attempt == 0 else 0.62,
+            ))
             normalize_scenes(obj)
             errors = validate(obj)
-            if not errors:
-                obj["generated_at"] = datetime.now(timezone.utc).isoformat()
-                obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-                obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-                obj["story_policy"] = "story_first_mystery_suspense_dilemma_twist_60_90_seconds"
-                obj["style_policy"] = STYLE
-                return obj
-            last = ValueError("validation failed: " + ", ".join(errors[:20]))
-            print(f"[SHORTS] validation failed ({len(errors)} issue(s)): {errors[:10]}")
-            if attempt < 2:
-                time.sleep(3)
+            if errors:
+                last = ValueError("structural validation failed: " + ", ".join(errors[:20]))
+                print(f"[SHORTS] structural validation failed ({len(errors)} issue(s)): {errors[:10]}")
+                feedback = "The previous draft failed machine validation: " + ", ".join(errors[:20])
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                break
+
+            # A valid JSON structure is not proof of a good story. Have a separate editor
+            # score the actual narrative and require a rewrite when quality is below threshold.
+            review = review_story(client, obj)
+            score = int(review.get("overall_score", 0) or 0)
+            approved = review.get("approved") is True and score >= 8
+            print(f"[SHORTS] independent story review: approved={approved}, score={score}/10")
+            print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
+            if not approved:
+                flaws = review.get("fatal_flaws", [])
+                fixes = review.get("rewrite_instructions", [])
+                feedback = json.dumps({
+                    "overall_score": score,
+                    "scores": review.get("scores", {}),
+                    "fatal_flaws": flaws,
+                    "rewrite_instructions": fixes,
+                }, ensure_ascii=False)
+                last = ValueError(f"story quality review rejected draft ({score}/10)")
+                print(f"[SHORTS] quality gate rejected draft: {feedback[:1800]}")
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                break
+
+            obj["story_quality_review"] = {
+                "reviewer_model": MODEL,
+                "approved": True,
+                "overall_score": score,
+                "scores": review.get("scores", {}),
+                "fatal_flaws": review.get("fatal_flaws", []),
+            }
+            obj["generated_at"] = datetime.now(timezone.utc).isoformat()
+            obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
+            obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
+            obj["story_policy"] = "story_first_mystery_suspense_dilemma_twist_60_90_seconds"
+            obj["style_policy"] = STYLE
+            return obj
         except Exception as exc:
             last = exc
             msg = str(exc).lower()
@@ -401,7 +490,7 @@ def generate(topic: str | None) -> dict[str, Any]:
             if attempt < 2:
                 print(f"[SHORTS] attempt {attempt + 1} failed: {exc}; waiting {wait}s")
                 time.sleep(wait)
-    raise RuntimeError(f"Could not generate a valid Chispa-Pifia story package: {last}")
+    raise RuntimeError(f"Could not generate a valid Chispa-Pifia story package after quality checks: {last}")
 
 
 def write(obj: dict[str, Any]) -> None:
@@ -452,6 +541,7 @@ def write(obj: dict[str, Any]) -> None:
         "zero_text_gate": "strict_ocr_reject_after_retry_in_image_renderer",
         "text_policy": "no_deliberate_story_text",
         "story_policy": "story_first_mystery_suspense_dilemma_twist_60_90_seconds",
+        "story_quality_gate": "independent_editor_score_minimum_8_of_10",
         "timing_policy": "narration_is_master_timeline",
         "media_generation": "cloudflare_images",
         "beat_policy": "meaningful_action_reaction_consequence_decision_reveal_payoff",
