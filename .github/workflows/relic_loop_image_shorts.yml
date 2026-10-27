@@ -28,13 +28,11 @@ jobs:
     timeout-minutes: 150
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      # GPT-OSS 120B is Groq's flagship production reasoning/text model.
       GROQ_WRITER_MODEL: 'openai/gpt-oss-120b'
       GROQ_REVIEWER_MODEL: 'openai/gpt-oss-120b'
       RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      # FLUX.2 [dev] is the high-fidelity multi-reference Cloudflare image model.
       CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-dev'
       RELIC_LOOP_IMAGE_WIDTH: '576'
       RELIC_LOOP_IMAGE_HEIGHT: '1024'
@@ -129,6 +127,7 @@ jobs:
           set -euo pipefail
           python -m py_compile \
             relic_loop_shorts_fixed.py \
+            relic_loop_shorts_production.py \
             cloudflare_relic_loop_images.py \
             cloudflare_relic_loop_images_peanut.py \
             assemble_relic_loop_short.py \
@@ -139,7 +138,7 @@ jobs:
       - name: Generate and quality-gate story
         run: |
           set -o pipefail
-          python relic_loop_shorts_fixed.py 2>&1 | tee shorts_flow.log
+          python relic_loop_shorts_production.py 2>&1 | tee shorts_flow.log
 
       - name: Render story beats with FLUX.2 dev and approved references
         run: |
@@ -189,6 +188,7 @@ jobs:
             cat youtube_upload.log 2>/dev/null || true
           } > run_diagnostics/complete_logs.txt
           cp relic_loop_shorts_fixed.py run_diagnostics/ 2>/dev/null || true
+          cp relic_loop_shorts_production.py run_diagnostics/ 2>/dev/null || true
           cp cloudflare_relic_loop_images_peanut.py run_diagnostics/ 2>/dev/null || true
           cp .github/workflows/relic_loop_image_shorts.yml run_diagnostics/ 2>/dev/null || true
 
