@@ -1,0 +1,43 @@
+name: Test FLUX.2 Dev Stickman Images
+run-name: "FLUX.2 Dev stickman image test"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install --upgrade "requests>=2.32,<3" "Pillow>=10,<13"
+      - name: Verify required secrets and reference images
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -s assets/visual_references/file_00000000078881f486600a6d2d8ccc89.png
+          test -s assets/visual_references/file_000000008bfc81f480840c507c90542b.png
+      - name: Generate three reference-guided test images
+        run: python test_flux2_dev_stickman.py
+      - name: Upload test images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flux2-dev-stickman-test
+          path: flux2_dev_test/
+          if-no-files-found: warn
+          retention-days: 7
