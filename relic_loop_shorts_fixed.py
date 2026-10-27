@@ -18,6 +18,7 @@ HISTORY = STATE / "relic_loop_topic_history.json"
 RUN.mkdir(parents=True, exist_ok=True)
 
 MODEL = os.environ.get("GROQ_WRITER_MODEL", "openai/gpt-oss-120b")
+REVIEW_MODEL = os.environ.get("GROQ_REVIEWER_MODEL", "openai/gpt-oss-20b")
 KEY = os.environ.get("GROQ_API_KEY", "").strip()
 
 STYLE = (
@@ -388,7 +389,7 @@ Approve only if overall_score is at least 8 and no major flaw remains. Be honest
         ],
     }
     result = client.chat.completions.create(
-        model=MODEL,
+        model=REVIEW_MODEL,
         messages=[
             {"role": "system", "content": review_system},
             {"role": "user", "content": json.dumps(review_input, ensure_ascii=False)},
@@ -471,7 +472,7 @@ def generate(topic: str | None) -> dict[str, Any]:
                 break
 
             obj["story_quality_review"] = {
-                "reviewer_model": MODEL,
+                "reviewer_model": REVIEW_MODEL,
                 "approved": True,
                 "overall_score": score,
                 "scores": review.get("scores", {}),
