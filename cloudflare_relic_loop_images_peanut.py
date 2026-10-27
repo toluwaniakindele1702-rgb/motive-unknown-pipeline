@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import os
 
-# The production choice is FLUX.2 [dev], Cloudflare's high-fidelity multi-reference
-# image model in the current Workers AI catalog.
+# FLUX.2 [dev] is the high-fidelity multi-reference Cloudflare image model selected for production.
 os.environ["CLOUDFLARE_IMAGE_MODEL"] = "@cf/black-forest-labs/flux-2-dev"
 
 import cloudflare_relic_loop_images as base
@@ -88,6 +87,26 @@ def _reference_blurb() -> str:
     )
 
 base._reference_blurb = _reference_blurb
+
+# The story generator still contains legacy wardrobe wording for its own character metadata.
+# Strip that visual baggage before the image prompt is built so the approved reference images,
+# rather than old prose, remain the authority for character appearance.
+_original_scene_prompt = base._scene_prompt
+
+
+def _scene_prompt(scene, characters, locations, previous_scene=None, attempt=1):
+    sanitized = []
+    for character in characters or []:
+        item = dict(character) if isinstance(character, dict) else {}
+        item["appearance"] = (
+            "the approved canonical Chispa-Pifia 2D stickman character from reference image 1; "
+            "preserve the reference character exactly; no invented clothing or redesign"
+        )
+        sanitized.append(item)
+    return _original_scene_prompt(scene, sanitized, locations, previous_scene, attempt)
+
+
+base._scene_prompt = _scene_prompt
 
 
 if __name__ == "__main__":
