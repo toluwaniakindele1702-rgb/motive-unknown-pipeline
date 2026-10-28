@@ -2,13 +2,15 @@
 
 This wrapper deliberately reuses the tested Cloudflare renderer so image transport,
 OCR, retries, previous-frame continuity, manifests and beat handling remain unchanged.
-Only the model, canonical references and visual prompt policy are overridden here.
+Only the model, canonical references, quota fallback and visual prompt policy are overridden here.
 """
 from __future__ import annotations
 
 import os
 
-# FLUX.2 [dev] is the high-fidelity multi-reference Cloudflare image model selected for production.
+# Keep FLUX.2 [dev] as the preferred high-fidelity multi-reference model.
+# If the account exhausts the daily free Workers AI neuron allocation, the wrapper
+# automatically falls back to the much cheaper FLUX.2 Klein 4B for the rest of the run.
 os.environ["CLOUDFLARE_IMAGE_MODEL"] = "@cf/black-forest-labs/flux-2-dev"
 
 import cloudflare_relic_loop_images as base
@@ -18,6 +20,49 @@ base.CANONICAL_REFERENCE_PATHS = (
     ("Generate_modern_stickman_character_20261027121745.jpg", "image/jpeg"),
     ("Remove_bag_and_animate_image_20261027125028.jpg", "image/jpeg"),
 )
+
+# Cloudflare error code 3036 / HTTP 429 means the account has exhausted the
+# 10,000-neuron daily free allocation. This is a quota condition, not a bad token.
+# Klein 4B is substantially cheaper and supports the same multi-reference workflow,
+# so it is a safe no-paid-plan fallback for the remainder of the current run.
+PREFERRED_MODEL = "@cf/black-forest-labs/flux-2-dev"
+FALLBACK_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
+_quota_fallback_activated = False
+_original_cloudflare = base._cloudflare
+
+
+def _cloudflare_with_quota_fallback(prompt, refs=None):
+    global _quota_fallback_activated
+
+    # Once the daily quota has been detected, do not keep hitting the exhausted
+    # preferred model on every subsequent image. Use the cheaper fallback directly.
+    if _quota_fallback_activated:
+        base.MODEL = FALLBACK_MODEL
+        return _original_cloudflare(prompt, refs)
+
+    try:
+        return _original_cloudflare(prompt, refs)
+    except RuntimeError as exc:
+        message = str(exc)
+        quota_exhausted = (
+            "3036" in message
+            or "used up your daily free allocation of 10,000 neurons" in message.lower()
+            or "daily free allocation" in message.lower()
+        )
+        if not quota_exhausted:
+            raise
+
+        _quota_fallback_activated = True
+        base.MODEL = FALLBACK_MODEL
+        os.environ["CLOUDFLARE_IMAGE_MODEL"] = FALLBACK_MODEL
+        print(
+            "[CLOUDFLARE] Daily free neuron allocation exhausted on FLUX.2 dev; "
+            f"switching to cheaper fallback model {FALLBACK_MODEL} for the remainder of this run."
+        )
+        return _original_cloudflare(prompt, refs)
+
+
+base._cloudflare = _cloudflare_with_quota_fallback
 
 base.STYLE_LOCK = """
 CHISPA-PIFIA MASTER VISUAL STYLE — APPROVED CHARACTER BIBLE:
