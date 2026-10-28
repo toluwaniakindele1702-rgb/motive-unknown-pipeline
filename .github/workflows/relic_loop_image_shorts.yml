@@ -10,9 +10,16 @@ on:
         default: ""
         type: string
   schedule:
+    # Temporary analytics test: 7:00 AM WAT instead of 10:00 AM.
+    - cron: '0 7 * * *'
+      timezone: 'Africa/Lagos'
+    - cron: '0 13 * * *'
+      timezone: 'Africa/Lagos'
+    - cron: '0 16 * * *'
+      timezone: 'Africa/Lagos'
     - cron: '0 19 * * *'
       timezone: 'Africa/Lagos'
-    - cron: '0 1 * * *'
+    - cron: '30 21 * * *'
       timezone: 'Africa/Lagos'
 
 concurrency:
