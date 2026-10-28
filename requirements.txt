@@ -2,15 +2,16 @@
 groq>=0.31.0,<1.0
 requests>=2.32,<3
 
-# Google Gemini / Nano Banana 2 / Veo 3.1 V2 media layer
+# Google Gemini / media layer
 google-genai>=2.3.0,<3
 
-# TTS. CPU-only PyTorch is installed explicitly by the workflow.
+# TTS
 kokoro>=0.9.4,<1.0
+edge-tts>=7.0,<8
 soundfile>=0.13,<1.0
 numpy>=2.0,<3
 
-# Images / thumbnail renderer
+# Images / OCR
 Pillow>=11,<13
 pytesseract>=0.3.13,<1
 
