@@ -1,7 +1,8 @@
 """Production story generator for Chispa-Pifia.
 
-Uses GPT-OSS 120B for both writing and review, while adding a resilient production
-retry loop so one mediocre draft cannot kill an entire scheduled video run.
+Uses GPT-OSS 120B for both writing and review, with multiple independent
+quality attempts and a best-draft fallback so a strict final review cannot
+kill an otherwise usable production run.
 """
 from __future__ import annotations
 
@@ -48,6 +49,11 @@ Every story must have a clear protagonist, a concrete desire/problem, understand
 
 The viewer should understand the situation almost immediately and want to know what happens next. The ending should feel earned, surprising when appropriate, and satisfying in hindsight.
 
+HOOK QUALITY — NON-NEGOTIABLE:
+The first sentence is the retention gate. It must immediately present a specific, concrete situation with an unanswered question, consequence, deadline, risk, embarrassment, unusual constraint, or other reason to keep listening. It must sound like the beginning of an actual story, not a topic introduction.
+Before writing, silently generate three different first-sentence hooks and choose the strongest one. Reject generic openings such as "Have you ever...", "One day...", "This guy...", "Something strange happened...", "He never expected...", or any vague setup that delays the actual story.
+Do not explain the premise before starting it. Start inside the problem.
+
 CAUSALITY AUDIT — NON-NEGOTIABLE:
 Before returning JSON, silently summarize the story as one causal chain. For every major beat ask:
 1. What caused this?
@@ -88,6 +94,9 @@ ABSOLUTE NO-RANDOMNESS RULES:
 - No meaningless surrealism.
 - No generic "have you ever wondered" opening.
 - No ending that introduces a completely new fact just to manufacture a twist.
+
+FINAL SILENT QUALITY CHECK:
+Before outputting JSON, score the draft mentally on hook, causality, agency, escalation, originality, payoff, naturalness, visual clarity, coherence and retention. If any major category is weak, discard the draft and write a stronger premise instead. Do not output a merely acceptable story when a stronger premise can be created.
 
 Return ONLY valid JSON with this shape:
 {{
@@ -141,12 +150,16 @@ def make_prompt(topic: str | None, retry: bool = False, feedback: str = "", atte
             "possible. Do not keep rewriting the same failed idea with different wording. "
             "Fix every reported flaw, especially weak hooks, repetitive beats, fake escalation, coincidence-driven "
             "plotting, predictable/unearned endings, irrational character choices, synopsis-like narration, "
-            "and visual ambiguity."
+            "and visual ambiguity. Generate three new hook candidates internally and select the strongest before "
+            "writing the narration. The new first sentence must work as a standalone retention hook."
         )
     else:
         retry_note = (
             "Before writing, silently test the premise for originality, causality, character agency, retention "
-            "and payoff. If the premise is weak or generic, discard it and invent a stronger one."
+            "and payoff. If the premise is weak or generic, discard it and invent a stronger one. Generate three "
+            "candidate first sentences internally and choose the strongest. The first sentence must start inside "
+            "a concrete problem, decision, risk, deadline, embarrassment or unanswered situation; never use a "
+            "generic introduction."
         )
 
     feedback_block = (
@@ -156,7 +169,8 @@ def make_prompt(topic: str | None, retry: bool = False, feedback: str = "", atte
     return (
         f"{seed}\n{used}\n{retry_note}\n{feedback_block}\n"
         "Write the complete JSON package now. Make the first sentence concrete and immediately interesting. "
-        "Use 10-14 meaningful scenes, exact contiguous narration excerpts, and a coherent causal chain."
+        "Use 10-14 meaningful scenes, exact contiguous narration excerpts, and a coherent causal chain. "
+        "Do not sacrifice story quality to satisfy the JSON fields; the actual narration is the product."
     )
 
 
@@ -164,24 +178,31 @@ base.make_prompt = make_prompt
 
 
 def production_generate(topic: str | None) -> dict:
-    """Generate a story with up to five independent quality attempts.
+    """Generate multiple independently reviewed stories and return the best one.
 
-    The original base generator only allowed three attempts. In production that made a
-    single strict reviewer decision capable of killing the whole scheduled run. This wrapper
-    keeps the structural validator and quality gate but gives the writer more chances and,
-    on retry, explicitly forces a new premise instead of repeatedly patching the same draft.
+    Normal behavior still requires a quality score of at least 8/10. However, if every
+    candidate misses that strict threshold, the run no longer dies after the final attempt:
+    it selects the highest-scoring structurally valid candidate and marks it as a fallback.
+    This keeps the production pipeline moving while preserving the strict review score in
+    the saved metadata so the fallback is visible in diagnostics.
     """
     if not base.KEY:
         raise RuntimeError("GROQ_API_KEY is required")
 
     client = base.Groq(api_key=base.KEY)
+    candidates: list[tuple[int, dict, dict]] = []
     last = None
     feedback = ""
 
-    for attempt in range(1, 6):
+    # Seven attempts gives the writer enough independent shots at a genuinely strong premise.
+    # A rejected draft is never reused as the final draft unless it is the best structurally
+    # valid candidate after all attempts have been exhausted.
+    max_attempts = 7
+
+    for attempt in range(1, max_attempts + 1):
         try:
             prompt = make_prompt(topic, retry=attempt > 1, feedback=feedback, attempt=attempt)
-            temperature = 0.82 if attempt == 1 else 0.72
+            temperature = 0.86 if attempt == 1 else 0.74
             obj = base.parse_json(base.request(client, prompt, temperature=temperature))
             base.normalize_scenes(obj)
 
@@ -190,7 +211,7 @@ def production_generate(topic: str | None) -> dict:
                 last = ValueError("structural validation failed: " + ", ".join(errors[:20]))
                 print(f"[SHORTS] structural validation failed on attempt {attempt}: {errors[:10]}")
                 feedback = "Machine validation failed: " + ", ".join(errors[:20])
-                if attempt < 5:
+                if attempt < max_attempts:
                     time.sleep(2)
                     continue
                 break
@@ -198,8 +219,12 @@ def production_generate(topic: str | None) -> dict:
             review = base.review_story(client, obj)
             score = int(review.get("overall_score", 0) or 0)
             approved = review.get("approved") is True and score >= 8
-            print(f"[SHORTS] independent story review: approved={approved}, score={score}/10, attempt={attempt}/5")
+            print(f"[SHORTS] independent story review: approved={approved}, score={score}/10, attempt={attempt}/{max_attempts}")
             print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
+
+            # Keep every structurally valid candidate. If no candidate reaches the strict
+            # threshold, the highest-scoring one will be used instead of cancelling the run.
+            candidates.append((score, obj, review))
 
             if not approved:
                 feedback = json.dumps({
@@ -210,7 +235,7 @@ def production_generate(topic: str | None) -> dict:
                 }, ensure_ascii=False)
                 last = ValueError(f"story quality review rejected draft ({score}/10)")
                 print(f"[SHORTS] quality gate rejected draft: {feedback[:1800]}")
-                if attempt < 5:
+                if attempt < max_attempts:
                     time.sleep(2)
                     continue
                 break
@@ -221,6 +246,8 @@ def production_generate(topic: str | None) -> dict:
                 "overall_score": score,
                 "scores": review.get("scores", {}),
                 "fatal_flaws": review.get("fatal_flaws", []),
+                "fallback_used": False,
+                "attempt": attempt,
             }
             obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
             obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
@@ -234,10 +261,39 @@ def production_generate(topic: str | None) -> dict:
             message = str(exc).lower()
             wait = 65 if any(x in message for x in ("429", "rate limit", "rate_limit")) else 5 + attempt * 3
             print(f"[SHORTS] attempt {attempt} failed: {exc}")
-            if attempt < 5:
+            if attempt < max_attempts:
                 time.sleep(wait)
 
-    raise RuntimeError(f"Could not generate a valid Chispa-Pifia story package after production retries: {last}")
+    # Final safety net: never throw away all usable work merely because the strict 8/10
+    # quality gate was missed. Only structurally valid candidates are eligible here, and
+    # the reviewer score determines which candidate wins.
+    if candidates:
+        best_score, best_obj, best_review = max(
+            candidates,
+            key=lambda item: (item[0], int((item[2].get("scores", {}) or {}).get("hook", 0) or 0),
+                              int((item[2].get("scores", {}) or {}).get("payoff", 0) or 0)),
+        )
+        best_obj["story_quality_review"] = {
+            "reviewer_model": MODEL,
+            "approved": False,
+            "overall_score": best_score,
+            "scores": best_review.get("scores", {}),
+            "fatal_flaws": best_review.get("fatal_flaws", []),
+            "rewrite_instructions": best_review.get("rewrite_instructions", []),
+            "fallback_used": True,
+            "fallback_reason": "No candidate reached the strict 8/10 quality gate; highest-scoring structurally valid candidate selected so the production run can continue.",
+            "attempt": next((i for i, item in enumerate(candidates, 1) if item[1] is best_obj), None),
+            "candidates_reviewed": len(candidates),
+        }
+        best_obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
+        best_obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
+        best_obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
+        best_obj["story_policy"] = "varied_storytime_60_90_seconds"
+        best_obj["style_policy"] = base.STYLE
+        print(f"[SHORTS] FALLBACK: selected best structurally valid story at {best_score}/10 from {len(candidates)} reviewed candidate(s).")
+        return best_obj
+
+    raise RuntimeError(f"Could not generate a structurally valid Chispa-Pifia story package after {max_attempts} production attempts: {last}")
 
 
 if __name__ == "__main__":
@@ -247,5 +303,7 @@ if __name__ == "__main__":
     print(
         f"[SHORTS] generated: {obj['title']} | "
         f"{base.words(obj['narration'])} narration words | "
-        f"{len(obj['scenes'])} visual beats | model={MODEL}"
+        f"{len(obj['scenes'])} visual beats | model={MODEL} | "
+        f"review_score={obj.get('story_quality_review', {}).get('overall_score')} | "
+        f"fallback={obj.get('story_quality_review', {}).get('fallback_used', False)}"
     )
