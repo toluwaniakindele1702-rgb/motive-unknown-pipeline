@@ -10,9 +10,9 @@ on:
         default: ""
         type: string
   schedule:
-    # Temporary analytics test: 7:00 AM WAT (06:00 UTC) instead of 10:00 AM.
+    # Temporary analytics test: 9:53 AM WAT (08:53 UTC) instead of 10:00 AM.
     # GitHub Actions schedule uses UTC here; Africa/Lagos is UTC+1.
-    - cron: '0 6 * * *'
+    - cron: '53 8 * * *'
     - cron: '0 12 * * *'
     - cron: '0 15 * * *'
     - cron: '0 18 * * *'
