@@ -42,16 +42,23 @@ Default outfit: black/dark charcoal hoodie with drawstrings, dark cargo trousers
 sneakers; backpack appears only when the story establishes that the character carries it. Do not
 add facial hair, nose detail, skin texture, logos, accessories or clothing changes without story need.
 
-RENDERING AND ENVIRONMENTS:
-Use cinematic stylized animation with polished soft dimensional shading on the character,
-clean dark outlines, readable hands, strong facial acting, subtle material detail, and rich,
-detailed environments. Environments may be more realistic and intricate than the character:
-believable bedrooms, apartments, corridors, streets, classrooms and outdoor spaces, with depth,
-practical objects, reflections, shadows and atmospheric perspective. Do not flatten the background
-into a blank cartoon setting. Keep the character stylized against the detailed environment; never
-turn the character photorealistic. Maintain a dark cinematic base palette (charcoal, black, cool
-blue/steel grey) with controlled warm amber/orange practical-light accents. Lighting must match
-time of day and story mood while keeping the face and action readable.
+RENDERING AND ENVIRONMENTS — ONE UNIFIED 2D CARTOON WORLD:
+The ENTIRE image must be illustrated in the same coherent 2D cartoon animation style as the
+stickman. This applies to the background AND every object: rooms, walls, floors, ceilings,
+doors, windows, furniture, tables, chairs, beds, phones, vehicles, streets, buildings, trees,
+plants, food, tools, props, decorations, shadows and reflections. Draw every element as a
+cartoon illustration with clean deliberate outlines, simplified readable shapes, stylized
+textures, and soft cel-shading or painted 2D shading. Backgrounds may be richly detailed and
+cinematic, but must remain visibly hand-illustrated/cartoon, never photographic or realistic.
+Use cartoon-perspective and stylized materials throughout. A table must look like a drawn
+cartoon table, not a photorealistic or 3D-rendered object; a room must look like a drawn cartoon
+room, not a real-life photograph. Keep line weight, edge treatment, shading language, texture,
+and level of stylization consistent across character, props and environment. Do not place a
+2D stickman into a realistic, photographic, live-action, or 3D-rendered scene. No mixed-media
+look, no realistic photographic background, no photorealistic props, no 3D furniture, no
+hyperrealistic textures. Maintain the dark cinematic palette (charcoal, black, cool blue/steel
+grey) with controlled warm amber/orange accents, expressed through the same 2D illustrated
+style. Lighting must match the story mood while keeping the face and action readable.
 
 IDENTITY AND CONTINUITY RULES:
 Use the standing-pose sheet for character shape, outfit, proportions and pose vocabulary. Use
