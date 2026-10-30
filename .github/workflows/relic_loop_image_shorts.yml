@@ -32,7 +32,6 @@ jobs:
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_WRITER_MODEL: 'openai/gpt-oss-120b'
-      GROQ_REVIEWER_MODEL: 'openai/gpt-oss-120b'
       RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -209,8 +208,7 @@ jobs:
             echo "Trigger: ${GITHUB_EVENT_NAME}"
             echo
             echo "Writer: ${GROQ_WRITER_MODEL}"
-            echo "Reviewer: ${GROQ_REVIEWER_MODEL}"
-            echo "Image model: ${CLOUDFLARE_IMAGE_MODEL}"
+              echo "Image model: ${CLOUDFLARE_IMAGE_MODEL}"
             echo "References: approved two-image Peanut-style visual bible"
             echo
             if [ -f state/current_run/flow_manifest.json ]; then cat state/current_run/flow_manifest.json; fi
