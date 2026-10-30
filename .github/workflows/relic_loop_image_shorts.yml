@@ -10,13 +10,13 @@ on:
         default: ""
         type: string
   schedule:
-    # Temporary analytics test: 9:53 AM WAT (08:53 UTC) instead of 10:00 AM.
-    # GitHub Actions schedule uses UTC here; Africa/Lagos is UTC+1.
+    # Staggered WAT schedule to reduce GitHub Actions scheduler contention.
+    # Africa/Lagos is UTC+1; GitHub cron is configured in UTC here.
     - cron: '53 8 * * *'
-    - cron: '0 12 * * *'
-    - cron: '0 15 * * *'
-    - cron: '0 18 * * *'
-    - cron: '30 20 * * *'
+    - cron: '7 12 * * *'
+    - cron: '13 15 * * *'
+    - cron: '19 18 * * *'
+    - cron: '37 20 * * *'
 
 concurrency:
   group: relic-loop-image-shorts
