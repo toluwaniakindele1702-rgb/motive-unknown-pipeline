@@ -14,7 +14,6 @@ import relic_loop_shorts_fixed as base
 
 MODEL = "openai/gpt-oss-120b"
 base.MODEL = MODEL
-base.REVIEW_MODEL = MODEL
 
 base.STYLE = (
     "CHISPA-PIFIA approved visual identity: simple expressive 2D storytime stickman based on the "
@@ -178,123 +177,44 @@ base.make_prompt = make_prompt
 
 
 def production_generate(topic: str | None) -> dict:
-    """Generate multiple independently reviewed stories and return the best one.
+    """Generate one story package per run; validate locally without a separate LLM reviewer.
 
-    Normal behavior still requires a quality score of at least 8/10. However, if every
-    candidate misses that strict threshold, the run no longer dies after the final attempt:
-    it selects the highest-scoring structurally valid candidate and marks it as a fallback.
-    This keeps the production pipeline moving while preserving the strict review score in
-    the saved metadata so the fallback is visible in diagnostics.
+    The writer prompt already contains the editorial requirements and silent quality audit.
+    A second model call for review, followed by as many as seven rewrites, consumed the
+    daily Groq allowance disproportionately. Production now makes exactly one Groq request.
+    Invalid structure fails fast and is visible in diagnostics rather than burning more tokens.
     """
     if not base.KEY:
         raise RuntimeError("GROQ_API_KEY is required")
 
     client = base.Groq(api_key=base.KEY)
-    candidates: list[tuple[int, dict, dict]] = []
-    last = None
-    feedback = ""
+    prompt = make_prompt(topic, retry=False, feedback="", attempt=1)
+    obj = base.parse_json(base.request(client, prompt, temperature=0.82))
+    base.normalize_scenes(obj)
 
-    # Seven attempts gives the writer enough independent shots at a genuinely strong premise.
-    # A rejected draft is never reused as the final draft unless it is the best structurally
-    # valid candidate after all attempts have been exhausted.
-    max_attempts = 7
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            prompt = make_prompt(topic, retry=attempt > 1, feedback=feedback, attempt=attempt)
-            temperature = 0.86 if attempt == 1 else 0.74
-            obj = base.parse_json(base.request(client, prompt, temperature=temperature))
-            base.normalize_scenes(obj)
-
-            errors = base.validate(obj)
-            if errors:
-                last = ValueError("structural validation failed: " + ", ".join(errors[:20]))
-                print(f"[SHORTS] structural validation failed on attempt {attempt}: {errors[:10]}")
-                feedback = "Machine validation failed: " + ", ".join(errors[:20])
-                if attempt < max_attempts:
-                    time.sleep(2)
-                    continue
-                break
-
-            review = base.review_story(client, obj)
-            score = int(review.get("overall_score", 0) or 0)
-            approved = review.get("approved") is True and score >= 8
-            print(f"[SHORTS] independent story review: approved={approved}, score={score}/10, attempt={attempt}/{max_attempts}")
-            print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
-
-            # Keep every structurally valid candidate. If no candidate reaches the strict
-            # threshold, the highest-scoring one will be used instead of cancelling the run.
-            candidates.append((score, obj, review))
-
-            if not approved:
-                feedback = json.dumps({
-                    "overall_score": score,
-                    "scores": review.get("scores", {}),
-                    "fatal_flaws": review.get("fatal_flaws", []),
-                    "rewrite_instructions": review.get("rewrite_instructions", []),
-                }, ensure_ascii=False)
-                last = ValueError(f"story quality review rejected draft ({score}/10)")
-                print(f"[SHORTS] quality gate rejected draft: {feedback[:1800]}")
-                if attempt < max_attempts:
-                    time.sleep(2)
-                    continue
-                break
-
-            obj["story_quality_review"] = {
-                "reviewer_model": MODEL,
-                "approved": True,
-                "overall_score": score,
-                "scores": review.get("scores", {}),
-                "fatal_flaws": review.get("fatal_flaws", []),
-                "fallback_used": False,
-                "attempt": attempt,
-            }
-            obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
-            obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-            obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-            obj["story_policy"] = "varied_storytime_60_90_seconds"
-            obj["style_policy"] = base.STYLE
-            return obj
-
-        except Exception as exc:
-            last = exc
-            message = str(exc).lower()
-            wait = 65 if any(x in message for x in ("429", "rate limit", "rate_limit")) else 5 + attempt * 3
-            print(f"[SHORTS] attempt {attempt} failed: {exc}")
-            if attempt < max_attempts:
-                time.sleep(wait)
-
-    # Final safety net: never throw away all usable work merely because the strict 8/10
-    # quality gate was missed. Only structurally valid candidates are eligible here, and
-    # the reviewer score determines which candidate wins.
-    if candidates:
-        best_score, best_obj, best_review = max(
-            candidates,
-            key=lambda item: (item[0], int((item[2].get("scores", {}) or {}).get("hook", 0) or 0),
-                              int((item[2].get("scores", {}) or {}).get("payoff", 0) or 0)),
+    errors = base.validate(obj)
+    if errors:
+        raise RuntimeError(
+            "Story failed local structural validation; no additional Groq rewrite was attempted "
+            "to protect the daily token budget: " + ", ".join(errors[:20])
         )
-        best_obj["story_quality_review"] = {
-            "reviewer_model": MODEL,
-            "approved": False,
-            "overall_score": best_score,
-            "scores": best_review.get("scores", {}),
-            "fatal_flaws": best_review.get("fatal_flaws", []),
-            "rewrite_instructions": best_review.get("rewrite_instructions", []),
-            "fallback_used": True,
-            "fallback_reason": "No candidate reached the strict 8/10 quality gate; highest-scoring structurally valid candidate selected so the production run can continue.",
-            "attempt": next((i for i, item in enumerate(candidates, 1) if item[1] is best_obj), None),
-            "candidates_reviewed": len(candidates),
-        }
-        best_obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
-        best_obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-        best_obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-        best_obj["story_policy"] = "varied_storytime_60_90_seconds"
-        best_obj["style_policy"] = base.STYLE
-        print(f"[SHORTS] FALLBACK: selected best structurally valid story at {best_score}/10 from {len(candidates)} reviewed candidate(s).")
-        return best_obj
 
-    raise RuntimeError(f"Could not generate a structurally valid Chispa-Pifia story package after {max_attempts} production attempts: {last}")
-
+    # This records that the story passed deterministic checks, not an independent LLM score.
+    obj["story_quality_review"] = {
+        "reviewer_model": None,
+        "approved": None,
+        "review_method": "single_pass_writer_self_audit_plus_local_structural_validation",
+        "independent_llm_review": False,
+        "fallback_used": False,
+        "attempt": 1,
+    }
+    obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
+    obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
+    obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
+    obj["story_policy"] = "varied_storytime_60_90_seconds_single_pass"
+    obj["style_policy"] = base.STYLE
+    print("[SHORTS] single-pass story generation; independent LLM review disabled to conserve Groq tokens.")
+    return obj
 
 if __name__ == "__main__":
     topic = os.environ.get("RELIC_LOOP_TOPIC", "").strip() or None
