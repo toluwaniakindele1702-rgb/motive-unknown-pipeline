@@ -12,7 +12,7 @@ on:
   schedule:
     # Staggered WAT schedule to reduce GitHub Actions scheduler contention.
     # Africa/Lagos is UTC+1; GitHub cron is configured in UTC here.
-    - cron: '53 8 * * *'
+    - cron: '45 5 * * *'
     - cron: '7 12 * * *'
     - cron: '13 15 * * *'
     - cron: '19 18 * * *'
@@ -201,6 +201,12 @@ jobs:
         run: |
           {
             echo "# Chispa-Pifia Production"
+            echo
+            echo "Run number: ${GITHUB_RUN_NUMBER}"
+            echo "Run ID: ${GITHUB_RUN_ID}"
+            echo "Commit SHA: ${GITHUB_SHA}"
+            echo "Workflow: ${GITHUB_WORKFLOW}"
+            echo "Trigger: ${GITHUB_EVENT_NAME}"
             echo
             echo "Writer: ${GROQ_WRITER_MODEL}"
             echo "Reviewer: ${GROQ_REVIEWER_MODEL}"
