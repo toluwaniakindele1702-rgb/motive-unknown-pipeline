@@ -346,7 +346,9 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
         model=MODEL,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
-        max_completion_tokens=7000,
+        # Keep prompt + reserved completion budget below Groq's 8k TPM request ceiling.
+        # The production wrapper uses compact 150-210 word stories and 10-14 beats.
+        max_completion_tokens=4500,
         response_format={"type": "json_object"},
     )
     return result.choices[0].message.content or ""
