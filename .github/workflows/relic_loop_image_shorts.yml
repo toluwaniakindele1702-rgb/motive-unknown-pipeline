@@ -110,6 +110,7 @@ jobs:
           test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          echo "Cloudflare account ID suffix: ${CLOUDFLARE_ACCOUNT_ID: -4}"
           test -n "$YOUTUBE_TOKEN_JSON" || { echo "YOUTUBE_TOKEN_JSON is missing"; exit 1; }
           test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           ffmpeg -version | head -n 1
@@ -174,6 +175,7 @@ jobs:
             echo "writer_model=${GROQ_WRITER_MODEL}"
             echo "reviewer_model=${GROQ_REVIEWER_MODEL}"
             echo "image_model=${CLOUDFLARE_IMAGE_MODEL}"
+            echo "cloudflare_account_id_suffix=${CLOUDFLARE_ACCOUNT_ID: -4}"
             echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
             echo "voice=${RELIC_LOOP_KOKORO_VOICE}"
             echo
