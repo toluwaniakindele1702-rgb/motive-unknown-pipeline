@@ -135,6 +135,10 @@ def _response_diagnostic(response: requests.Response) -> str:
         messages = payload.get("messages") if isinstance(payload, dict) else None
         result_keys = list((payload.get("result") or {}).keys()) if isinstance(payload, dict) and isinstance(payload.get("result"), dict) else []
         parts = [f"status={response.status_code}"]
+        for header in ("cf-ray", "cf-ai-req-id"):
+            value = response.headers.get(header)
+            if value:
+                parts.append(f"{header}={value}")
         if errors:
             parts.append(f"errors={json.dumps(errors, ensure_ascii=False)}")
         if messages:
@@ -145,7 +149,12 @@ def _response_diagnostic(response: requests.Response) -> str:
             parts.append(f"json={json.dumps(payload, ensure_ascii=False)[:1200]}")
         return " | ".join(parts)
     except ValueError:
-        return f"status={response.status_code} | body={body[:1200]}"
+        request_ids = " | ".join(
+            f"{key}={response.headers[key]}" for key in ("cf-ray", "cf-ai-req-id")
+            if response.headers.get(key)
+        )
+        suffix = f" | {request_ids}" if request_ids else ""
+        return f"status={response.status_code}{suffix} | body={body[:1200]}"
 
 
 def _cloudflare(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
@@ -184,10 +193,29 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -
             diagnostic = _response_diagnostic(r)
             print(f"[CLOUDFLARE] HTTP response: {diagnostic}")
             if r.status_code == 429:
-                last = RuntimeError(f"Cloudflare rate limit: {diagnostic}")
+                body_lower = r.text.lower()
+                try:
+                    error_codes = {
+                        str(item.get("code")) for item in (r.json().get("errors") or [])
+                        if isinstance(item, dict) and item.get("code") is not None
+                    }
+                except (ValueError, AttributeError):
+                    error_codes = set()
+                quota_exhausted = (
+                    bool(error_codes.intersection({"3036", "4006"}))
+                    or "used up your daily free allocation" in body_lower
+                    or "daily free allocation" in body_lower
+                )
+                if quota_exhausted:
+                    raise RuntimeError(
+                        "Cloudflare account-level Workers AI neuron quota is exhausted; "
+                        "no model fallback can bypass an account-wide quota. "
+                        f"Check the account ID suffix against the intended Cloudflare account. {diagnostic}"
+                    )
+                last = RuntimeError(f"Cloudflare HTTP 429 (rate limit/capacity): {diagnostic}")
                 if attempt < MAX_RETRIES:
                     wait = 8 * attempt
-                    print(f"[CLOUDFLARE] rate limited; retrying in {wait}s")
+                    print(f"[CLOUDFLARE] transient 429; retrying in {wait}s")
                     time.sleep(wait)
                     continue
                 break
@@ -348,7 +376,7 @@ def main() -> None:
         "text_gate": "best_effort_ocr_retry_then_continue",
         "ocr_retries": OCR_RETRIES,
         "ocr_policy": "retry_suspected_text_then_accept_with_warning_if_still_suspected",
-        "cloudflare_diagnostics": "http_status_and_response_body_logged_on_every_attempt",
+        "cloudflare_diagnostics": "http_status_response_body_cf_ray_cf_ai_req_id_and_account_id_suffix_logged",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "assembly recalculates beat durations from actual TTS duration",
         "image_count_policy": "10-14 meaningful phrase-aligned story beats",
