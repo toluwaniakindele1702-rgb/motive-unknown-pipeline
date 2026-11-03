@@ -10,13 +10,10 @@ on:
         default: ""
         type: string
   schedule:
-    # Staggered WAT schedule to reduce GitHub Actions scheduler contention.
+    # Temporary recovery mode: one daily production attempt while Cloudflare
+    # Workers AI account allocation is being investigated. Manual dispatch remains available.
     # Africa/Lagos is UTC+1; GitHub cron is configured in UTC here.
-    - cron: '45 5 * * *'
-    - cron: '7 12 * * *'
-    - cron: '13 15 * * *'
     - cron: '19 18 * * *'
-    - cron: '37 20 * * *'
 
 concurrency:
   group: relic-loop-image-shorts
