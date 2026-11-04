@@ -90,7 +90,9 @@ For EVERY scene, specify:
 - one or two small contextual details that make the frame feel specific and lived-in, only when supported by the story.
 Make descriptions concrete and drawable: name visible objects, positions, gestures, expressions and spatial relationships. Avoid abstract phrases such as "dramatic scene", "he feels nervous", "cinematic atmosphere" or "a mysterious place" unless followed by observable visual evidence. Never rely on text, signs, UI or speech bubbles to explain the story. Do not add props, characters, actions or plot facts that the narration does not establish.
 A strong frame must read instantly at mobile size: one dominant action, clear silhouette, expressive acting, simple visual hierarchy, and a background that supports rather than competes with the focal action. Vary shot composition across the storyboard when the story beat changes; do not repeat the same medium shot or standing pose.
-Keep each visual_prompt approximately 45-85 words: sufficiently detailed to guide a high-quality image, but focused on one frame.
+OPENING IMAGE — SCENE 1 IS THE MOST IMPORTANT FRAME:
+Scene 1 is the first visual impression and must be art-directed as the opening hook, not as a routine establishing shot. Translate the first narration beat into one striking, truthful image: show the protagonist in the middle of the unusual action, urgent problem, visible consequence or revealing discovery. Put the protagonist and the key object/consequence prominently in frame, with a strong readable expression, clear gesture, bold silhouette and immediate visual contrast. Prefer a close or medium shot unless the story absolutely requires a wide view. Make the unanswered visual question obvious at a glance, but do not reveal the ending or invent extra danger. Never use an empty location, neutral standing pose, tiny distant figure or generic room as the opening frame.
+Keep each visual_prompt approximately 45-85 words: sufficiently detailed to guide a high-quality image, but focused on one frame. Scene 1 should use the strongest composition and clearest focal point in the entire storyboard.
 
 STORYBOARD:
 Create 10-14 meaningful visual beats. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased or reordered words. Split at natural sentence/action/reaction boundaries rather than fixed time intervals. Do not create filler scenes. Every visual_prompt must be a specific production-ready image description following the visual director requirements above.
@@ -132,7 +134,7 @@ Return ONLY valid JSON with this shape:
     "duration_seconds":3.0,
     "beat_text":"literal event happening now",
     "narration":"CONTIGUOUS EXACT EXCERPT FROM FULL NARRATION",
-    "visual_prompt":"45-85 word production-ready image description: exact instant, expressive pose and face, key prop placement, specific illustrated setting, layered composition, shot angle, lighting and clear focal point",
+    "visual_prompt":"45-85 word production-ready image description; scene 1 must be the strongest truthful opening hook, with a prominent protagonist, key prop/consequence, expressive action, clear focal point, layered illustrated setting, shot angle and lighting",
     "camera":"...",
     "action":"exact visible action"
   }}],
