@@ -104,6 +104,19 @@ def credentials() -> Credentials:
     return creds
 
 
+def preflight_auth() -> dict[str, Any]:
+    """Validate OAuth and channel access before the pipeline spends image credits."""
+    creds = credentials()
+    service = build("youtube", "v3", credentials=creds, cache_discovery=False)
+    response = service.channels().list(part="id", mine=True).execute()
+    channels = response.get("items") or []
+    if not channels:
+        raise RuntimeError("YouTube OAuth is valid, but it cannot access a YouTube channel for this account")
+    channel_id = channels[0].get("id", "")
+    print(f"[YOUTUBE] OAuth preflight passed; accessible channel ID suffix={channel_id[-6:]}")
+    return {"ok": True, "channel_id_suffix": channel_id[-6:]}
+
+
 def upload() -> dict[str, Any]:
     if not VIDEO_PATH.exists() or VIDEO_PATH.stat().st_size == 0:
         raise RuntimeError(f"Finished Short not found: {VIDEO_PATH}")
@@ -179,5 +192,10 @@ def upload() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    result = upload()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check-auth", action="store_true", help="Validate OAuth/channel access without uploading")
+    args = parser.parse_args()
+    result = preflight_auth() if args.check_auth else upload()
     print(json.dumps(result, ensure_ascii=False, indent=2))
