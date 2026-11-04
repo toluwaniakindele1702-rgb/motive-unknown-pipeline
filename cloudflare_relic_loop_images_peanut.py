@@ -18,6 +18,78 @@ from PIL import Image, ImageOps
 
 import cloudflare_relic_loop_images as base
 
+# The two checked-in Chispa-Pifia images are the canonical visual bible.
+base.CANONICAL_REFERENCE_PATHS = (
+    ("Generate_modern_stickman_character_20261027121745.jpg", "image/jpeg"),
+    ("Remove_bag_and_animate_image_20261027125028.jpg", "image/jpeg"),
+)
+
+base.STYLE_LOCK = """
+CHISPA-PIFIA APPROVED 2D STICKMAN STYLE — HARD LOCK:
+Use the supplied canonical reference images as the highest-priority visual authority.
+The protagonist must remain the same simple, expressive 2D storytime stickman shown in
+those references. Preserve the same large smooth pale round head, face construction,
+eye shape and spacing, eyebrows, mouth style, head-to-body ratio, silhouette, limb
+construction, outline thickness and overall proportions. Do not redesign the character.
+Do not invent clothing or accessories that are not established by the references or story.
+
+UNIFIED 2D ANIMATION WORLD:
+The character, props, objects and every background element must all belong to one
+coherent illustrated 2D cartoon world. Use clean hand-drawn/digital outlines, simplified
+shapes, expressive poses, readable silhouettes, and restrained 2D cel-shading. Rooms,
+furniture, streets, vehicles, trees, phones and all other objects must also look illustrated.
+Never place the flat 2D stickman into a photograph, photorealistic environment or 3D scene.
+Keep the established reference palette and rendering language consistent between shots.
+
+CHARACTER AND SCENE CONTINUITY:
+Reference 1 is the primary character identity anchor. Reference 2 is the secondary
+approved style/action guide. Preserve the same character identity across every scene.
+Expressions, poses, camera angles and story locations may change, but character design
+must not. Use the previously accepted frame as an additional continuity aid without
+overriding the canonical references or story facts.
+
+ONE-SCENE RULE:
+Generate exactly one full-frame vertical story shot per request. Never reproduce a
+reference-sheet layout, collage, turnaround sheet or multiple panels.
+
+ABSOLUTE EXCLUSIONS:
+no photorealism, no live action, no 3D CGI, no anime/manga, no glossy mascot redesign,
+no realistic human anatomy, no character redesign, no random outfit changes, no extra
+limbs or fingers, no duplicated protagonist unless the story explicitly requires it,
+no copied reference-sheet panels, no text, captions, speech bubbles, labels, logos
+or watermarks.
+""".strip()
+
+base.NO_TEXT = """
+STRICT ZERO-TEXT IMAGE RULE:
+Do not render captions, subtitles, title cards, speech bubbles, labels, logos, watermarks,
+UI, readable signs, letters, numbers, symbols, menus, posters, packaging text, screen text
+or typography. Keep environmental surfaces blank or non-readable. Communicate the story
+only through character acting, objects, composition, expressions and visible cause/effect.
+""".strip()
+
+base._reference_blurb = lambda: (
+    "CANONICAL REFERENCE PRIORITY: Reference 1 defines the exact protagonist identity. "
+    "Reference 2 defines the approved 2D visual language and action/style guidance. "
+    "Match the original simple stickman construction, facial design, proportions, outlines "
+    "and flat illustrated rendering. Do not copy the reference-sheet layout. The references "
+    "define character appearance; the narration defines the action."
+)
+
+_original_scene_prompt = base._scene_prompt
+def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, attempt=1):
+    cleaned = []
+    for character in characters or []:
+        item = dict(character) if isinstance(character, dict) else {}
+        item["appearance"] = (
+            "the approved canonical Chispa-Pifia 2D stickman from reference image 1; "
+            "match its appearance exactly; do not redesign or invent wardrobe"
+        )
+        cleaned.append(item)
+    return _original_scene_prompt(scene, cleaned, locations, previous_scene, attempt)
+
+base._scene_prompt = _peanut_scene_prompt
+
 POLLINATIONS_KEY = os.environ.get("POLLINATIONS_API_KEY", "").strip()
 POLLINATIONS_MODEL = os.environ.get(
     "POLLINATIONS_IMAGE_MODEL", "bytedance/seedream-4.0"
