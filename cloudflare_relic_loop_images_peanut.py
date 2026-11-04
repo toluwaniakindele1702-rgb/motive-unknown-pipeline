@@ -34,6 +34,7 @@ OVH_URL = os.environ.get(
 PROVIDER_EVENTS: list[dict] = []
 PROVIDER_COUNTS: dict[str, int] = {"pollinations": 0, "ovhcloud": 0, "cloudflare": 0}
 REFERENCE_FILES = base.CANONICAL_REFERENCE_PATHS
+_CLOUDFLARE_ORIGINAL = base._cloudflare
 
 
 def _record(provider: str, status: str, detail: str = "") -> None:
@@ -173,7 +174,7 @@ def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) 
     providers = (
         ("pollinations", lambda: _pollinations(prompt, refs)),
         ("ovhcloud", lambda: _ovhcloud(prompt)),
-        ("cloudflare", lambda: _normalize_image(base._cloudflare(prompt, refs))),
+        ("cloudflare", lambda: _normalize_image(_CLOUDFLARE_ORIGINAL(prompt, refs))),
     )
     failures = []
     for provider, generate in providers:
