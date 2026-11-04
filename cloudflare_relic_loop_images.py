@@ -65,11 +65,15 @@ Use the standing-pose sheet for character shape, outfit, proportions and pose vo
 the environment reference sheet for location detail, cinematic lighting, palette and camera
 language. Treat both as canonical constraints. Do not copy the reference-sheet layout, captions,
 labels or example story panels into a generated scene. Render only one full-frame story shot.
-The same protagonist must retain the same head, eyes, brows, outfit, body proportions and footwear
-in every scene. Preserve room layout, door/window positions, time of night, lighting direction,
-prop placement and object state across adjacent shots unless narration explicitly changes them.
-The prior accepted frame is a continuity aid, but never overrides the canonical character model
-or story facts.
+The same protagonist must retain the same head shape and size, eye shape and spacing,
+eyebrow design, mouth style, head-to-body ratio, outline weight, limb construction, outfit,
+footwear and silhouette in every scene. These are fixed model-sheet properties, not optional
+stylistic suggestions. Never reinterpret or redesign the protagonist between shots.
+Preserve room layout, door and window positions, time of day, lighting direction, prop placement,
+object state, clothing condition and screen direction across adjacent shots unless narration
+explicitly changes them. When a prop moves or changes state, the sequence must show the cause.
+The previous accepted frame is an additional continuity aid, but never overrides the canonical
+character model, approved references or story facts.
 
 SHOT LANGUAGE:
 Create vertical 9:16 cinematic story frames with deliberate composition. Vary wide establishing
