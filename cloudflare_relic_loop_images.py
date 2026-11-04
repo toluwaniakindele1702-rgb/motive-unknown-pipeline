@@ -334,6 +334,10 @@ def _scene_prompt(
             "\nSTRICT TEXT-CLEAN RETRY: blank surfaces only. No signs, labels, menus, posters, packaging, "
             "screens, letters, numbers, symbols or readable marks anywhere in frame.\n"
         )
+    opening_direction = ""
+    if int(scene.get("number", 0) or 0) == 1 or not previous_scene:
+        opening_direction = """\\nOPENING-HOOK ART DIRECTION — PRIORITY FOR THIS FIRST FRAME:
+This is the first image the viewer sees. It must be immediately legible and visually compelling at small phone size. Use the storyboard director's visual description as a precise shot blueprint. Show the protagonist in a specific active pose, with a readable face/eye-line and the story-critical object or visible consequence large enough to recognize. Prefer a close/medium shot, bold silhouette, purposeful perspective and one dominant focal point. Give the background only enough distinctive detail to establish the story location. Create an unanswered visual question, but do not reveal later events or invent anything. Do not use a neutral standing pose, empty establishing shot, tiny distant figure or generic room.\\n"""
     return f"""Create ONE vertical 9:16 image for a Chispa-Pifia story-first Short: mini-mystery, suspense, dilemma, problem-solving or a fair twist. Absurd comedy is optional, never the default.
 
 {STYLE_LOCK}
@@ -354,6 +358,7 @@ Visible action: {scene.get('action','')}
 Camera/composition: {scene.get('camera','')}
 
 IMAGE-MAKING PRIORITY:
+{opening_direction}
 Use the storyboard director's visual description as the shot-specific visual blueprint, while
 treating the narration and beat text as the factual source of truth. Translate that description
 into a polished, instantly readable image with a strong visual hook. Do not omit its distinctive
