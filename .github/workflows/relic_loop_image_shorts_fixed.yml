@@ -10,9 +10,6 @@ on:
         required: false
         default: ''
         type: string
-  schedule:
-    - cron: '23 2 * * *'
-      timezone: Africa/Lagos
 
 concurrency:
   group: relic-loop-image-shorts-fixed
