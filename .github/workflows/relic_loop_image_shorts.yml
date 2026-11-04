@@ -109,8 +109,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
-          test -n "$POLLINATIONS_API_KEY" || { echo "POLLINATIONS_API_KEY is missing"; exit 1; }
-          echo "Pollinations API key: configured (value hidden)"
+          if [ -n "$POLLINATIONS_API_KEY" ]; then
+            echo "Pollinations API key: configured (value hidden)"
+          else
+            echo "Pollinations API key: not configured; router will skip Pollinations and try the remaining providers."
+          fi
           if [ -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" ]; then
             echo "OVHcloud API token: configured (value hidden)"
           else
@@ -136,6 +139,11 @@ jobs:
           print('Pollinations model:', __import__('os').environ['POLLINATIONS_IMAGE_MODEL'])
           print('OVHcloud model:', __import__('os').environ['OVH_IMAGE_MODEL'])
           PY
+
+      - name: Verify YouTube OAuth before spending image-generation quota
+        run: |
+          set -euo pipefail
+          python youtube_upload.py --check-auth
 
       - name: Validate Python syntax before API generation
         run: |
