@@ -386,7 +386,7 @@ Approve only if overall_score is at least 8 and no major flaw remains. Be honest
         "narration": obj.get("narration", ""),
         "story_structure": obj.get("story_structure", {}),
         "scenes": [
-            {"beat_text": s.get("beat_text", ""), "narration": s.get("narration", ""), "action": s.get("action", "")}
+            {"beat_text": s.get("beat_text", ""), "narration": s.get("narration", ""), "visual_prompt": s.get("visual_prompt", ""), "camera": s.get("camera", ""), "action": s.get("action", "")}
             for s in obj.get("scenes", []) if isinstance(s, dict)
         ],
     }
