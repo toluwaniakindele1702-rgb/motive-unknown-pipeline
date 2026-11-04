@@ -31,6 +31,10 @@ jobs:
       GROQ_WRITER_MODEL: 'openai/gpt-oss-120b'
       GROQ_REVIEWER_MODEL: 'openai/gpt-oss-20b'
       RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
+      POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+      POLLINATIONS_IMAGE_MODEL: 'bytedance/seedream-4.0'
+      OVH_AI_ENDPOINTS_ACCESS_TOKEN: ${{ secrets.OVH_AI_ENDPOINTS_ACCESS_TOKEN }}
+      OVH_IMAGE_MODEL: 'stable-diffusion-xl-base-v10'
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-dev'
@@ -105,6 +109,13 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
+          test -n "$POLLINATIONS_API_KEY" || { echo "POLLINATIONS_API_KEY is missing"; exit 1; }
+          echo "Pollinations API key: configured (value hidden)"
+          if [ -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" ]; then
+            echo "OVHcloud API token: configured (value hidden)"
+          else
+            echo "OVHcloud API token: not configured; OVHcloud will be skipped until its GitHub secret is added."
+          fi
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
           echo "Cloudflare account ID suffix: ${CLOUDFLARE_ACCOUNT_ID: -4}"
@@ -121,7 +132,9 @@ jobs:
           print('Python imports passed.')
           print('Writer model:', __import__('os').environ['GROQ_WRITER_MODEL'])
           print('Reviewer model:', __import__('os').environ['GROQ_REVIEWER_MODEL'])
-          print('Image model:', __import__('os').environ['CLOUDFLARE_IMAGE_MODEL'])
+          print('Image provider priority: Pollinations -> OVHcloud -> Cloudflare')
+          print('Pollinations model:', __import__('os').environ['POLLINATIONS_IMAGE_MODEL'])
+          print('OVHcloud model:', __import__('os').environ['OVH_IMAGE_MODEL'])
           PY
 
       - name: Validate Python syntax before API generation
