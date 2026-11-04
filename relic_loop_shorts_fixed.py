@@ -328,8 +328,16 @@ def validate(obj: dict[str, Any]) -> list[str]:
         for field in ("beat_text", "visual_prompt", "camera", "action", "narration"):
             if not str(scene.get(field, "")).strip():
                 errors.append(f"scene_{i}_{field}")
-        if "stickman" not in str(scene.get("visual_prompt", "")).lower():
+        visual_description = _norm_text(str(scene.get("visual_prompt", "")))
+        if "stickman" not in visual_description.lower():
             errors.append(f"scene_{i}_stickman")
+        visual_words = words(visual_description)
+        if not 45 <= visual_words <= 115:
+            errors.append(f"scene_{i}_visual_prompt_words={visual_words}_expected_45_115")
+        if i == 1 and visual_words < 55:
+            errors.append("opening_visual_prompt_too_short")
+        if i == 1 and re.search(r"\\b(?:empty room|standing neutrally|standing still|generic room|far in the distance)\\b", visual_description, re.I):
+            errors.append("opening_visual_prompt_generic_or_low_impact")
         if len(str(scene.get("beat_text", ""))) < 12 or len(str(scene.get("action", ""))) < 8:
             errors.append(f"scene_{i}_too_vague")
         combined = " ".join(str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action")).lower()
@@ -373,12 +381,13 @@ Score each category from 1 to 10:
 8. VISUAL STORYTELLING: actions and reveals can be understood clearly in images without relying on text.
 9. COHERENCE: no plot holes, arbitrary coincidences, unexplained behavior, missing objects, or contradictions.
 10. SHORTS RETENTION: each beat creates a reason to keep watching; no padding.
+11. OPENING IMAGE: scene 1 is a specific, visually arresting, truthful hook that can be understood at phone size immediately; it shows a strong action or visible consequence, expressive acting, and a story-critical prop, rather than a generic pose or empty establishing shot.
 
 Be strict. A story that merely follows the requested structure is NOT automatically good.
 Reject vague stakes, predictable or unearned twists, random events, fake complexity, repetitive failed attempts, characters acting irrationally for convenience, and endings that explain rather than deliver a payoff.
 Do not reward a story for including a twist if the twist is obvious, unsupported, or irrelevant to the original problem.
 Return ONLY JSON:
-{"approved":true|false,"overall_score":1,"scores":{"hook":1,"causality":1,"agency":1,"escalation":1,"originality":1,"payoff":1,"naturalness":1,"visual_storytelling":1,"coherence":1,"retention":1},"fatal_flaws":["specific flaw"],"rewrite_instructions":["specific actionable fix"]}
+{"approved":true|false,"overall_score":1,"scores":{"hook":1,"causality":1,"agency":1,"escalation":1,"originality":1,"payoff":1,"naturalness":1,"visual_storytelling":1,"coherence":1,"retention":1,"opening_image":1},"fatal_flaws":["specific flaw"],"rewrite_instructions":["specific actionable fix"]}
 Approve only if overall_score is at least 8 and no major flaw remains. Be honest; do not inflate scores."""
     review_input = {
         "title": obj.get("title", ""),
