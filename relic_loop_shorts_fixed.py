@@ -336,7 +336,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
             errors.append(f"scene_{i}_visual_prompt_words={visual_words}_expected_45_115")
         if i == 1 and visual_words < 55:
             errors.append("opening_visual_prompt_too_short")
-        if i == 1 and re.search(r"\\b(?:empty room|standing neutrally|standing still|generic room|far in the distance)\\b", visual_description, re.I):
+        if i == 1 and re.search(r"\b(?:empty room|standing neutrally|standing still|generic room|far in the distance)\b", visual_description, re.I):
             errors.append("opening_visual_prompt_generic_or_low_impact")
         if len(str(scene.get("beat_text", ""))) < 12 or len(str(scene.get("action", ""))) < 8:
             errors.append(f"scene_{i}_too_vague")
