@@ -78,8 +78,22 @@ LENGTH:
 VISUAL TRUTH:
 Every scene must literally show one meaningful moment from the narration. The narration is the source of truth. No visual gag may contradict or invent story events.
 
+VISUAL DESCRIPTION DIRECTOR — HIGH PRIORITY:
+The visual_prompt is not a vague caption or a paraphrase of narration. It is the production-ready image description that will be sent directly to the image generator. Write it like an experienced animation art director describing one specific finished frame to an illustrator.
+For EVERY scene, specify:
+- the exact visible instant: what is happening at this precise moment, not a general summary;
+- protagonist placement, body pose, hand/arm action, head direction, facial expression and eye-line;
+- the important story prop(s), their exact position/state, and how the character interacts with them;
+- the location's distinctive visible features and spatial layout, with foreground, middle-ground and background details;
+- a deliberate shot size and angle, plus a clear focal point and visual reading order;
+- lighting direction, time-of-day cues, atmosphere and a restrained color/contrast treatment that supports the emotion;
+- one or two small contextual details that make the frame feel specific and lived-in, only when supported by the story.
+Make descriptions concrete and drawable: name visible objects, positions, gestures, expressions and spatial relationships. Avoid abstract phrases such as "dramatic scene", "he feels nervous", "cinematic atmosphere" or "a mysterious place" unless followed by observable visual evidence. Never rely on text, signs, UI or speech bubbles to explain the story. Do not add props, characters, actions or plot facts that the narration does not establish.
+A strong frame must read instantly at mobile size: one dominant action, clear silhouette, expressive acting, simple visual hierarchy, and a background that supports rather than competes with the focal action. Vary shot composition across the storyboard when the story beat changes; do not repeat the same medium shot or standing pose.
+Keep each visual_prompt approximately 45-85 words: sufficiently detailed to guide a high-quality image, but focused on one frame.
+
 STORYBOARD:
-Create 10-14 meaningful visual beats. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased or reordered words. Split at natural sentence/action/reaction boundaries rather than fixed time intervals. Do not create filler scenes.
+Create 10-14 meaningful visual beats. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased or reordered words. Split at natural sentence/action/reaction boundaries rather than fixed time intervals. Do not create filler scenes. Every visual_prompt must be a specific production-ready image description following the visual director requirements above.
 
 CHARACTER:
 The protagonist is a human represented by the approved simple 2D stickman visual identity. Keep roles and locations consistent.
@@ -118,7 +132,7 @@ Return ONLY valid JSON with this shape:
     "duration_seconds":3.0,
     "beat_text":"literal event happening now",
     "narration":"CONTIGUOUS EXACT EXCERPT FROM FULL NARRATION",
-    "visual_prompt":"literal visible shot of the human stickman protagonist",
+    "visual_prompt":"45-85 word production-ready image description: exact instant, expressive pose and face, key prop placement, specific illustrated setting, layered composition, shot angle, lighting and clear focal point",
     "camera":"...",
     "action":"exact visible action"
   }}],
