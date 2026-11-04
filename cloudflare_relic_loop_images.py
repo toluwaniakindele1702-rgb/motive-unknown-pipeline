@@ -345,13 +345,36 @@ LOCATIONS AVAILABLE:
 CURRENT BEAT — THIS IS THE ONLY MOMENT TO ILLUSTRATE:
 Beat text: {scene.get('beat_text','')}
 Narration for this shot: {scene.get('narration','')}
+STORYBOARD DIRECTOR'S VISUAL DESCRIPTION: {scene.get('visual_prompt','')}
 Visible action: {scene.get('action','')}
 Camera/composition: {scene.get('camera','')}
 
-NARRATION IS THE SOURCE OF TRUTH. Reenact the current beat literally. Do not summarize it,
-and do not invent an unrelated visual joke. Clearly show WHO is present, WHERE they are,
-WHAT exactly they are doing, and WHAT caused this moment. Do not add unrelated characters,
-props, locations, plot events or visual gags.
+IMAGE-MAKING PRIORITY:
+Use the storyboard director's visual description as the shot-specific visual blueprint, while
+treating the narration and beat text as the factual source of truth. Translate that description
+into a polished, instantly readable image with a strong visual hook. Do not omit its distinctive
+setting, prop, expression, gesture, spatial relationship or reveal. If it conflicts with narration,
+follow narration and preserve every compatible visual detail.
+
+COMPOSITION AND ATTENTION:
+Give the frame one unmistakable focal subject or action that reads at phone-screen size in under
+one second. Use a clear foreground / middle-ground / background hierarchy, intentional negative
+space, a strong silhouette, expressive body language, and a camera distance that makes the
+important action obvious. Use foreground framing, leading lines, contrast, scale or a meaningful
+prop to guide the eye. Avoid clutter, tiny important details, empty generic backgrounds, stiff
+standing poses and centered model-sheet compositions. The first glance should make the viewer
+curious about the exact moment shown, without adding an event that is not in the story.
+
+CINEMATIC 2D CRAFT:
+Create a carefully art-directed 2D illustrated frame: deliberate perspective, layered depth,
+coherent light direction, readable shadows, controlled highlights, nuanced but restrained texture,
+and a palette that supports the emotion. Make faces and the key action legible; do not let dark
+lighting hide the protagonist or story-critical prop. Match the scene's time, weather, location,
+and emotional temperature. The background should add story context, not compete with the action.
+
+NARRATION IS THE SOURCE OF TRUTH. Reenact the current beat literally. Clearly show WHO is present,
+WHERE they are, WHAT exactly they are doing, and WHAT caused this moment. Do not invent unrelated
+characters, props, locations, plot events or visual gags.
 
 {NO_TEXT}
 {retry_note}
