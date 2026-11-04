@@ -388,7 +388,7 @@ Reject vague stakes, predictable or unearned twists, random events, fake complex
 Do not reward a story for including a twist if the twist is obvious, unsupported, or irrelevant to the original problem.
 Return ONLY JSON:
 {"approved":true|false,"overall_score":1,"scores":{"hook":1,"causality":1,"agency":1,"escalation":1,"originality":1,"payoff":1,"naturalness":1,"visual_storytelling":1,"coherence":1,"retention":1,"opening_image":1},"fatal_flaws":["specific flaw"],"rewrite_instructions":["specific actionable fix"]}
-Approve only if overall_score is at least 8 and no major flaw remains. Be honest; do not inflate scores."""
+Approval gate: overall_score must be at least 8, opening_image must be at least 8, and no major flaw may remain. If the opening image is generic, visually weak, too distant, static, cluttered, or not instantly understandable at phone size, reject the candidate even when the narration is strong. Give specific rewrite instructions for scene 1. Be honest; do not inflate scores."""
     review_input = {
         "title": obj.get("title", ""),
         "hook": obj.get("hook", ""),
