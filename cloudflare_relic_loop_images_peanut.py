@@ -1,116 +1,224 @@
-"""Chispa-Pifia image renderer configured for the approved Peanut-style visual bible.
+"""Chispa-Pifia multi-provider image router.
 
-This wrapper deliberately reuses the tested Cloudflare renderer so image transport,
-OCR, retries, previous-frame continuity, manifests and beat handling remain unchanged.
-Only the model, canonical references, quota fallback and visual prompt policy are overridden here.
+Priority: Pollinations (reference-guided edits) -> OVHcloud SDXL (prompt-only)
+-> Cloudflare Workers AI (reference-guided final fallback).
+The existing renderer retains storyboard, continuity, OCR, and manifest handling.
 """
 from __future__ import annotations
 
+import base64
+from io import BytesIO
+import json
 import os
+import time
+from pathlib import Path
 
-# Use one image model per run. Workers AI neuron quotas are account-wide:
-# switching to Klein on the same account cannot bypass an exhausted account allocation.
-# Transient capacity errors are retried by the shared renderer; account quota errors stop
-# immediately with the account suffix and Cloudflare request IDs recorded in the logs.
-os.environ["CLOUDFLARE_IMAGE_MODEL"] = "@cf/black-forest-labs/flux-2-dev"
+import requests
+from PIL import Image, ImageOps
 
 import cloudflare_relic_loop_images as base
 
-base.MODEL = "@cf/black-forest-labs/flux-2-dev"
-base.CANONICAL_REFERENCE_PATHS = (
-    ("Generate_modern_stickman_character_20261027121745.jpg", "image/jpeg"),
-    ("Remove_bag_and_animate_image_20261027125028.jpg", "image/jpeg"),
-)
+POLLINATIONS_KEY = os.environ.get("POLLINATIONS_API_KEY", "").strip()
+POLLINATIONS_MODEL = os.environ.get(
+    "POLLINATIONS_IMAGE_MODEL", "bytedance/seedream-4.0"
+).strip()
+POLLINATIONS_URL = "https://gen.pollinations.ai/v1/images/edits"
 
-base.STYLE_LOCK = """
-CHISPA-PIFIA MASTER VISUAL STYLE — APPROVED CHARACTER BIBLE:
-Use the supplied canonical reference images as the highest-priority visual authority.
-The protagonist must look like the ORIGINAL character established by those references:
-a very simple, expressive 2D storytime stickman/cartoon figure with a large smooth pale
-round head, simple minimal body construction, thin clean limbs, large expressive eyes,
-clear eyebrows and exaggerated mouth shapes. Preserve the exact recognizable character
-proportions, face construction, silhouette, line quality and simplified anatomy shown in
-the references. Clothing is NOT a defining requirement. Do not invent a hoodie, cargo
-trousers, sneakers, backpack or other outfit merely because an older pipeline used them.
-If the approved reference shows a minimally dressed or unclothed stickman, preserve that
-minimal design.
+OVH_TOKEN = os.environ.get("OVH_AI_ENDPOINTS_ACCESS_TOKEN", "").strip()
+OVH_MODEL = os.environ.get("OVH_IMAGE_MODEL", "stable-diffusion-xl-base-v10").strip()
+OVH_URL = os.environ.get(
+    "OVH_IMAGE_ENDPOINT",
+    "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations",
+).strip()
 
-STYLE TARGET:
-Clean hand-drawn/digital 2D animation with bold readable outlines, simple shapes, strong
-facial acting, exaggerated poses and expressive body language. The character must remain
-flat/2D and cartoon-like rather than becoming a realistic person, 3D mascot, glossy CGI
-figure, anime character or detailed human cartoon. Keep the character visually simple enough
-that the same design can be reproduced across an entire Shorts channel.
-
-SCENE ART:
-Use story-appropriate illustrated environments that support the action without changing the
-character's identity. Background detail may vary with the story, but must remain compatible
-with the approved reference aesthetic. Use clear silhouettes, readable composition and
-cinematic framing where useful. Do not turn every scene into a character model sheet.
-
-CHARACTER CONTINUITY:
-Reference 1 is the primary character identity anchor. Reference 2 is a secondary approved
-style/action/character reference. Match the same head, eyes, brows, mouth, body proportions,
-limb construction, outline language and overall 2D rendering in every shot. Expressions,
-poses, camera angle and environment may change because the story changes. The character
-identity must not.
-
-ONE-SCENE RULE:
-Generate exactly ONE coherent vertical story frame per request. Never reproduce the reference
-sheet layout. Never create a collage, turnaround sheet, contact sheet or multiple panels.
-The current narration beat is the only event to illustrate.
-
-ABSOLUTE EXCLUSIONS:
-no photorealistic humans, no live-action look, no 3D CGI, no glossy mascot, no anime/manga,
-no realistic human anatomy, no old hoodie/cargo/sneaker identity lock, no random clothing,
-no character redesign, no extra limbs/fingers, no duplicated protagonist unless the story
-explicitly requires another person, no copied reference-sheet panels, no text, no captions,
-no speech bubbles, no labels, no logos and no watermarks.
-""".strip()
-
-base.NO_TEXT = """
-STRICT ZERO-TEXT IMAGE RULE:
-Do not render captions, subtitles, title cards, speech bubbles, labels, logos, watermarks,
-UI, readable signs, letters, numbers, symbols, menus, posters, packaging text, screen text
-or typography. Keep environmental surfaces visually clean and non-readable. Never use text
-as a storytelling shortcut. The story must be communicated through the character's acting,
-objects, composition, expressions and visible cause-and-effect.
-""".strip()
+PROVIDER_EVENTS: list[dict] = []
+PROVIDER_COUNTS: dict[str, int] = {"pollinations": 0, "ovhcloud": 0, "cloudflare": 0}
+REFERENCE_FILES = base.CANONICAL_REFERENCE_PATHS
 
 
-def _reference_blurb() -> str:
-    return (
-        "CANONICAL REFERENCE PRIORITY: Reference 1 is the primary approved character model. "
-        "Reference 2 is the secondary approved character/style/action guide. Match their original "
-        "simple 2D stickman construction, head shape, facial design, eye treatment, limb style, "
-        "proportions, outline language and expressive acting. Do NOT import clothing or visual "
-        "features from previous pipeline versions. Do not copy the reference-sheet composition. "
-        "Render one single vertical story scene. The approved references define WHAT THE CHARACTER "
-        "LOOKS LIKE; the narration defines WHAT THE CHARACTER IS DOING."
+def _record(provider: str, status: str, detail: str = "") -> None:
+    PROVIDER_EVENTS.append({
+        "provider": provider,
+        "status": status,
+        "detail": detail[:700],
+    })
+    print(f"[PROVIDER:{provider.upper()}] {status}" + (f": {detail[:500]}" if detail else ""))
+
+
+def _normalize_image(blob: bytes) -> bytes:
+    """Normalize every provider output to the renderer's required vertical canvas."""
+    try:
+        with Image.open(BytesIO(blob)) as source:
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            target_ratio = base.WIDTH / base.HEIGHT
+            current_ratio = image.width / image.height
+            if current_ratio > target_ratio:
+                new_width = max(1, round(image.height * target_ratio))
+                left = (image.width - new_width) // 2
+                image = image.crop((left, 0, left + new_width, image.height))
+            elif current_ratio < target_ratio:
+                new_height = max(1, round(image.width / target_ratio))
+                top = (image.height - new_height) // 2
+                image = image.crop((0, top, image.width, top + new_height))
+            image = image.resize((base.WIDTH, base.HEIGHT), Image.Resampling.LANCZOS)
+            output = BytesIO()
+            image.save(output, format="PNG", optimize=True)
+            return output.getvalue()
+    except Exception as exc:
+        raise RuntimeError(f"Provider returned an unreadable image: {type(exc).__name__}: {exc}") from exc
+
+
+def _extract_image(response: requests.Response) -> bytes:
+    content_type = response.headers.get("content-type", "").lower()
+    if "image/" in content_type:
+        return response.content
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Image API returned non-image, non-JSON response: {response.text[:500]}") from exc
+    data = payload.get("data") or []
+    if not data or not isinstance(data[0], dict):
+        raise RuntimeError(f"Image API response contains no data[0]: {json.dumps(payload)[:700]}")
+    item = data[0]
+    encoded = item.get("b64_json")
+    if encoded:
+        try:
+            return base64.b64decode(encoded, validate=True)
+        except Exception as exc:
+            raise RuntimeError("Image API returned invalid b64_json") from exc
+    url = item.get("url")
+    if url:
+        downloaded = requests.get(url, timeout=90)
+        downloaded.raise_for_status()
+        return downloaded.content
+    raise RuntimeError(f"Image API response has neither b64_json nor url: {json.dumps(item)[:500]}")
+
+
+def _pollinations(prompt: str, refs: list[tuple[str, bytes, str]] | None) -> bytes:
+    if not POLLINATIONS_KEY:
+        raise RuntimeError("POLLINATIONS_API_KEY is not configured")
+    if not refs:
+        raise RuntimeError("Pollinations reference-edit mode requires canonical reference images")
+    headers = {"Authorization": f"Bearer {POLLINATIONS_KEY}"}
+    files = []
+    for idx, (name, blob, mime) in enumerate(refs[:3]):
+        files.append(("image", (f"reference_{idx}.jpg", blob, mime or "image/jpeg")))
+    data = {
+        "model": POLLINATIONS_MODEL,
+        "prompt": prompt,
+        "size": f"{base.WIDTH}x{base.HEIGHT}",
+        "response_format": "b64_json",
+        "n": "1",
+    }
+    last_error = None
+    for attempt in range(1, 3):
+        try:
+            print(
+                f"[POLLINATIONS] edit attempt {attempt}/2 model={POLLINATIONS_MODEL} "
+                f"references={len(files)} size={base.WIDTH}x{base.HEIGHT}"
+            )
+            response = requests.post(
+                POLLINATIONS_URL, headers=headers, data=data, files=files, timeout=240
+            )
+            if not response.ok:
+                message = response.text[:1000]
+                raise RuntimeError(f"HTTP {response.status_code}: {message}")
+            return _normalize_image(_extract_image(response))
+        except requests.RequestException as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt < 2:
+                time.sleep(5 * attempt)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            status = getattr(locals().get("response"), "status_code", 0)
+            if status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                break
+            time.sleep(5 * attempt)
+    raise RuntimeError(last_error or "Pollinations image edit failed")
+
+
+def _ovhcloud(prompt: str) -> bytes:
+    if not OVH_TOKEN:
+        raise RuntimeError("OVH_AI_ENDPOINTS_ACCESS_TOKEN is not configured")
+    headers = {"Authorization": f"Bearer {OVH_TOKEN}"}
+    payload = {
+        "model": OVH_MODEL,
+        "prompt": prompt,
+        "size": "1024x1024",
+        "n": 1,
+        "response_format": "b64_json",
+    }
+    last_error = None
+    for attempt in range(1, 3):
+        try:
+            print(f"[OVHCLOUD] generation attempt {attempt}/2 model={OVH_MODEL} (text-to-image; no reference upload)")
+            response = requests.post(OVH_URL, headers=headers, json=payload, timeout=240)
+            if not response.ok:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:1000]}")
+            return _normalize_image(_extract_image(response))
+        except requests.RequestException as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt < 2:
+                time.sleep(5 * attempt)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            status = getattr(locals().get("response"), "status_code", 0)
+            if status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                break
+            time.sleep(5 * attempt)
+    raise RuntimeError(last_error or "OVHcloud image generation failed")
+
+
+def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
+    providers = (
+        ("pollinations", lambda: _pollinations(prompt, refs)),
+        ("ovhcloud", lambda: _ovhcloud(prompt)),
+        ("cloudflare", lambda: _normalize_image(base._cloudflare(prompt, refs))),
     )
-
-base._reference_blurb = _reference_blurb
-
-# The story generator still contains legacy wardrobe wording for its own character metadata.
-# Strip that visual baggage before the image prompt is built so the approved reference images,
-# rather than old prose, remain the authority for character appearance.
-_original_scene_prompt = base._scene_prompt
-
-
-def _scene_prompt(scene, characters, locations, previous_scene=None, attempt=1):
-    sanitized = []
-    for character in characters or []:
-        item = dict(character) if isinstance(character, dict) else {}
-        item["appearance"] = (
-            "the approved canonical Chispa-Pifia 2D stickman character from reference image 1; "
-            "preserve the reference character exactly; no invented clothing or redesign"
-        )
-        sanitized.append(item)
-    return _original_scene_prompt(scene, sanitized, locations, previous_scene, attempt)
+    failures = []
+    for provider, generate in providers:
+        try:
+            image = generate()
+            if not image:
+                raise RuntimeError("provider returned an empty image")
+            PROVIDER_COUNTS[provider] += 1
+            _record(provider, "success")
+            return image
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            failures.append(f"{provider}: {detail}")
+            _record(provider, "fallback", detail)
+    raise RuntimeError("All configured image providers failed. " + " || ".join(failures))
 
 
-base._scene_prompt = _scene_prompt
+# The base renderer calls this function for each storyboard beat. Keep its
+# story prompts, reference loading, previous-frame continuity and OCR pipeline.
+base._cloudflare = _route_image
+_original_main = base.main
+
+
+def main() -> None:
+    PROVIDER_EVENTS.clear()
+    for key in PROVIDER_COUNTS:
+        PROVIDER_COUNTS[key] = 0
+    _record("router", "started", "Pollinations -> OVHcloud -> Cloudflare")
+    _original_main()
+
+    manifest_path = base.RUN / "cloudflare_image_manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["media_generation"] = "multi_provider_image_router"
+        manifest["provider_priority"] = ["pollinations", "ovhcloud", "cloudflare"]
+        manifest["provider_counts"] = PROVIDER_COUNTS
+        manifest["provider_events"] = PROVIDER_EVENTS
+        manifest["reference_policy"] = {
+            "pollinations": "canonical references plus previous accepted frame via /v1/images/edits",
+            "ovhcloud": "prompt-only SDXL; no direct reference-image input documented",
+            "cloudflare": "canonical references plus previous accepted frame",
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("[PROVIDER SUMMARY] " + json.dumps(PROVIDER_COUNTS, sort_keys=True))
 
 
 if __name__ == "__main__":
-    base.main()
+    main()
