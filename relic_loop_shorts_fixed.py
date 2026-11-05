@@ -268,9 +268,13 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if isinstance(structure, dict):
         # A twist is optional for this channel's varied story mix. Keep the key in
         # the output schema, but allow an empty string when the story has no twist.
-        for key in ("problem", "goal", "causal_chain", "escalations", "punchline"):
+        for key in ("problem", "goal", "causal_chain", "escalations"):
             if not structure.get(key):
                 errors.append(f"missing_structure:{key}")
+        # Stories can end with a payoff that is not a joke. Accept either field
+        # during the schema transition; a twist remains optional.
+        if not (structure.get("payoff") or structure.get("punchline")):
+            errors.append("missing_structure:payoff")
         chain = structure.get("causal_chain")
         if isinstance(chain, list):
             # Accept a compact arrow-separated chain only if it clearly names multiple stages.
@@ -356,9 +360,9 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
         model=MODEL,
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
-        # Keep prompt + reserved completion budget below Groq's 8k TPM request ceiling.
-        # The production wrapper uses compact 150-210 word stories and 10-14 beats.
-        max_completion_tokens=4500,
+        # Keep the request safely below Groq's 8k TPM ceiling; the compact
+        # storyboard needs far less than the previous 4,500-token reservation.
+        max_completion_tokens=3000,
         response_format={"type": "json_object"},
     )
     return result.choices[0].message.content or ""
