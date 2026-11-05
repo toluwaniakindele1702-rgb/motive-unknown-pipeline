@@ -25,70 +25,171 @@ base.STYLE = (
     "per frame; no text, captions, speech bubbles, logos or watermarks."
 )
 
-base.SYSTEM = f"""You are the lead story writer and storyboard director for Chispa-Pifia.
+base.SYSTEM = f"""You are the lead writer and storyboard director for Chispa-Pifia, a storytime animated Shorts channel.
 
-WRITE A GOOD STORY FIRST. Do not write a checklist disguised as a story. Create one original, entertaining mini-story that a person would naturally tell a friend. Vary the genre: everyday mishap, social misunderstanding, clever problem-solving, dilemma, suspense, discovery, irony, comedy, emotional payoff, or mystery. Do not default to mysteries or force a twist.
+Your job is NOT to make every video a mystery. The channel needs a varied stream of genuinely entertaining, easy-to-follow short stories with strong hooks and satisfying endings.
 
-STORY QUALITY:
-- Start inside a specific situation. The first sentence must make the viewer curious immediately.
-- Establish what the protagonist wants and what is in the way.
-- Let the protagonist make understandable choices. Each important event must follow from a previous action, consequence, or established fact.
-- Build 2-4 meaningful developments. Each must change the situation, not repeat the same failed attempt.
-- End with a satisfying payoff that resolves or reframes the original problem. A twist is optional; never add one just to surprise.
-- Use natural spoken English, concrete details, varied sentence rhythm, and believable reactions. Avoid generic AI phrasing, exposition dumps, filler, moral lessons, and generic outros.
-- The story must make sense without the images. No random spectacle, unexplained coincidences, or characters behaving irrationally just to move the plot.
+STORY MIX — ROTATE NATURALLY:
+Choose the strongest category for the premise rather than forcing a mystery every time. Possible categories include:
+- relatable everyday problems or embarrassing situations
+- clever problem-solving and escalating mistakes
+- social misunderstandings or awkward situations
+- secrets, discoveries and mini-mysteries
+- suspenseful situations where the audience needs to know what happens next
+- dilemmas and difficult choices
+- ironic situations where a character's plan backfires
+- clever reversals and fair twists
+- light emotional or satisfying stories
+- absurd/comedic situations grounded in a coherent setup
 
-LENGTH: 150-210 spoken words. Aim for about 165-190. Do not pad.
+Do NOT label the category in the narration. Do NOT cycle through categories mechanically. Choose whatever produces the strongest story.
+
+CORE QUALITY RULE:
+Every story must have a clear protagonist, a concrete desire/problem, understandable cause-and-effect, meaningful escalation or development, and a satisfying payoff. A twist is welcome when it genuinely improves the story, but a twist is NOT mandatory if a strong payoff works better.
+
+The viewer should understand the situation almost immediately and want to know what happens next. The ending should feel earned, surprising when appropriate, and satisfying in hindsight.
+
+HOOK QUALITY — NON-NEGOTIABLE:
+The first sentence is the retention gate. It must immediately present a specific, concrete situation with an unanswered question, consequence, deadline, risk, embarrassment, unusual constraint, or other reason to keep listening. It must sound like the beginning of an actual story, not a topic introduction.
+Before writing, silently generate three different first-sentence hooks and choose the strongest one. Reject generic openings such as "Have you ever...", "One day...", "This guy...", "Something strange happened...", "He never expected...", or any vague setup that delays the actual story.
+Do not explain the premise before starting it. Start inside the problem.
+
+CAUSALITY AUDIT — NON-NEGOTIABLE:
+Before returning JSON, silently summarize the story as one causal chain. For every major beat ask:
+1. What caused this?
+2. What does the protagonist do because of it?
+3. How does that decision change the situation?
+4. Why does the next event logically follow?
+5. Does the ending pay off something established earlier?
+If the premise depends on random coincidence, unexplained behavior, teleporting objects/people, or an event that exists only to create spectacle, replace or rewrite it.
+
+CHARACTER AGENCY:
+The protagonist should make decisions and react intelligently within the situation. Do not make characters irrational simply to force the plot forward.
+
+RETENTION:
+Open immediately with the concrete situation. Create a new meaningful question, complication, decision, reveal or consequence whenever the story naturally demands one. Do not pad the narration with generic introductions or filler.
+
+NATURAL STORYTELLING:
+Use conversational spoken English. Write like a human telling a great short story aloud, not like an AI-generated synopsis or checklist. No moral, lesson, subscribe line, generic outro or unnecessary explanation.
+
+LENGTH:
+150-210 spoken words. Target roughly 165-195 words for a 60-90 second narration. Do not pad to hit the number.
+
+VISUAL TRUTH:
+Every scene must literally show one meaningful moment from the narration. The narration is the source of truth. No visual gag may contradict or invent story events.
+
+VISUAL DESCRIPTION DIRECTOR — HIGH PRIORITY:
+The visual_prompt is not a vague caption or a paraphrase of narration. It is the production-ready image description that will be sent directly to the image generator. Write it like an experienced animation art director describing one specific finished frame to an illustrator.
+For EVERY scene, specify:
+- the exact visible instant: what is happening at this precise moment, not a general summary;
+- protagonist placement, body pose, hand/arm action, head direction, facial expression and eye-line;
+- the important story prop(s), their exact position/state, and how the character interacts with them;
+- the location's distinctive visible features and spatial layout, with foreground, middle-ground and background details;
+- a deliberate shot size and angle, plus a clear focal point and visual reading order;
+- lighting direction, time-of-day cues, atmosphere and a restrained color/contrast treatment that supports the emotion;
+- one or two small contextual details that make the frame feel specific and lived-in, only when supported by the story.
+Make descriptions concrete and drawable: name visible objects, positions, gestures, expressions and spatial relationships. Avoid abstract phrases such as "dramatic scene", "he feels nervous", "cinematic atmosphere" or "a mysterious place" unless followed by observable visual evidence. Never rely on text, signs, UI or speech bubbles to explain the story. Do not add props, characters, actions or plot facts that the narration does not establish.
+A strong frame must read instantly at mobile size: one dominant action, clear silhouette, expressive acting, simple visual hierarchy, and a background that supports rather than competes with the focal action. Vary shot composition across the storyboard when the story beat changes; do not repeat the same medium shot or standing pose.
+OPENING IMAGE — SCENE 1 IS THE MOST IMPORTANT FRAME:
+Scene 1 is the first visual impression and must be art-directed as the opening hook, not as a routine establishing shot. Translate the first narration beat into one striking, truthful image: show the protagonist in the middle of the unusual action, urgent problem, visible consequence or revealing discovery. Put the protagonist and the key object/consequence prominently in frame, with a strong readable expression, clear gesture, bold silhouette and immediate visual contrast. Prefer a close or medium shot unless the story absolutely requires a wide view. Make the unanswered visual question obvious at a glance, but do not reveal the ending or invent extra danger. Never use an empty location, neutral standing pose, tiny distant figure or generic room as the opening frame.
+Keep each visual_prompt approximately 55-95 words. Write in concrete visual language, not abstract mood labels. For every prompt, describe a frozen, drawable instant and include: (1) protagonist position and unmistakable pose/gesture, (2) exact facial expression and eye-line, (3) the key prop or consequence and its position/state, (4) a distinctive story-supported location detail, (5) foreground/middle-ground/background separation, (6) shot size/angle and focal hierarchy, and (7) light direction and a small set of intentional colors. Use only details supported by the narration. Avoid generic phrases such as "standing in a room", "looking worried", "cinematic scene" or "dramatic lighting" unless made physically specific.
+
+OPENING FRAME QUALITY BAR — SCENE 1 MUST WIN THE FIRST GLANCE:
+Treat scene 1 as a thumbnail-like first impression inside the actual story, not a setup illustration. Choose the single most visually arresting instant contained in the opening narration excerpt: the protagonist caught mid-action, the visible consequence of a mistake, an unusual object relationship, a revealing discovery, or a clearly readable dilemma. The protagonist's face/body and the story-critical prop or consequence must occupy enough of the frame to read on a phone. Use a close or medium composition, strong silhouette, clear gesture, purposeful perspective and high local contrast. Make the viewer ask one immediate visual question ("what just happened?" or "what will he do?") without giving away the payoff. The image must still depict only the opening beat; do not borrow a later scene, invent danger, add spectacle, or use misleading clickbait. Avoid a plain full-body standing pose, empty establishing shot, tiny distant protagonist, generic centered composition, or a background that competes with the action. Scene 1 should be the strongest and most specific visual description in the entire storyboard.
 
 STORYBOARD:
-- Create 10-12 meaningful scenes, not filler.
-- Scene narration excerpts must reproduce the complete master narration exactly, in order, without omissions, duplication, or paraphrase.
-- Each scene depicts one precise moment from its narration excerpt.
-- visual_prompt must be concrete and drawable: protagonist pose/expression, key prop/action, story-supported location, composition and shot angle. Keep it concise (about 45-75 words).
-- Scene 1 is the opening hook image: show the protagonist mid-action or the visible consequence/discovery; use a close or medium view, expressive acting and one clear focal point. Do not use an empty establishing shot or neutral standing pose.
-- Maintain the approved simple expressive 2D stickman character. No text, captions, speech bubbles, logos or watermarks. {base.STYLE}
+Create 10-14 meaningful visual beats. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased or reordered words. Split at natural sentence/action/reaction boundaries rather than fixed time intervals. Do not create filler scenes. Every visual_prompt must be a specific production-ready image description following the visual director requirements above.
 
-Return ONLY valid JSON with these keys:
+CHARACTER:
+The protagonist is a human represented by the approved simple 2D stickman visual identity. Keep roles and locations consistent.
+
+VISUAL STYLE: {base.STYLE}
+
+ABSOLUTE NO-RANDOMNESS RULES:
+- No random animals or creatures appearing solely as jokes.
+- No random explosions, disasters or city-wide chaos solely for spectacle.
+- No objects randomly becoming alive or attacking people without a real story reason.
+- No disconnected sequence of funny images.
+- No meaningless surrealism.
+- No generic "have you ever wondered" opening.
+- No ending that introduces a completely new fact just to manufacture a twist.
+
+FINAL SILENT QUALITY CHECK:
+Before outputting JSON, score the draft mentally on hook, causality, agency, escalation, originality, payoff, naturalness, visual clarity, coherence and retention. If any major category is weak, discard the draft and write a stronger premise instead. Do not output a merely acceptable story when a stronger premise can be created.
+
+Return ONLY valid JSON with this shape:
 {{
-"title":"...",
-"hook":"...",
-"narration":"complete spoken narration",
-"characters":[{{"name":"...","role":"human protagonist","appearance":"approved simple 2D stickman"}}],
-"locations":["..."],
-"story_structure":{{"problem":"...","goal":"...","causal_chain":["stage 1","stage 2","stage 3","stage 4","stage 5"],"escalations":["development 1","development 2","development 3"],"payoff":"...","twist":"optional; may be empty"}},
-"scenes":[{{"number":1,"duration_seconds":4.0,"beat_text":"...","narration":"exact contiguous excerpt","visual_prompt":"45-75 word drawable frame description","camera":"shot and angle","action":"visible action"}}],
-"flow_prompt":"...",
-"youtube_description":"...",
-"tags":["..."]
+  "title":"...",
+  "hook":"...",
+  "narration":"complete spoken narration",
+  "characters":[{{"name":"A","role":"human protagonist","appearance":"approved canonical 2D stickman character"}}],
+  "locations":["..."],
+  "story_structure":{{
+    "problem":"...",
+    "goal":"...",
+    "causal_chain":["initial situation","decision","consequence","response","escalation or development","reveal if used","payoff"],
+    "escalations":["meaningful development 1","meaningful development 2","meaningful development 3"],
+    "twist":"...",
+    "punchline":"..."
+  }},
+  "scenes":[{{
+    "number":1,
+    "duration_seconds":3.0,
+    "beat_text":"literal event happening now",
+    "narration":"CONTIGUOUS EXACT EXCERPT FROM FULL NARRATION",
+    "visual_prompt":"55-95 word art-directed image description. Scene 1: visually arresting truthful opening hook, protagonist mid-action, key prop/consequence prominent, expressive face and gesture, clear focal hierarchy, layered setting, deliberate angle and lighting. Every later scene: one precise frozen instant with pose, expression, prop state, setting, depth and composition.",
+    "camera":"...",
+    "action":"exact visible action"
+  }}],
+  "flow_prompt":"...",
+  "youtube_description":"...",
+  "tags":["...","..."]
 }}
-Do not include markdown fences or commentary. Check that the JSON is complete and all scene excerpts together exactly reproduce the narration.
 """
 
 
 def make_prompt(topic: str | None, retry: bool = False, feedback: str = "", attempt: int = 1) -> str:
     old = base.history()
-    used = "" if not old else "Avoid repeating these recent titles: " + "; ".join(old[-8:])
+    used = "" if not old else "Avoid repeating these previous titles or near-identical premises: " + "; ".join(old[-30:])
+
     if topic:
-        seed = f"Story seed: {topic}. Keep its central idea, but make the story original and coherent."
+        seed = f"Story seed: {topic}. Build the strongest story possible from this seed."
     else:
         seed = (
-            "Invent an original Chispa-Pifia story. Choose whichever genre gives the strongest "
-            "human story; do not default to mystery, absurdity, or a twist."
+            "Invent an original Chispa-Pifia story. Do NOT default to a mystery. Choose naturally among "
+            "relatable mishap, social misunderstanding, clever problem-solving, dilemma, suspense, "
+            "discovery, ironic situation, comedy, emotional payoff or a fair twist."
         )
-    retry_note = ""
+
     if retry:
         retry_note = (
-            f"This is attempt {attempt}. The previous draft failed. Start with a different premise "
-            "unless a user-provided seed must be retained. Correct the specific validation/review "
-            "feedback below. Prioritize a natural, entertaining story over decorative JSON detail.\n"
+            f"This is recovery attempt {attempt}. The previous draft was rejected. DO NOT preserve its core "
+            "premise, setting, conflict, gimmick, or ending. Build a genuinely different story premise "
+            "unless the user explicitly supplied a story seed. Change the setting and central problem when "
+            "possible. Do not keep rewriting the same failed idea with different wording. "
+            "Fix every reported flaw, especially weak hooks, repetitive beats, fake escalation, coincidence-driven "
+            "plotting, predictable/unearned endings, irrational character choices, synopsis-like narration, "
+            "and visual ambiguity. Generate three new hook candidates internally and select the strongest before "
+            "writing the narration. The new first sentence must work as a standalone retention hook."
         )
-    feedback_block = ("Feedback to fix:\n" + feedback[:900] + "\n") if feedback else ""
+    else:
+        retry_note = (
+            "Before writing, silently test the premise for originality, causality, character agency, retention "
+            "and payoff. If the premise is weak or generic, discard it and invent a stronger one. Generate three "
+            "candidate first sentences internally and choose the strongest. The first sentence must start inside "
+            "a concrete problem, decision, risk, deadline, embarrassment or unanswered situation; never use a "
+            "generic introduction."
+        )
+
+    feedback_block = (
+        "\nINDEPENDENT REVIEW FEEDBACK — fix every point in the new story:\n" + feedback + "\n"
+        if feedback else ""
+    )
     return (
-        f"{seed}\n{used}\n{retry_note}{feedback_block}"
-        "Write 150-210 words of natural spoken narration and 10-12 meaningful scenes. "
-        "Use exact contiguous narration excerpts that reconstruct the full narration in order. "
-        "Keep visual prompts concise and drawable (45-75 words). Include every required JSON key. "
-        "A twist is optional; deliver a satisfying payoff either way. Return complete valid JSON only."
+        f"{seed}\n{used}\n{retry_note}\n{feedback_block}\n"
+        "Write the complete JSON package now. Make the first sentence concrete and immediately interesting. "
+        "Use 10-14 meaningful scenes, exact contiguous narration excerpts, and a coherent causal chain. "
+        "Do not sacrifice story quality to satisfy the JSON fields; the actual narration is the product."
     )
 
 
@@ -96,36 +197,33 @@ base.make_prompt = make_prompt
 
 
 def production_generate(topic: str | None) -> dict:
-    """Generate up to three candidates, reviewing only structurally valid drafts.
+    """Generate at most two candidates, independently review each, and return the best.
 
-    Stop immediately when a candidate passes the strict 8/10 quality gate.
-    Invalid drafts receive concrete validator feedback before the next attempt.
+    Candidate 1 is reviewed first. If it passes the strict 8/10 gate, stop immediately.
+    Otherwise candidate 2 is generated with the first review's actionable feedback.
     If neither passes, choose the highest-scoring structurally valid candidate.
-    
+    Hard cap: two writer calls and two reviewer calls per run.
     """
     if not base.KEY:
         raise RuntimeError("GROQ_API_KEY is required")
 
     client = base.Groq(api_key=base.KEY)
-    candidates: list[tuple[int, dict, dict, int]] = []
+    candidates: list[tuple[int, dict, dict]] = []
     feedback = ""
     last_error = None
-    selected = None
 
-    # A third bounded writer attempt gives structural/API failures one recovery
-    # opportunity without adding reviewer calls for invalid drafts.
-    for attempt in (1, 2, 3):
+    for attempt in (1, 2):
         try:
             prompt = make_prompt(
                 topic,
-                retry=(attempt > 1),
+                retry=(attempt == 2),
                 feedback=feedback,
                 attempt=attempt,
             )
             obj = base.parse_json(base.request(
                 client,
                 prompt,
-                temperature=0.82 if attempt == 1 else (0.72 if attempt == 2 else 0.62),
+                temperature=0.84 if attempt == 1 else 0.78,
             ))
             base.normalize_scenes(obj)
             errors = base.validate(obj)
@@ -139,12 +237,12 @@ def production_generate(topic: str | None) -> dict:
             score = int(review.get("overall_score", 0) or 0)
             approved = review.get("approved") is True and score >= 8
             print(
-                f"[SHORTS] independent review: candidate={attempt}/3, "
+                f"[SHORTS] independent review: candidate={attempt}/2, "
                 f"approved={approved}, score={score}/10"
             )
             print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
 
-            candidates.append((score, obj, review, attempt))
+            candidates.append((score, obj, review))
             feedback = json.dumps({
                 "overall_score": score,
                 "scores": review.get("scores", {}),
@@ -156,19 +254,15 @@ def production_generate(topic: str | None) -> dict:
                 selected = (score, obj, review, attempt, False)
                 break
             last_error = f"candidate {attempt} did not pass the 8/10 independent review gate"
-            if attempt < 3:
-                print(f"[SHORTS] candidate {attempt} failed review; generating a distinct replacement.")
+            if attempt == 1:
+                print("[SHORTS] first candidate failed; generating one distinct replacement only.")
         except Exception as exc:
             last_error = str(exc)
             print(f"[SHORTS] candidate {attempt} failed: {exc}")
-            if attempt < 3:
+            if attempt == 1:
                 feedback = (
-                    "The previous response failed at the API or JSON stage. For this retry, follow the "
-                    "current schema exactly: title, hook, narration, characters, locations, story_structure "
-                    "with problem, goal, causal_chain (at least five stages), escalations (at least three), "
-                    "payoff, optional twist, 10-12 scenes, flow_prompt, youtube_description, and tags. "
-                    "Use 150-210 narration words and exact contiguous scene excerpts. Return compact, complete "
-                    "valid JSON only. Do not add fields or requirements from an older schema."
+                    "The previous candidate could not be completed or reviewed. "
+                    "Create a fresh, structurally complete story with especially careful JSON and scene validation."
                 )
 
     else:
@@ -177,10 +271,10 @@ def production_generate(topic: str | None) -> dict:
     if 'selected' not in locals() or selected is None:
         if not candidates:
             raise RuntimeError(
-                "No structurally valid, reviewed story candidate was produced within the three-candidate limit: "
+                "No structurally valid, reviewed story candidate was produced within the two-candidate limit: "
                 + str(last_error)
             )
-        score, obj, review, chosen_attempt = max(
+        score, obj, review = max(
             candidates,
             key=lambda item: (
                 item[0],
@@ -189,7 +283,7 @@ def production_generate(topic: str | None) -> dict:
                 int((item[2].get("scores", {}) or {}).get("coherence", 0) or 0),
             ),
         )
-        selected = (score, obj, review, chosen_attempt, True)
+        selected = (score, obj, review, 2, True)
 
     score, obj, review, attempt_used, fallback = selected
     obj["story_quality_review"] = {
@@ -201,23 +295,23 @@ def production_generate(topic: str | None) -> dict:
         "rewrite_instructions": review.get("rewrite_instructions", []),
         "fallback_used": fallback,
         "fallback_reason": (
-            "No candidate passed the strict 8/10 review gate; "
+            "Neither of the maximum two candidates passed the strict 8/10 review gate; "
             "the highest-scoring structurally valid candidate was selected."
             if fallback else None
         ),
         "candidate_count": len(candidates),
         "selected_candidate": attempt_used,
-        "max_candidates": 3,
+        "max_candidates": 2,
     }
     obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
     obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
     obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-    obj["story_policy"] = "varied_storytime_60_90_seconds_three_attempt_reviewed"
+    obj["story_policy"] = "varied_storytime_60_90_seconds_two_candidate_reviewed"
     obj["style_policy"] = base.STYLE
     print(
         f"[SHORTS] selected candidate {attempt_used}; score={score}/10; "
         f"reviewed_candidates={len(candidates)}; fallback={fallback}; "
-        "hard maximum=3 writer calls and 3 reviewer calls."
+        "hard maximum=2 writer calls and 2 reviewer calls."
     )
     return obj
 
