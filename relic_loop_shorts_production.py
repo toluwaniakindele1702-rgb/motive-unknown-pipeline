@@ -204,12 +204,12 @@ base.make_prompt = make_prompt
 
 
 def production_generate(topic: str | None) -> dict:
-    """Generate at most two candidates, independently review each, and return the best.
+    """Generate up to three candidates, reviewing only structurally valid drafts.
 
-    Candidate 1 is reviewed first. If it passes the strict 8/10 gate, stop immediately.
-    Otherwise candidate 2 is generated with the first review's actionable feedback.
+    Stop immediately when a candidate passes the strict 8/10 quality gate.
+    Invalid drafts receive concrete validator feedback before the next attempt.
     If neither passes, choose the highest-scoring structurally valid candidate.
-    Hard cap: two writer calls and two reviewer calls per run.
+    
     """
     if not base.KEY:
         raise RuntimeError("GROQ_API_KEY is required")
@@ -226,7 +226,7 @@ def production_generate(topic: str | None) -> dict:
         try:
             prompt = make_prompt(
                 topic,
-                retry=(attempt == 2),
+                retry=(attempt > 1),
                 feedback=feedback,
                 attempt=attempt,
             )
@@ -247,7 +247,7 @@ def production_generate(topic: str | None) -> dict:
             score = int(review.get("overall_score", 0) or 0)
             approved = review.get("approved") is True and score >= 8
             print(
-                f"[SHORTS] independent review: candidate={attempt}/2, "
+                f"[SHORTS] independent review: candidate={attempt}/3, "
                 f"approved={approved}, score={score}/10"
             )
             print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
@@ -285,7 +285,7 @@ def production_generate(topic: str | None) -> dict:
     if 'selected' not in locals() or selected is None:
         if not candidates:
             raise RuntimeError(
-                "No structurally valid, reviewed story candidate was produced within the two-candidate limit: "
+                "No structurally valid, reviewed story candidate was produced within the three-candidate limit: "
                 + str(last_error)
             )
         score, obj, review, chosen_attempt = max(
@@ -320,7 +320,7 @@ def production_generate(topic: str | None) -> dict:
     obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
     obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
     obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-    obj["story_policy"] = "varied_storytime_60_90_seconds_two_candidate_reviewed"
+    obj["story_policy"] = "varied_storytime_60_90_seconds_three_attempt_reviewed"
     obj["style_policy"] = base.STYLE
     print(
         f"[SHORTS] selected candidate {attempt_used}; score={score}/10; "
