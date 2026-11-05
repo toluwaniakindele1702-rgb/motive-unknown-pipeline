@@ -131,7 +131,7 @@ def _topic_context() -> str:
     history = _load_topic_history()
     if not history:
         return "No previous Relic Loop topics are recorded yet."
-    recent = "\n".join(f"- {x}" for x in history[-40:])
+    recent = "\n".join(f"- {x}" for x in history[-12:])
     return (
         "These titles/topics have already been used. Do NOT repeat them or create near-duplicates:\n" + recent
     )
@@ -248,8 +248,8 @@ def _prompt_for(topic: str | None = None) -> str:
         "change what is visibly happening. Make the final 1-2 beats the payoff and stop immediately."
     )
     if topic:
-        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\n{beat_instruction}\n\n{SYSTEM}"
-    return f"Invent ONE original absurd Relic Loop Short premise that is visually ridiculous and easy to understand in a scrolling feed. Avoid all used topics and near-duplicates.\n\n{history}\n\n{beat_instruction}\n\n{SYSTEM}"
+        return f"Create an original absurd Relic Loop Short around this seed: {topic}.\n\n{history}\n\n{beat_instruction}"
+    return f"Invent ONE original absurd Relic Loop Short premise that is visually ridiculous and easy to understand in a scrolling feed. Avoid all used topics and near-duplicates.\n\n{history}\n\n{beat_instruction}"
 
 
 def generate(topic: str | None = None) -> dict[str, Any]:
