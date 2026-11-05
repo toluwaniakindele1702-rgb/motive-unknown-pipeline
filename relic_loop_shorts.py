@@ -265,8 +265,8 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                     {"role": "system", "content": SYSTEM},
                     {"role": "user", "content": _prompt_for(topic)},
                 ],
-                temperature=0.92,
-                max_completion_tokens=7000,
+                temperature=0.82,
+                max_completion_tokens=4500,
             )
             data = _extract_json(response.choices[0].message.content or "")
             errors = _validate(data)
@@ -281,7 +281,7 @@ def generate(topic: str | None = None) -> dict[str, Any]:
                         },
                     ],
                     temperature=0.18,
-                    max_completion_tokens=7000,
+                    max_completion_tokens=4500,
                 )
                 data = _extract_json(repair.choices[0].message.content or "")
                 errors = _validate(data)
