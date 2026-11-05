@@ -163,12 +163,12 @@ def production_generate(topic: str | None) -> dict:
             print(f"[SHORTS] candidate {attempt} failed: {exc}")
             if attempt < 3:
                 feedback = (
-                    "The previous candidate could not be completed or reviewed. "
-                    "Create a fresh, structurally complete story. Required: title, hook, narration, characters, "
-                    "locations, story_structure with problem, goal, causal_chain (5 separate stages), "
-                    "escalations (at least 3), twist key (empty string is allowed if no twist), punchline, "
-                    "10-14 scenes, and flow_prompt. Include youtube_description and tags. "
-                    "Ensure valid complete JSON and exact contiguous scene narration."
+                    "The previous response failed at the API or JSON stage. For this retry, follow the "
+                    "current schema exactly: title, hook, narration, characters, locations, story_structure "
+                    "with problem, goal, causal_chain (at least five stages), escalations (at least three), "
+                    "payoff, optional twist, 10-12 scenes, flow_prompt, youtube_description, and tags. "
+                    "Use 150-210 narration words and exact contiguous scene excerpts. Return compact, complete "
+                    "valid JSON only. Do not add fields or requirements from an older schema."
                 )
 
     else:
