@@ -266,9 +266,13 @@ def validate(obj: dict[str, Any]) -> list[str]:
 
     structure = obj.get("story_structure")
     if isinstance(structure, dict):
-        for key in ("problem", "goal", "causal_chain", "escalations", "twist", "punchline"):
+        # A twist is optional for this channel's varied story mix. Keep the key in
+        # the output schema, but allow an empty string when the story has no twist.
+        for key in ("problem", "goal", "causal_chain", "escalations", "punchline"):
             if not structure.get(key):
                 errors.append(f"missing_structure:{key}")
+        if "twist" not in structure:
+            errors.append("missing_structure:twist_key")
         chain = structure.get("causal_chain")
         if isinstance(chain, list):
             # Accept a compact arrow-separated chain only if it clearly names multiple stages.
