@@ -188,8 +188,15 @@ def make_prompt(topic: str | None, retry: bool = False, feedback: str = "", atte
     return (
         f"{seed}\n{used}\n{retry_note}\n{feedback_block}\n"
         "Write the complete JSON package now. Make the first sentence concrete and immediately interesting. "
-        "Use 10-14 meaningful scenes, exact contiguous narration excerpts, and a coherent causal chain. "
-        "Do not sacrifice story quality to satisfy the JSON fields; the actual narration is the product."
+        "OUTPUT BUDGET / COMPLETENESS: Return exactly 10 scenes (not 4, 8, or 9). Keep narration 150-175 words. "
+        "Each scene visual_prompt MUST be 55-65 words, concise but drawable; camera and action each one short phrase. "
+        "Keep beat_text short. Keep flow_prompt to 1-2 concise sentences, youtube_description to 1-2 sentences, "
+        "and tags to 5-8 short strings. Do not repeat the narration inside other fields. "
+        "Every required top-level key in the schema must be present, especially flow_prompt, youtube_description, and tags. "
+        "Scene narration excerpts must reproduce the full narration exactly, in order, with no omissions or additions. "
+        "Use natural sentence/clause boundaries to divide it into exactly 10 meaningful scenes. "
+        "Before responding, verify the JSON closes correctly and contains all 10 scenes and all required top-level keys. "
+        "Do not end the response early. Do not use markdown fences or commentary."
     )
 
 
