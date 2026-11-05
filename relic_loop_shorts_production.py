@@ -215,11 +215,14 @@ def production_generate(topic: str | None) -> dict:
         raise RuntimeError("GROQ_API_KEY is required")
 
     client = base.Groq(api_key=base.KEY)
-    candidates: list[tuple[int, dict, dict]] = []
+    candidates: list[tuple[int, dict, dict, int]] = []
     feedback = ""
     last_error = None
+    selected = None
 
-    for attempt in (1, 2):
+    # A third bounded writer attempt gives structural/API failures one recovery
+    # opportunity without adding reviewer calls for invalid drafts.
+    for attempt in (1, 2, 3):
         try:
             prompt = make_prompt(
                 topic,
@@ -230,7 +233,7 @@ def production_generate(topic: str | None) -> dict:
             obj = base.parse_json(base.request(
                 client,
                 prompt,
-                temperature=0.84 if attempt == 1 else 0.78,
+                temperature=0.82 if attempt == 1 else (0.72 if attempt == 2 else 0.62),
             ))
             base.normalize_scenes(obj)
             errors = base.validate(obj)
@@ -249,7 +252,7 @@ def production_generate(topic: str | None) -> dict:
             )
             print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
 
-            candidates.append((score, obj, review))
+            candidates.append((score, obj, review, attempt))
             feedback = json.dumps({
                 "overall_score": score,
                 "scores": review.get("scores", {}),
@@ -261,15 +264,19 @@ def production_generate(topic: str | None) -> dict:
                 selected = (score, obj, review, attempt, False)
                 break
             last_error = f"candidate {attempt} did not pass the 8/10 independent review gate"
-            if attempt == 1:
-                print("[SHORTS] first candidate failed; generating one distinct replacement only.")
+            if attempt < 3:
+                print(f"[SHORTS] candidate {attempt} failed review; generating a distinct replacement.")
         except Exception as exc:
             last_error = str(exc)
             print(f"[SHORTS] candidate {attempt} failed: {exc}")
-            if attempt == 1:
+            if attempt < 3:
                 feedback = (
                     "The previous candidate could not be completed or reviewed. "
-                    "Create a fresh, structurally complete story with especially careful JSON and scene validation."
+                    "Create a fresh, structurally complete story. Required: title, hook, narration, characters, "
+                    "locations, story_structure with problem, goal, causal_chain (5 separate stages), "
+                    "escalations (at least 3), twist key (empty string is allowed if no twist), punchline, "
+                    "10-14 scenes, and flow_prompt. Include youtube_description and tags. "
+                    "Ensure valid complete JSON and exact contiguous scene narration."
                 )
 
     else:
@@ -281,7 +288,7 @@ def production_generate(topic: str | None) -> dict:
                 "No structurally valid, reviewed story candidate was produced within the two-candidate limit: "
                 + str(last_error)
             )
-        score, obj, review = max(
+        score, obj, review, chosen_attempt = max(
             candidates,
             key=lambda item: (
                 item[0],
@@ -290,7 +297,7 @@ def production_generate(topic: str | None) -> dict:
                 int((item[2].get("scores", {}) or {}).get("coherence", 0) or 0),
             ),
         )
-        selected = (score, obj, review, 2, True)
+        selected = (score, obj, review, chosen_attempt, True)
 
     score, obj, review, attempt_used, fallback = selected
     obj["story_quality_review"] = {
@@ -302,13 +309,13 @@ def production_generate(topic: str | None) -> dict:
         "rewrite_instructions": review.get("rewrite_instructions", []),
         "fallback_used": fallback,
         "fallback_reason": (
-            "Neither of the maximum two candidates passed the strict 8/10 review gate; "
+            "No candidate passed the strict 8/10 review gate; "
             "the highest-scoring structurally valid candidate was selected."
             if fallback else None
         ),
         "candidate_count": len(candidates),
         "selected_candidate": attempt_used,
-        "max_candidates": 2,
+        "max_candidates": 3,
     }
     obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
     obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
@@ -318,7 +325,7 @@ def production_generate(topic: str | None) -> dict:
     print(
         f"[SHORTS] selected candidate {attempt_used}; score={score}/10; "
         f"reviewed_candidates={len(candidates)}; fallback={fallback}; "
-        "hard maximum=2 writer calls and 2 reviewer calls."
+        "hard maximum=3 writer calls and 3 reviewer calls."
     )
     return obj
 
