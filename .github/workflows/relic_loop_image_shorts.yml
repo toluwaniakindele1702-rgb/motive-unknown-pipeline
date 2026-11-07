@@ -124,11 +124,17 @@ jobs:
           echo "Cloudflare account ID suffix: ${CLOUDFLARE_ACCOUNT_ID: -4}"
           test -n "$YOUTUBE_TOKEN_JSON" || { echo "YOUTUBE_TOKEN_JSON is missing"; exit 1; }
           test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
-          ffmpeg -version | head -n 1
-          ffmpeg -filters | grep -q zoompan
-          ffprobe -version | head -n 1
-          tesseract --version | head -n 1
-          espeak-ng --version | head -n 1
+          # Avoid early-exit pipelines under pipefail (grep -q/head can SIGPIPE the producer).
+          ffmpeg -version > /tmp/ffmpeg-version.txt
+          sed -n '1p' /tmp/ffmpeg-version.txt
+          ffmpeg -filters > /tmp/ffmpeg-filters.txt
+          grep -q 'zoompan' /tmp/ffmpeg-filters.txt
+          ffprobe -version > /tmp/ffprobe-version.txt
+          sed -n '1p' /tmp/ffprobe-version.txt
+          tesseract --version > /tmp/tesseract-version.txt
+          sed -n '1p' /tmp/tesseract-version.txt
+          espeak-ng --version > /tmp/espeak-version.txt 2>&1
+          sed -n '1p' /tmp/espeak-version.txt
           python - <<'PY'
           import edge_tts, groq, requests
           from PIL import Image
