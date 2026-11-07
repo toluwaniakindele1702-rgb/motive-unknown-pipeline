@@ -278,22 +278,6 @@ def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) 
             detail = f"{type(exc).__name__}: {exc}"
             failures.append(f"{provider}: {detail}")
             _record(provider, "fallback", detail)
-            # A 402 balance response is not transient. If OVH is unavailable,
-            # stop before Cloudflare so an empty Pollinations balance cannot
-            # consume the account's daily Workers AI neuron allocation.
-            if provider == "pollinations" and isinstance(exc, PollinationsBalanceError) and not OVH_TOKEN:
-                _record(
-                    "router",
-                    "stopped",
-                    "Pollinations has zero spendable balance and OVH is not configured; "
-                    "Cloudflare skipped to protect its daily quota."
-                )
-                raise RuntimeError(
-                    "Pollinations returned HTTP 402 INSUFFICIENT_BALANCE and OVH fallback "
-                    "is not configured. Cloudflare was intentionally skipped to protect "
-                    "its daily quota. Add spendable Pollinations balance or configure "
-                    "OVH_AI_ENDPOINTS_ACCESS_TOKEN, then rerun."
-                ) from exc
     raise RuntimeError("All configured image providers failed. " + " || ".join(failures))
 
 
