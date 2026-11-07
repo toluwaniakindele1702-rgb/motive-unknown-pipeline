@@ -255,6 +255,9 @@ def _cloudflare(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -
         except Exception as exc:
             last = exc
             print(f"[CLOUDFLARE] attempt failed: {type(exc).__name__}: {exc}")
+            # Daily neuron exhaustion is account-wide and cannot recover by retrying.
+            if "account-level Workers AI neuron quota is exhausted" in str(exc):
+                raise
             if attempt < MAX_RETRIES:
                 time.sleep(4 * attempt)
     raise RuntimeError(f"Cloudflare image generation failed after {MAX_RETRIES} attempts: {last}")
