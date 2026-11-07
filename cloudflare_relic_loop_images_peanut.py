@@ -105,6 +105,10 @@ OVH_URL = os.environ.get(
 
 PROVIDER_EVENTS: list[dict] = []
 PROVIDER_COUNTS: dict[str, int] = {"pollinations": 0, "ovhcloud": 0, "cloudflare": 0}
+
+class PollinationsBalanceError(RuntimeError):
+    """Pollinations accepted the request but the account has no spendable pollen."""
+
 REFERENCE_FILES = base.CANONICAL_REFERENCE_PATHS
 _CLOUDFLARE_ORIGINAL = base._cloudflare
 
@@ -195,12 +199,25 @@ def _pollinations(prompt: str, refs: list[tuple[str, bytes, str]] | None) -> byt
             )
             if not response.ok:
                 message = response.text[:1000]
+                if response.status_code == 402:
+                    try:
+                        error_payload = response.json()
+                    except ValueError:
+                        error_payload = {}
+                    error = error_payload.get("error") or {}
+                    if error.get("code") == "INSUFFICIENT_BALANCE":
+                        raise PollinationsBalanceError(
+                            "Pollinations returned HTTP 402 INSUFFICIENT_BALANCE: "
+                            + str(error.get("message") or message)
+                        )
                 raise RuntimeError(f"HTTP {response.status_code}: {message}")
             return _normalize_image(_extract_image(response))
         except requests.RequestException as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             if attempt < 2:
                 time.sleep(5 * attempt)
+        except PollinationsBalanceError:
+            raise
         except RuntimeError as exc:
             last_error = str(exc)
             status = getattr(locals().get("response"), "status_code", 0)
@@ -261,6 +278,22 @@ def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) 
             detail = f"{type(exc).__name__}: {exc}"
             failures.append(f"{provider}: {detail}")
             _record(provider, "fallback", detail)
+            # A 402 balance response is not transient. If OVH is unavailable,
+            # stop before Cloudflare so an empty Pollinations balance cannot
+            # consume the account's daily Workers AI neuron allocation.
+            if provider == "pollinations" and isinstance(exc, PollinationsBalanceError) and not OVH_TOKEN:
+                _record(
+                    "router",
+                    "stopped",
+                    "Pollinations has zero spendable balance and OVH is not configured; "
+                    "Cloudflare skipped to protect its daily quota."
+                )
+                raise RuntimeError(
+                    "Pollinations returned HTTP 402 INSUFFICIENT_BALANCE and OVH fallback "
+                    "is not configured. Cloudflare was intentionally skipped to protect "
+                    "its daily quota. Add spendable Pollinations balance or configure "
+                    "OVH_AI_ENDPOINTS_ACCESS_TOKEN, then rerun."
+                ) from exc
     raise RuntimeError("All configured image providers failed. " + " || ".join(failures))
 
 
