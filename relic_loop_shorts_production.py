@@ -196,44 +196,148 @@ def make_prompt(topic: str | None, retry: bool = False, feedback: str = "", atte
 base.make_prompt = make_prompt
 
 
-def production_generate(topic: str | None) -> dict:
-    """Generate at most two candidates, independently review each, and return the best.
+def _phase_json(client, system_prompt: str, user_prompt: str, temperature: float, token_budget: int) -> dict:
+    """One bounded JSON generation phase with a single repair attempt."""
+    last_error = None
+    for attempt in range(2):
+        try:
+            result = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt if attempt == 0 else (
+                        user_prompt + "\n\nREPAIR: The previous response was incomplete or invalid. "
+                        "Return one complete valid JSON object now. Do not omit required fields. "
+                        "Keep the response within the requested scope."
+                    )},
+                ],
+                temperature=temperature if attempt == 0 else max(0.35, temperature - 0.12),
+                max_completion_tokens=token_budget,
+                response_format={"type": "json_object"},
+            )
+            content = result.choices[0].message.content or ""
+            return base.parse_json(content)
+        except Exception as exc:
+            last_error = exc
+            print(f"[SHORTS] bounded JSON phase attempt {attempt + 1}/2 failed: {exc}")
+    raise RuntimeError(f"JSON phase failed after one repair attempt: {last_error}")
 
-    Candidate 1 is reviewed first. If it passes the strict 8/10 gate, stop immediately.
-    Otherwise candidate 2 is generated with the first review's actionable feedback.
-    If neither passes, choose the highest-scoring structurally valid candidate.
-    Hard cap: two writer calls and two reviewer calls per run.
-    """
+
+STORY_SYSTEM = """You are the lead writer for Chispa-Pifia, a storytime Shorts channel.
+Write an original, genuinely entertaining spoken story. Do not default to mystery or twists.
+Choose naturally among relatable mishaps, clever problem-solving, social misunderstandings,
+dilemmas, suspense, discoveries, irony, comedy, and emotional or satisfying payoffs.
+
+The story must have a concrete protagonist, desire/problem, clear cause and effect,
+meaningful escalation, character agency, and an earned payoff. Start inside a specific
+situation with a strong first-sentence hook. Use natural conversational spoken English,
+not a synopsis, checklist, moral, or generic introduction. No filler, subscribe line,
+or forced twist. Length: 150-210 spoken words.
+
+Before answering, silently audit the causal chain and ensure every major event follows
+from an established cause or a character decision. Keep the story visually depictable.
+Return ONLY one JSON object with exactly these keys:
+"title", "hook", "narration", "characters", "locations", "story_structure".
+characters must be a non-empty array of objects with name, role, appearance.
+The protagonist role must identify a human/person.
+story_structure must contain problem, goal, causal_chain (at least 5 separate array items),
+escalations (at least 3 separate items), twist, and punchline.
+Use an empty string for twist or punchline when not applicable; do not force either.
+Do not include scenes, visual prompts, flow_prompt, markdown, or commentary."""
+
+
+def _story_prompt(topic: str | None, prior_feedback: str = "") -> str:
+    old = base.history()
+    used = "" if not old else "Avoid repeating these previous titles or near-identical premises: " + "; ".join(old[-30:])
+    seed = (
+        f"Story seed: {topic}. Build the strongest coherent story from it."
+        if topic else
+        "Invent an original Chispa-Pifia story. Choose the strongest premise; do not default to a mystery."
+    )
+    feedback = ("\nPrevious review/validation feedback to fix: " + prior_feedback) if prior_feedback else ""
+    return seed + "\n" + used + feedback + "\nWrite the complete story core now."
+
+
+STORYBOARD_SYSTEM = f"""You are an expert storyboard director for Chispa-Pifia.
+The supplied narration is FINAL and is the source of truth. Do not rewrite, shorten,
+expand, correct, paraphrase, reorder, or omit any narration words.
+Create 10-14 meaningful visual beats, each containing a contiguous exact excerpt copied
+from the narration, in the same order. When joined with single spaces and whitespace
+normalized, the excerpts must reconstruct the entire narration exactly.
+Split at natural sentence/action/reaction boundaries; do not invent events or filler.
+
+Each scene must have: number, duration_seconds, beat_text, narration, visual_prompt,
+camera, action. Each visual_prompt must be 55-95 words, describe one frozen drawable
+moment, include the approved simple 2D human stickman identity, pose/gesture, expression
+and eye-line, story-critical prop and its state, specific setting, depth, shot/angle,
+focal hierarchy, and lighting/color. Scene 1 must be a truthful, arresting close/medium
+opening image with the protagonist mid-action and the key prop/consequence prominent.
+No text, captions, signs, speech bubbles, logos, watermarks, or unsupported story details.
+Use only story facts in the supplied package. Vary composition when the beat changes.
+Duration should be positive and proportionate to the spoken excerpt, not fixed equally.
+Return ONLY JSON with keys flow_prompt and scenes. flow_prompt should briefly describe
+the complete storyboard direction and preserve the canonical visual style:
+{base.STYLE}"""
+
+
+def _storyboard_prompt(story: dict) -> str:
+    payload = {
+        "title": story.get("title", ""),
+        "narration": story.get("narration", ""),
+        "characters": story.get("characters", []),
+        "locations": story.get("locations", []),
+        "story_structure": story.get("story_structure", {}),
+    }
+    return (
+        "Build the storyboard for this completed story. Copy narration excerpts exactly; "
+        "do not rewrite the narration. Ensure 10-14 meaningful scenes and return complete JSON.\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+
+
+def _attach_storyboard(story: dict, client) -> dict:
+    board = _phase_json(
+        client, STORYBOARD_SYSTEM, _storyboard_prompt(story),
+        temperature=0.48, token_budget=3400,
+    )
+    if not isinstance(board.get("scenes"), list):
+        raise ValueError("storyboard phase returned no scenes array")
+    story["scenes"] = board["scenes"]
+    story["flow_prompt"] = str(board.get("flow_prompt", "")).strip()
+    base.normalize_scenes(story)
+    errors = base.validate(story)
+    if errors:
+        raise ValueError("storyboard validation failed: " + ", ".join(errors[:20]))
+    return story
+
+
+def production_generate(topic: str | None) -> dict:
+    """Generate the narration and storyboard in separate bounded calls, then review."""
     if not base.KEY:
         raise RuntimeError("GROQ_API_KEY is required")
 
     client = base.Groq(api_key=base.KEY)
-    candidates: list[tuple[int, dict, dict]] = []
     feedback = ""
+    candidates: list[tuple[int, dict, dict, int]] = []
     last_error = None
 
+    # Two complete story attempts. Each attempt has a compact story-core call,
+    # a separate storyboard call (with one repair), and an independent review.
     for attempt in (1, 2):
         try:
-            prompt = make_prompt(
-                topic,
-                retry=(attempt == 2),
-                feedback=feedback,
-                attempt=attempt,
+            story = _phase_json(
+                client, STORY_SYSTEM, _story_prompt(topic, feedback),
+                temperature=0.84 if attempt == 1 else 0.76,
+                token_budget=1800,
             )
-            obj = base.parse_json(base.request(
-                client,
-                prompt,
-                temperature=0.84 if attempt == 1 else 0.78,
-            ))
-            base.normalize_scenes(obj)
-            errors = base.validate(obj)
-            if errors:
-                last_error = "structural validation failed: " + ", ".join(errors[:20])
-                print(f"[SHORTS] candidate {attempt} rejected by local validation: {last_error}")
-                feedback = "The previous candidate failed deterministic validation: " + last_error
-                continue
+            if not isinstance(story.get("narration"), str):
+                raise ValueError("story phase omitted narration")
+            narration_words = base.words(story["narration"])
+            if not 150 <= narration_words <= 210:
+                raise ValueError(f"story narration has {narration_words} words; expected 150-210")
+            story = _attach_storyboard(story, client)
 
-            review = base.review_story(client, obj)
+            review = base.review_story(client, story)
             score = int(review.get("overall_score", 0) or 0)
             approved = review.get("approved") is True and score >= 8
             print(
@@ -241,29 +345,26 @@ def production_generate(topic: str | None) -> dict:
                 f"approved={approved}, score={score}/10"
             )
             print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
-
-            candidates.append((score, obj, review))
+            candidates.append((score, story, review, attempt))
             feedback = json.dumps({
                 "overall_score": score,
                 "scores": review.get("scores", {}),
                 "fatal_flaws": review.get("fatal_flaws", []),
                 "rewrite_instructions": review.get("rewrite_instructions", []),
             }, ensure_ascii=False)
-
             if approved:
-                selected = (score, obj, review, attempt, False)
+                selected = (score, story, review, attempt, False)
                 break
             last_error = f"candidate {attempt} did not pass the 8/10 independent review gate"
-            if attempt == 1:
-                print("[SHORTS] first candidate failed; generating one distinct replacement only.")
+            print("[SHORTS] reviewer requested a stronger replacement story.")
         except Exception as exc:
             last_error = str(exc)
             print(f"[SHORTS] candidate {attempt} failed: {exc}")
-            if attempt == 1:
-                feedback = (
-                    "The previous candidate could not be completed or reviewed. "
-                    "Create a fresh, structurally complete story with especially careful JSON and scene validation."
-                )
+            feedback = (
+                "Previous attempt failed: " + str(exc) +
+                ". Write a fresh coherent story. Keep narration 150-210 words. "
+                "The storyboard will be generated separately, so return only the six story-core fields."
+            )
 
     else:
         selected = None
@@ -271,10 +372,10 @@ def production_generate(topic: str | None) -> dict:
     if 'selected' not in locals() or selected is None:
         if not candidates:
             raise RuntimeError(
-                "No structurally valid, reviewed story candidate was produced within the two-candidate limit: "
+                "No complete, structurally valid story package was produced after two staged attempts: "
                 + str(last_error)
             )
-        score, obj, review = max(
+        score, story, review, attempt_used = max(
             candidates,
             key=lambda item: (
                 item[0],
@@ -283,10 +384,10 @@ def production_generate(topic: str | None) -> dict:
                 int((item[2].get("scores", {}) or {}).get("coherence", 0) or 0),
             ),
         )
-        selected = (score, obj, review, 2, True)
+        selected = (score, story, review, attempt_used, True)
 
-    score, obj, review, attempt_used, fallback = selected
-    obj["story_quality_review"] = {
+    score, story, review, attempt_used, fallback = selected
+    story["story_quality_review"] = {
         "reviewer_model": base.REVIEW_MODEL,
         "approved": bool(review.get("approved") is True and score >= 8),
         "overall_score": score,
@@ -295,25 +396,26 @@ def production_generate(topic: str | None) -> dict:
         "rewrite_instructions": review.get("rewrite_instructions", []),
         "fallback_used": fallback,
         "fallback_reason": (
-            "Neither of the maximum two candidates passed the strict 8/10 review gate; "
+            "Neither staged candidate passed the strict 8/10 review gate; "
             "the highest-scoring structurally valid candidate was selected."
             if fallback else None
         ),
         "candidate_count": len(candidates),
         "selected_candidate": attempt_used,
         "max_candidates": 2,
+        "generation_mode": "story_core_then_storyboard",
     }
-    obj["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
-    obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-    obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-    obj["story_policy"] = "varied_storytime_60_90_seconds_two_candidate_reviewed"
-    obj["style_policy"] = base.STYLE
+    story["generated_at"] = base.datetime.now(base.timezone.utc).isoformat()
+    story["visual_policy"] = "Narration is source of truth; every image reenacts its exact contiguous narration excerpt."
+    story["timing_policy"] = "Narration is the master timeline; 10-14 phrase-aligned image beats scale to their spoken excerpts."
+    story["story_policy"] = "varied_storytime_60_90_seconds_staged_generation_reviewed"
+    story["style_policy"] = base.STYLE
     print(
         f"[SHORTS] selected candidate {attempt_used}; score={score}/10; "
         f"reviewed_candidates={len(candidates)}; fallback={fallback}; "
-        "hard maximum=2 writer calls and 2 reviewer calls."
+        "generation=separate_story_and_storyboard_phases."
     )
-    return obj
+    return story
 
 if __name__ == "__main__":
     topic = os.environ.get("RELIC_LOOP_TOPIC", "").strip() or None
