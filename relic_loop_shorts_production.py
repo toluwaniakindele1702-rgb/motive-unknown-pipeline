@@ -39,7 +39,7 @@ characters is an array of character objects with name, role and appearance. The 
 locations is an array of setting names.
 story_structure contains problem, goal, causal_chain (at least 4 short items), escalations (at least 3 short items), twist, and punchline. If there is no twist, say "No twist; the comedy comes from the escalating situation."
 Create 10-12 scenes that cover the narration in order. Every scene narration must be a contiguous excerpt from the master narration; all excerpts together, in order, must reproduce the narration exactly when joined with spaces. Do not add events.
-Each scene has number, duration_seconds, beat_text, narration, visual_prompt, camera, action. Give each scene a 45-80 word visual_prompt describing one specific frozen moment: stickman pose, facial expression, key prop, setting, composition and camera angle. Scene 1 must show the opening problem/action clearly in a close or medium shot. No text in images.
+Each scene has number, duration_seconds, beat_text, narration, visual_prompt, camera, action. Give each scene a 45-80 word visual_prompt (55-80 words for scene 1) describing one specific frozen moment: stickman pose, facial expression, key prop, setting, composition and camera angle. Scene 1 must show the opening problem/action clearly in a close or medium shot. No text in images.
 flow_prompt briefly describes the complete visual direction and must include the visual style.
 youtube_description is one short sentence. tags is an array of relevant short tags.
 Do not include analysis or any fields beyond the requested JSON."""
