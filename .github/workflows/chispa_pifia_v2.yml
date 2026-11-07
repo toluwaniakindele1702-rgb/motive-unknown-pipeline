@@ -15,6 +15,10 @@ on:
       - ".github/workflows/chispa_pifia_v2.yml"
       - "chispa_pifia_v2.py"
       - "chispa_pifia_contact_sheet.py"
+      - "cloudflare_relic_loop_images.py"
+      - "cloudflare_relic_loop_images_peanut.py"
+      - "assemble_relic_loop_short.py"
+      - "youtube_upload.py"
 
 concurrency:
   group: chispa-pifia-v2
@@ -61,19 +65,22 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install --retries 5 --timeout 120 --prefer-binary \
-            'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' 'edge-tts>=7.0,<8' 'numpy>=2.0,<3' 'soundfile>=0.13,<1.0' 'kokoro>=0.9.4,<1.0' \
+            'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' 'edge-tts>=7.0,<8' \
             'google-api-python-client>=2.180,<3' 'google-auth>=2.40,<3' \
             'google-auth-httplib2>=0.2,<1' 'google-auth-oauthlib>=1.2,<2'
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr espeak-ng
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
       - name: Verify secrets, references and media tools
         shell: bash
         run: |
           set -euo pipefail
           test -n "$GROQ_API_KEY" || { echo "::error::GROQ_API_KEY is missing"; exit 1; }
-          test -n "$POLLINATIONS_API_KEY" || { echo "::error::POLLINATIONS_API_KEY is missing"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          test -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" || { echo "::error::OVH_AI_ENDPOINTS_ACCESS_TOKEN is missing"; exit 1; }
+          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare fallback credentials are configured."
+          else
+            echo "::warning::Cloudflare fallback is not configured; OVHcloud will be the only image provider."
+          fi
           test -n "$YOUTUBE_TOKEN_JSON" || { echo "::error::YOUTUBE_TOKEN_JSON is missing"; exit 1; }
           test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "::error::YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           for f in \
@@ -84,7 +91,85 @@ jobs:
           ffmpeg -version | sed -n '1p'
           ffprobe -version | sed -n '1p'
           tesseract --version | sed -n '1p'
-          python -c "import groq, requests, edge_tts; from PIL import Image; print('Production imports passed')"
+          python -c "import groq, requests, edge_tts; from PIL import Image; from googleapiclient.discovery import build; from google.oauth2.credentials import Credentials; print('Production imports passed')"
+          tesseract --list-langs | grep -q '^eng
+          echo "Image route: authenticated OVHcloud SDXL primary; Cloudflare FLUX.2 Klein fallback when configured."
+      - name: Verify YouTube channel access before image generation
+        run: python youtube_upload.py --check-auth
+      - name: Run deterministic V2 tests
+        run: |
+          set -euo pipefail
+          python -m py_compile chispa_pifia_v2.py chispa_pifia_contact_sheet.py \
+            cloudflare_relic_loop_images.py cloudflare_relic_loop_images_peanut.py \
+            assemble_relic_loop_short.py youtube_upload.py
+          python chispa_pifia_v2.py --self-test
+      - name: Write compact story and deterministic storyboard
+        run: |
+          set -o pipefail
+          python chispa_pifia_v2.py 2>&1 | tee v2_story.log
+      - name: Render images (OVHcloud SDXL primary; Cloudflare fallback)
+        run: |
+          set -o pipefail
+          python cloudflare_relic_loop_images_peanut.py 2>&1 | tee v2_images.log
+      - name: Create visual contact sheet
+        run: python chispa_pifia_contact_sheet.py
+      - name: Assemble narrated 9:16 Short
+        run: |
+          set -o pipefail
+          python assemble_relic_loop_short.py 2>&1 | tee v2_assembly.log
+      - name: Upload completed Short to Chispa-Pifia
+        if: success()
+        run: |
+          set -o pipefail
+          python youtube_upload.py 2>&1 | tee v2_youtube.log
+      - name: Write production report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Chispa-Pifia V2 production report"
+            echo "- Run: \${GITHUB_RUN_NUMBER}"
+            echo "- Commit: \${GITHUB_SHA}"
+            echo "- Trigger: \${GITHUB_EVENT_NAME}"
+            for f in v2_story.log v2_images.log v2_assembly.log v2_youtube.log; do
+              if [ -f "$f" ]; then
+                echo "## $f"
+                tail -n 100 "$f"
+              fi
+            done
+            if [ -f state/current_run/cloudflare_image_manifest.json ]; then
+              echo "## Image provider report"
+              python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("state/current_run/cloudflare_image_manifest.json").read_text())
+          print(json.dumps({"provider_priority":d.get("provider_priority"),"provider_counts":d.get("provider_counts"),
+            "provider_events":d.get("provider_events"),"reference_mode":d.get("reference_mode"),
+            "rendered_images":len(d.get("beats",[]))},indent=2))
+          PY
+            fi
+            if [ -f state/current_run/youtube_upload.json ]; then cat state/current_run/youtube_upload.json; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload video, contact sheet and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chispa-pifia-v2-${{ github.run_number }}
+          path: |
+            state/current_run/relic_loop_short.json
+            state/current_run/flow_manifest.json
+            state/current_run/cloudflare_image_manifest.json
+            state/current_run/timing_manifest.json
+            state/current_run/relic_loop_short.mp4
+            state/current_run/contact_sheet.jpg
+            state/current_run/youtube_upload.json
+            v2_story.log
+            v2_images.log
+            v2_assembly.log
+            v2_youtube.log
+          if-no-files-found: warn
+          retention-days: 14
+ || { echo "::error::Tesseract English language data is missing"; exit 1; }
           echo "Pollinations is first in the image-provider route; fallback usage is recorded."
       - name: Verify YouTube channel access before image generation
         run: python youtube_upload.py --check-auth
