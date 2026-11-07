@@ -22,7 +22,10 @@ TOKEN_JSON = os.environ.get("YOUTUBE_TOKEN_JSON", "").strip()
 CLIENT_SECRET_JSON = os.environ.get("YOUTUBE_CLIENT_SECRET_JSON", "").strip()
 PRIVACY = os.environ.get("YOUTUBE_PRIVACY_STATUS", "public").strip().lower()
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Chispa-Pifia").strip() or "Chispa-Pifia"
-SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+SCOPES = (
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+)
 
 if PRIVACY not in {"public", "private", "unlisted"}:
     PRIVACY = "public"
@@ -95,7 +98,7 @@ def credentials() -> Credentials:
     if not isinstance(token_info, dict) or not isinstance(client_info, dict):
         raise RuntimeError("YouTube OAuth secrets must contain JSON objects")
 
-    creds = Credentials.from_authorized_user_info(token_info, scopes=[SCOPE])
+    creds = Credentials.from_authorized_user_info(token_info, scopes=list(SCOPES))
     if not creds.valid:
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
