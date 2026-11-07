@@ -36,7 +36,7 @@ WRITE ONLY THE SCRIPT:
 Return a compact JSON object with only:
 {"title":"short title","narration":"the complete spoken script","characters":[{"name":"character name","role":"protagonist or supporting character"}],"locations":["setting name"]}
 
-Keep the JSON small. Characters and locations are brief continuity notes only; do not add descriptions or scene plans. The narration must be 125-145 words."""
+Keep the JSON small. Characters and locations are brief continuity notes only; list the protagonist first, then supporting characters. Do not add descriptions or scene plans. The narration must be 125-145 words."""
  
 VISUAL_SYSTEM = """You are the visual storyboard artist for Chispa-Pifia, an absurd-but-coherent 2D stickman comedy channel.
 
@@ -96,7 +96,7 @@ def _split_narration(text: str, scene_count: int = 11) -> list[str]:
         candidates = range(minimum, maximum + 1)
 
         def boundary_cost(position: int) -> tuple[float, int]:
-            gap = narration[words[position - 1].end():words[position].start()]
+            gap = narration[words[position - 1].end():words[position].start()].strip()
             if re.search(r"[.!?][\"')\]]?$", gap):
                 punctuation_penalty = 0.0
             elif re.search(r"[;:][\"')\]]?$", gap):
@@ -318,8 +318,19 @@ def generate(topic: str | None) -> dict:
             errors = base.validate(obj)
             if errors:
                 raise ValueError("package validation: " + ", ".join(errors[:18]))
-            review = base.review_story(client, obj)
-            score = int(review.get("overall_score", 0) or 0)
+            try:
+                review = base.review_story(client, obj)
+                score = int(review.get("overall_score", 0) or 0)
+            except Exception as review_error:
+                print(f"[CHISPA] reviewer unavailable; preserving the valid script package: {review_error}")
+                review = {
+                    "approved": False,
+                    "overall_score": 7,
+                    "scores": {},
+                    "fatal_flaws": ["Independent reviewer unavailable; manual quality review recommended."],
+                    "rewrite_instructions": [],
+                }
+                score = 7
             approved = review.get("approved") is True and score >= 8
             print(f"[CHISPA] script review: approved={approved}, score={score}/10")
             print("[CHISPA] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
