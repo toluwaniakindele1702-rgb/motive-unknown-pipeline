@@ -338,7 +338,7 @@ def _scene_prompt(
     if int(scene.get("number", 0) or 0) == 1 or not previous_scene:
         opening_direction = """\nOPENING-HOOK ART DIRECTION — PRIORITY FOR THIS FIRST FRAME:
 This is the first image the viewer sees. It must be immediately legible and visually compelling at small phone size. Use the storyboard director's visual description as a precise shot blueprint. Show the protagonist in a specific active pose, with a readable face/eye-line and the story-critical object or visible consequence large enough to recognize. Prefer a close/medium shot, bold silhouette, purposeful perspective and one dominant focal point. Give the background only enough distinctive detail to establish the story location. Create an unanswered visual question, but do not reveal later events or invent anything. Do not use a neutral standing pose, empty establishing shot, tiny distant figure or generic room.\n"""
-    return f"""Create ONE vertical 9:16 image for a Chispa-Pifia story-first Short: mini-mystery, suspense, dilemma, problem-solving or a fair twist. Absurd comedy is optional, never the default.
+    return f"""Create ONE vertical 9:16 image for a Chispa-Pifia Short: an absurd-but-coherent stickman comedy story. The frame must literally illustrate the supplied narration beat; the comedy comes from character choices, misunderstandings, escalating consequences and a clear payoff. Do not invent random gags or add unrelated events.
 
 {STYLE_LOCK}
 
@@ -396,8 +396,8 @@ def main() -> None:
         raise SystemExit("Missing relic_loop_short.json; run the story generator first")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     scenes = package.get("scenes") or []
-    if not 10 <= len(scenes) <= 14:
-        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the required 10-14 range")
+    if not 10 <= len(scenes) <= 12:
+        raise SystemExit(f"Storyboard beat count {len(scenes)} is outside the required 10-12 range")
 
     refs = _load_reference()
     manifest = {
@@ -411,7 +411,7 @@ def main() -> None:
         "cloudflare_diagnostics": "http_status_response_body_cf_ray_cf_ai_req_id_and_account_id_suffix_logged",
         "story_truth": "literal_scene_reenactment",
         "timing_truth": "assembly recalculates beat durations from actual TTS duration",
-        "image_count_policy": "10-14 meaningful phrase-aligned story beats",
+        "image_count_policy": "10-12 meaningful phrase-aligned story beats",
         "continuity_policy": "canonical_character_and_environment_references_plus_previous_accepted_frame",
         "beats": [],
     }
@@ -470,6 +470,9 @@ def main() -> None:
             "prompt": prompt,
             "beat_text": scene.get("beat_text"),
             "narration": scene.get("narration"),
+            "action": scene.get("action", ""),
+            "camera": scene.get("camera", ""),
+            "mood": scene.get("mood", ""),
             "ocr_suspected": ocr_suspected,
             "used_previous_frame_reference": previous_image is not None and index > 1,
         })
