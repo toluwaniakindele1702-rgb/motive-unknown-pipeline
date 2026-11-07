@@ -35,160 +35,13 @@ STYLE = (
     "switching, random outfit changes, extra limbs/fingers, text, captions, logos or watermarks."
 )
 
-SYSTEM = f"""You are the head writer and visual storyboard director for Chispa-Pifia, an story-first stickman Shorts channel focused on mini-mysteries, suspense, dilemmas, problem-solving and fair twists; absurd comedy is optional.
+SYSTEM = f"""You write one-minute scripts for Chispa-Pifia, a Shorts channel about absurd but coherent stickman comedy.
 
-Create ONE ORIGINAL, MEANINGFUL fictional story centered on a normal HUMAN PROTAGONIST.
-Prioritize genuinely engaging mini-mysteries, suspense, dilemmas, problem-solving and fair plot twists. Absurd comedy is optional, not mandatory. Stories should feel compelling to watch, not merely weird.
-The story must feel like a real mini-story, not a list of random jokes.
+Turn an ordinary situation into a funny escalating incident through a character choice, misunderstanding, overconfidence, failed plan or clever solution. Absurd is welcome; random disconnected events are not. Use natural spoken English, a strong immediate hook, clear cause and effect, visual actions, and a satisfying comedic payoff. No filler, moral, lesson, subscribe line or forced twist.
 
-CORE STORY ENGINE — NON-NEGOTIABLE:
-1. A relatable human problem or goal.
-2. The protagonist makes a clear decision.
-3. That decision causes a concrete consequence.
-4. The protagonist reacts and makes another decision.
-5. The new decision makes the problem worse.
-6. A second escalation follows logically.
-7. A surprising but foreshadowed twist changes how the earlier events are understood.
-8. A satisfying reveal, consequence or payoff ends the story; it may be eerie, clever, emotional, ironic or funny, depending on the premise.
-
-MEANING + CAUSAL-INTEGRITY TEST — NON-NEGOTIABLE:
-Before writing, silently summarize the whole story in ONE sentence using cause and effect. If that summary sounds like a list of unrelated events, discard the premise.
-For EVERY major beat, silently answer:
-- What exactly caused this event?
-- How does it follow from the previous action or established situation?
-- What does the protagonist do in response, and how does that response create the next problem?
-- Would the event make sense under the story's own rules and ordinary real-world logic?
-If any answer is weak, rewrite the beat or replace the premise. Do not rely on coincidence to move the plot forward.
-The viewer must understand the protagonist's goal, why each escalation happens, and how the ending connects to earlier details. Absurd does NOT mean meaningless.
-CONTINUITY / PLAUSIBILITY AUDIT:
-- Never create an obstacle that contradicts the setting's established rules without explaining the cause.
-- Do not use implausible safety or building behavior as a cheap gag (for example, an exit inexplicably locked during a fire alarm/drill).
-- Track where the protagonist, important objects, and other characters are; do not teleport or forget them between beats.
-- If a character loses an object, becomes trapped, misses a deadline, or triggers an alarm, show the action or established rule that caused it.
-- The twist must be surprising but fair: seed the key detail earlier, then reveal its meaning. Do not introduce a brand-new coincidence in the last sentence.
-- Prefer one tightly connected chain of 3-5 escalations over adding extra events just to make the story feel bigger.
-
-LENGTH — HARD LIMIT:
-The complete spoken narration MUST be 150-210 words, targeting roughly 165-195 words for 60-90 seconds of natural narration.
-Do not pad the story. Do not rush it to hit a word count. If the idea cannot support a meaningful 60-90 second story, discard it and create a stronger premise.
-
-STORY QUALITY:
-- Open in the first sentence with a concrete, instantly understandable problem AND a specific constraint, deadline, risk, or goal where useful. Avoid slow introductions.
-- Make the viewer understand what the protagonist wants and why it matters within the first 1-2 sentences.
-- Start the chain quickly: the protagonist makes a clear choice early, and that choice has a visible consequence.
-- Use 3-5 meaningful escalations; each must be caused by the protagonist's prior action, the direct consequence of that action, or a clearly established rule.
-- Escalate the COST or difficulty of the original goal; do not merely increase spectacle.
-- Give the protagonist agency: their decisions should drive the story, including failed attempts to recover the situation.
-- Keep the world grounded and internally consistent. Use humor only when it naturally serves the premise; do not force absurdity.
-- Keep continuity of people, locations, objects, time, and cause-and-effect.
-- Make the twist connected to an earlier detail and make it feel inevitable in hindsight.
-- Check for plot holes, contradictory rules, implausible coincidences, forgotten objects, unexplained escapes, and obstacles that exist only to force the next scene. Repair every one before returning JSON.
-- End immediately after the strongest payoff; do not explain the joke afterward.
-- Use natural conversational spoken English and short, clear sentences that are easy to narrate.
-- No moral, lesson, generic outro or "subscribe" line.
-- The story must still make sense if all visuals are removed.
-
-GOOD PREMISE PATTERN:
-A protagonist faces a clear goal, mystery, risk or dilemma, follows clues or makes consequential decisions, encounters logically connected complications, and reaches a satisfying reveal or payoff. The ending may be clever, eerie, emotional, ironic or funny, but must be earned by the setup.
-Every link must be explicit enough for a viewer to follow on first watch. The ending should pay off the original goal, not abandon it for an unrelated gag.
-
-GOOD EXAMPLES OF PREMISE TYPES:
-- returning something before a deadline
-- trying to fix a small mistake before someone notices
-- trying to save money and accidentally creating a much bigger expense
-- trying to arrive somewhere on time after making one bad shortcut
-- trying to impress someone by pretending to know what he is doing
-- trying to recover a lost item without admitting he lost it
-- trying to finish a simple job before a deadline
-- trying to hide an embarrassing mistake while fixing it
-
-CURIOSITY AND PAYOFF RULE:
-The audience should think: "I need to know what happens next" and, at the ending, "That makes sense now" or "I didn't see that coming, but the clues were there."
-Never make the audience think: "The writer just put a random thing here because it is weird."
-
-ABSOLUTE NO-RANDOMNESS RULES:
-- No random animals appearing as gags.
-- No random dinosaurs, llamas, cats, dogs, monkeys or birds unless an animal is genuinely required by the established story.
-- No objects suddenly becoming alive, talking, running, attacking or forming armies.
-- No random livestreams, memes, websites, videos or digital jokes appearing without causal setup.
-- No unrelated explosions, city-wide chaos or disasters just for spectacle.
-- No "and then suddenly" events unless the sudden event is a direct consequence of the previous action.
-- No meaningless surrealism.
-- No object protagonist.
-- No story whose only joke is "something impossible happened."
-- No disconnected sequence of funny images.
-- No generic "have you ever wondered" intro.
-
-TWIST RULE:
-The final twist must be seeded by an earlier detail, action, rule, person, object, deadline or misunderstanding.
-Do not invent a completely new fact in the final sentence just to create a twist.
-The viewer should be able to look back and say, "Oh. That's why that happened."
-
-VISUAL TRUTH:
-Narration is the source of truth. Every image is a literal reenactment of one meaningful moment in the narration.
-Each visual beat must answer: WHO is there, WHERE are they, WHAT are they doing, and WHY is it happening now?
-Never invent visual jokes that are absent from the story.
-
-STORYBOARD BEAT COUNT — VISUAL PACING:
-Create 10-14 distinct visual beats/scenes for a normal 60-90 second Short. This is a practical range, not a fixed duration per image. Nine or fewer is too sparse; more than 14 is not allowed.
-Split the narration at natural sentence endings first, then at meaningful phrase/clause boundaries when a sentence contains multiple visible actions. Each image should cover one short spoken phrase or one compact sentence, not a whole paragraph. Aim for a new image as the spoken narration moves to the next meaningful phrase/action, roughly 12-18 words per beat on average for a 150-210 word narration, but use shorter phrases when a meaningful visual change happens and longer excerpts when one sentence describes a single continuous moment.
-Do not assign every image the same number of seconds. Each scene's narration must be a contiguous exact excerpt from the master narration, in order, with no missing, duplicated, paraphrased, or reordered words. The editor must time each image to its own spoken excerpt, so shorter phrases display for less time and longer phrases display for longer time.
-Do not pad with meaningless filler, duplicate poses, or split one unchanged moment arbitrarily. Preserve the coherent causal story while showing its meaningful visual changes.
-Final assembly uses the actual neural narration as the master timeline; scene duration values are estimates only and must not control final image timing.
-
-CHARACTERS:
-- The protagonist is a normal human represented as a stickman.
-- The protagonist must actively make decisions.
-- Other humans may appear only when the story requires them.
-- Keep character roles and appearances consistent across scenes.
+The spoken narration must be 125-145 words. Return one complete JSON package with title, hook, narration, characters, locations, story_structure, scenes, flow_prompt, youtube_description and tags. Include a human stickman protagonist, 10-12 ordered scenes whose narration excerpts exactly reconstruct the master narration, and concrete 45-80 word visual prompts for each scene. Scene 1 must show the opening problem clearly. No text in images. story_structure must include problem, goal, causal_chain, escalations, twist and punchline. If there is no twist, say so plainly. Return JSON only.
 
 VISUAL STYLE: {STYLE}
-
-SCENE RULES:
-- The complete storyboard MUST have 10-14 scenes; fewer than 10 or more than 14 is invalid.
-- Divide scenes at natural sentence/phrase boundaries so each image changes with the spoken text; never use a fixed seconds-per-image rule.
-- Every scene describes exactly one meaningful moment.
-- Every scene contains the protagonist or a directly relevant visible consequence.
-- beat_text, narration, visual_prompt and action describe the same event.
-- visual_prompt explicitly includes "human stickman" or "stickman protagonist".
-- No captions, subtitles, title cards, speech bubbles, logos, watermarks, UI or plot text in images.
-
-Return ONLY valid JSON with this shape:
-{{
-  "title":"...",
-  "hook":"...",
-  "narration":"complete spoken narration",
-  "characters":[{{"name":"A","role":"human protagonist","appearance":"..."}}],
-  "locations":["..."],
-  "story_structure":{{
-    "problem":"...",
-    "goal":"...",
-    "causal_chain":[
-      "1. Initial problem",
-      "2. Protagonist decision",
-      "3. Immediate consequence",
-      "4. Attempt to fix it",
-      "5. Further escalation",
-      "6. Foreshadowed twist",
-      "7. Punchline payoff"
-    ],
-    "escalations":["first cause-and-effect escalation","second escalation caused by the protagonist's response","third escalation that sets up the twist"],
-    "twist":"...",
-    "punchline":"..."
-  }},
-  "scenes":[{{
-    "number":1,
-    "duration_seconds":3.0,
-    "beat_text":"literal event happening now",
-    "narration":"CONTIGUOUS EXACT EXCERPT FROM FULL NARRATION",
-    "visual_prompt":"literal visible shot of the human stickman protagonist, no interpretation",
-    "camera":"...",
-    "action":"exact visible action"
-  }}],
-  "flow_prompt":"...",
-  "youtube_description":"...",
-  "tags":["...","..."]
-}}
 """
 
 
@@ -413,27 +266,16 @@ Approval gate: overall_score must be at least 8, opening_image must be at least 
 
 
 def make_prompt(topic: str | None, retry: bool = False, feedback: str = "") -> str:
-    old = history()
-    used = "" if not old else "Avoid repeating these previous titles: " + "; ".join(old[-25:])
-    seed = f"Story seed: {topic}." if topic else "Invent an original, highly engaging story-first Short built around a mini-mystery, suspenseful situation, dilemma, problem-solving challenge or fair twist. Absurd comedy is optional, not the default."
-    retry_note = (
-        "The previous package failed validation. Rebuild it from scratch. Do not patch the failed story. "
-        "Audit cause and effect beat by beat: every event needs an established cause, every attempted fix must change the situation, and the ending must pay off the original goal. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. Do not use implausible safety/building behavior as a cheap gag (for example, an exit inexplicably locked during a fire alarm/drill). "
-        "Write causal_chain as a JSON ARRAY of at least 5 separate short strings, one causal stage per item; never put the entire chain in one array item. "
-        "Write at least 3 separate escalations, each caused by the protagonist's response to the previous problem. "
-        "Make the first sentence an immediate concrete hook, make the protagonist's goal matter, remove every event that exists only because it is weird, and ensure the twist is seeded earlier. "
-        "The final narration must be 150-210 words and every scene narration must exactly partition it. "
-        "The storyboard MUST contain 10-14 separate scenes. Nine or fewer is too sparse; more than fourteen is invalid. Divide narration at natural sentence boundaries and then meaningful phrase/clause boundaries, with each image showing the phrase currently being spoken. Keep exact contiguous narration excerpts; do not use filler or duplicate moments. Do not set a fixed seconds-per-image duration."
-        if retry else
-        "Build and audit the full causal chain silently before writing. For every beat, verify what caused it, how it follows from the prior beat, and how it changes the protagonist's next decision. Repair plot holes, contradictory rules, implausible coincidences, forgotten objects/characters, and unexplained location changes. "
-        "Use a concrete first-sentence hook with a clear goal and constraint; start the protagonist's first consequential decision early. Each escalation must worsen the original problem because of an established cause, not merely add spectacle. The twist must be seeded earlier and pay off the original goal. "
-        "Then output causal_chain as at least 5 separate JSON array items, not one combined sentence. Output at least 3 separate escalation items. The story must be meaningful and compelling first; comedy is optional and must never replace coherence. "
-        "The storyboard MUST contain 10-14 separate scenes for the 60-90 second narration. Make each image correspond to a natural sentence or short spoken phrase; split long sentences at meaningful action/reaction/consequence/reveal boundaries. Each scene must contain a short exact contiguous narration excerpt. Do not add filler, duplicate moments, or assign a fixed duration to every image. "
-        "Do not force extra plot events to reach length; show the existing causal story in more visual detail. If the premise is weak, replace it with a stronger premise."
-    )
-    feedback_block = ("\nINDEPENDENT STORY-QUALITY REVIEW FEEDBACK — FIX EVERY POINT, DO NOT DEFEND THE OLD DRAFT:\n" + feedback + "\n" if feedback else "")
-    return f"{seed}\n{used}\n{retry_note}{feedback_block}\nWrite the complete JSON package now."
-
+    history_text = "; ".join(history()[-20:])
+    seed = f"Start from this idea: {topic}" if topic else "Invent a fresh absurd-but-coherent stickman comedy situation."
+    return "\\n".join(part for part in (
+        seed,
+        "Avoid repeating these previous titles or premises: " + history_text if history_text else "",
+        "Write a complete 125-145 word spoken script and its 10-12 visual scenes.",
+        "Make the situation funny through understandable cause and effect, character choices and a satisfying payoff.",
+        "Return the complete required JSON package only.",
+        "Recovery instruction: " + feedback if retry and feedback else "",
+    ) if part)
 
 def generate(topic: str | None) -> dict[str, Any]:
     if not KEY:
