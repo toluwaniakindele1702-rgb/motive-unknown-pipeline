@@ -252,8 +252,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
 
     narration = _norm_text(str(obj.get("narration", "")))
     wc = words(narration)
-    if not 150 <= wc <= 210:
-        errors.append(f"narration_words={wc}_hard_limit_150_210")
+    if not 125 <= wc <= 145:
+        errors.append(f"narration_words={wc}_hard_limit_125_145_one_minute")
 
     chars = obj.get("characters")
     if not isinstance(chars, list) or not chars:
@@ -549,10 +549,10 @@ def write(obj: dict[str, Any]) -> None:
         "story_word_count": words(obj["narration"]),
         "estimated_storyboard_seconds": runtime_estimate,
         "image_beat_count": len(scenes),
-        "image_count_policy": "10_to_14_phrase_aligned_visual_beats",
+        "image_count_policy": "10_to_12_phrase_aligned_visual_beats",
         "zero_text_gate": "strict_ocr_reject_after_retry_in_image_renderer",
         "text_policy": "no_deliberate_story_text",
-        "story_policy": "story_first_mystery_suspense_dilemma_twist_60_90_seconds",
+        "story_policy": "absurd_but_coherent_stickman_comedy_about_60_seconds",
         "story_quality_gate": "independent_editor_score_minimum_8_of_10",
         "timing_policy": "narration_is_master_timeline",
         "media_generation": "cloudflare_images",
