@@ -9,17 +9,6 @@ on:
         required: false
         default: ""
         type: string
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/chispa_pifia_v2.yml"
-      - "chispa_pifia_v2.py"
-      - "chispa_pifia_contact_sheet.py"
-      - "cloudflare_relic_loop_images.py"
-      - "cloudflare_relic_loop_images_peanut.py"
-      - "assemble_relic_loop_short.py"
-      - "edge_tts.py"
-      - "youtube_upload.py"
 
 concurrency:
   group: chispa-pifia-v2
