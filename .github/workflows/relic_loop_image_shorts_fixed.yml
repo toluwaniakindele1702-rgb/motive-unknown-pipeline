@@ -43,9 +43,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --retries 5 --timeout 120 --prefer-binary groq requests pillow
+          python -m pip install --retries 5 --timeout 120 --prefer-binary \
+            'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' \
+            'numpy>=2.0,<3' 'soundfile>=0.13,<1.0' 'kokoro>=0.9.4,<1.0'
           sudo apt-get update
-          sudo apt-get install -y ffmpeg espeak-ng tesseract-ocr
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng tesseract-ocr
 
       - name: Check required secrets
         run: |
