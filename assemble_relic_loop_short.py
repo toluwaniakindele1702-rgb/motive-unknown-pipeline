@@ -30,7 +30,7 @@ VOICE = __import__("os").environ.get("RELIC_LOOP_KOKORO_VOICE", "am_liam")
 VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
 TTS_RETRIES = 3
-TTS_TIMEOUT_SECONDS = 120
+TTS_TIMEOUT_SECONDS = 240
 MIN_SHORT_SECONDS = 60.0
 MAX_SHORT_SECONDS = 90.0
 TARGET_SHORT_SECONDS = 65.0
@@ -251,19 +251,24 @@ def main() -> None:
     story = json.loads(STORY.read_text(encoding="utf-8"))
     beats = data.get("beats") or []
     narration = _norm(story.get("narration", ""))
-    if not beats:
-        raise SystemExit("Story contains no rendered visual beats")
+    if not 10 <= len(beats) <= 12:
+        raise SystemExit(f"Rendered beat count {len(beats)} is outside the one-minute format's 10-12 scene range")
     if _word_count(narration) < 50:
         raise SystemExit("Master narration is too short")
 
-    audio_duration = make_voiceover(narration)
     total_words = _word_count(narration)
-
-    beat_word_counts = [_word_count(str(b.get("narration", ""))) for b in beats]
+    beat_narrations = [_norm(str(b.get("narration", ""))) for b in beats]
+    if any(not part for part in beat_narrations):
+        raise SystemExit("Every visual beat must contain narration text")
+    reconstructed_narration = " ".join(beat_narrations)
+    if reconstructed_narration != narration:
+        raise SystemExit("Rendered beat narration does not exactly reconstruct the master narration in order")
+    beat_word_counts = [_word_count(part) for part in beat_narrations]
     if sum(beat_word_counts) != total_words:
         raise SystemExit(f"Beat narration does not cover the complete story: beat_words={sum(beat_word_counts)}, master_words={total_words}. Refusing to make a video where visuals and narration drift apart.")
-    if any(count <= 0 for count in beat_word_counts):
-        raise SystemExit("Every visual beat must contain narration text")
+
+    # Validate the image/narration handoff before spending time on voice synthesis.
+    audio_duration = make_voiceover(narration)
 
     raw_durations = [audio_duration * count / total_words for count in beat_word_counts]
     durations = [max(0.20, d) for d in raw_durations]
