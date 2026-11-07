@@ -222,7 +222,7 @@ Score each category from 1 to 10:
 3. CHARACTER AGENCY: the protagonist makes understandable choices that drive the story.
 4. ESCALATION: stakes or difficulty meaningfully rise; beats are not repetitive.
 5. ORIGINALITY: premise and execution feel specific, not like a stock AI story or a familiar trope with names swapped.
-6. PAYOFF: ending is surprising but fair, emotionally or comically satisfying, and resolves the central goal.
+6. PAYOFF: ending delivers a strong, satisfying comedic payoff that resolves the central goal. A twist is optional.
 7. NATURALNESS: sounds like a human storyteller, not a checklist, synopsis, or awkward AI-generated prose.
 8. VISUAL STORYTELLING: actions and reveals can be understood clearly in images without relying on text.
 9. COHERENCE: no plot holes, arbitrary coincidences, unexplained behavior, missing objects, or contradictions.
@@ -230,7 +230,7 @@ Score each category from 1 to 10:
 11. OPENING IMAGE: scene 1 is a specific, visually arresting, truthful hook that can be understood at phone size immediately; it shows a strong action or visible consequence, expressive acting, and a story-critical prop, rather than a generic pose or empty establishing shot.
 
 Be strict. A story that merely follows the requested structure is NOT automatically good.
-Reject vague stakes, predictable or unearned twists, random events, fake complexity, repetitive failed attempts, characters acting irrationally for convenience, and endings that explain rather than deliver a payoff.
+Reject vague stakes, forced or unearned twists, random disconnected events, fake complexity, repetitive failed attempts, characters acting irrationally for convenience, and endings that explain rather than deliver a funny payoff.
 Do not reward a story for including a twist if the twist is obvious, unsupported, or irrelevant to the original problem.
 Return ONLY JSON:
 {"approved":true|false,"overall_score":1,"scores":{"hook":1,"causality":1,"agency":1,"escalation":1,"originality":1,"payoff":1,"naturalness":1,"visual_storytelling":1,"coherence":1,"retention":1,"opening_image":1},"fatal_flaws":["specific flaw"],"rewrite_instructions":["specific actionable fix"]}
