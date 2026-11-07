@@ -26,7 +26,7 @@ FRAMES.mkdir(parents=True, exist_ok=True)
 FPS = 30
 W = 576
 H = 1024
-VOICE = __import__("os").environ.get("RELIC_LOOP_TTS_VOICE", "en-US-GuyNeural")
+VOICE = __import__("os").environ.get("RELIC_LOOP_KOKORO_VOICE", "am_liam")
 VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
 TTS_RETRIES = 3
