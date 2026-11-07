@@ -316,7 +316,7 @@ def main() -> None:
     timing = {
         "timing_policy": "narration_is_master_timeline",
         "duration_policy": "neural_narration_is_automatically_retimed_to_60_90_seconds_before_visual_assembly",
-        "image_count_policy": "10_to_14_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
+        "image_count_policy": "10_to_12_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
         "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
         "master_narration_words": total_words,
