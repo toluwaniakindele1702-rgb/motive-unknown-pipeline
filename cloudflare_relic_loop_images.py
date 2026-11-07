@@ -419,8 +419,10 @@ def main() -> None:
     previous_scene = None
     previous_image: bytes | None = None
     for index, scene in enumerate(scenes, 1):
+        # Check image instructions, not spoken narration. A character may legitimately
+        # read or mention a sign in the story while the generated image keeps it blank.
         scene_fields = " ".join(
-            str(scene.get(k, "")) for k in ("beat_text", "narration", "visual_prompt", "action", "camera")
+            str(scene.get(k, "")) for k in ("visual_prompt", "camera")
         )
         if STORY_TEXT_REQUEST_RE.search(scene_fields):
             raise SystemExit(f"Prompt safety gate failed for beat {index}: deliberate story text requested")
