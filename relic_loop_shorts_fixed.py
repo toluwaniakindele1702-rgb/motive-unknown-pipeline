@@ -35,14 +35,7 @@ STYLE = (
     "switching, random outfit changes, extra limbs/fingers, text, captions, logos or watermarks."
 )
 
-SYSTEM = f"""You write one-minute scripts for Chispa-Pifia, a Shorts channel about absurd but coherent stickman comedy.
-
-Turn an ordinary situation into a funny escalating incident through a character choice, misunderstanding, overconfidence, failed plan or clever solution. Absurd is welcome; random disconnected events are not. Use natural spoken English, a strong immediate hook, clear cause and effect, visual actions, and a satisfying comedic payoff. No filler, moral, lesson, subscribe line or forced twist.
-
-The spoken narration must be 125-145 words. Return one complete JSON package with title, hook, narration, characters, locations, story_structure, scenes, flow_prompt, youtube_description and tags. Include a human stickman protagonist with name, role and appearance, at least one location, and 10-12 ordered scenes whose narration excerpts exactly reconstruct the master narration. Every scene needs a plausible duration estimate of 3-8 seconds and a concrete 45-80 word visual prompt (55-80 words for scene 1). Scene 1 must show the opening problem clearly. No text in images. story_structure must include problem, goal, at least 4 causal_chain items, at least 3 escalations, twist and punchline. If there is no twist, say so plainly. Return JSON only.
-
-VISUAL STYLE: {STYLE}
-"""
+SYSTEM = ""
 
 
 def history() -> list[str]:
@@ -215,19 +208,6 @@ def validate(obj: dict[str, Any]) -> list[str]:
     return errors
 
 
-def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
-    result = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
-        temperature=temperature,
-        # Keep prompt + reserved completion budget below Groq's 8k TPM request ceiling.
-        # The production wrapper uses compact 125-145 word stories and 10-12 beats.
-        max_completion_tokens=4500,
-        response_format={"type": "json_object"},
-    )
-    return result.choices[0].message.content or ""
-
-
 
 
 def review_story(client: Groq, obj: dict[str, Any]) -> dict[str, Any]:
@@ -278,86 +258,13 @@ Approval gate: overall_score must be at least 8, opening_image must be at least 
     return parse_json(result.choices[0].message.content or "")
 
 
-def make_prompt(topic: str | None, retry: bool = False, feedback: str = "") -> str:
-    history_text = "; ".join(history()[-20:])
-    seed = f"Start from this idea: {topic}" if topic else "Invent a fresh absurd-but-coherent stickman comedy situation."
-    return "\n".join(part for part in (
-        seed,
-        "Avoid repeating these previous titles or premises: " + history_text if history_text else "",
-        "Write a complete 125-145 word spoken script and its 10-12 visual scenes.",
-        "Make the situation funny through understandable cause and effect, character choices and a satisfying payoff.",
-        "Return the complete required JSON package only.",
-        "Recovery instruction: " + feedback if retry and feedback else "",
-    ) if part)
+
+
 
 def generate(topic: str | None) -> dict[str, Any]:
-    if not KEY:
-        raise RuntimeError("GROQ_API_KEY is required")
-    client = Groq(api_key=KEY)
-    last: Exception | None = None
-    feedback = ""
-    for attempt in range(3):
-        try:
-            obj = parse_json(request(
-                client,
-                make_prompt(topic, retry=attempt > 0, feedback=feedback),
-                temperature=0.82 if attempt == 0 else 0.62,
-            ))
-            normalize_scenes(obj)
-            errors = validate(obj)
-            if errors:
-                last = ValueError("structural validation failed: " + ", ".join(errors[:20]))
-                print(f"[SHORTS] structural validation failed ({len(errors)} issue(s)): {errors[:10]}")
-                feedback = "The previous draft failed machine validation: " + ", ".join(errors[:20])
-                if attempt < 2:
-                    time.sleep(2)
-                    continue
-                break
-
-            # A valid JSON structure is not proof of a good story. Have a separate editor
-            # score the actual narrative and require a rewrite when quality is below threshold.
-            review = review_story(client, obj)
-            score = int(review.get("overall_score", 0) or 0)
-            approved = review.get("approved") is True and score >= 8
-            print(f"[SHORTS] independent story review: approved={approved}, score={score}/10")
-            print("[SHORTS] review scores: " + json.dumps(review.get("scores", {}), ensure_ascii=False))
-            if not approved:
-                flaws = review.get("fatal_flaws", [])
-                fixes = review.get("rewrite_instructions", [])
-                feedback = json.dumps({
-                    "overall_score": score,
-                    "scores": review.get("scores", {}),
-                    "fatal_flaws": flaws,
-                    "rewrite_instructions": fixes,
-                }, ensure_ascii=False)
-                last = ValueError(f"story quality review rejected draft ({score}/10)")
-                print(f"[SHORTS] quality gate rejected draft: {feedback[:1800]}")
-                if attempt < 2:
-                    time.sleep(2)
-                    continue
-                break
-
-            obj["story_quality_review"] = {
-                "reviewer_model": REVIEW_MODEL,
-                "approved": True,
-                "overall_score": score,
-                "scores": review.get("scores", {}),
-                "fatal_flaws": review.get("fatal_flaws", []),
-            }
-            obj["generated_at"] = datetime.now(timezone.utc).isoformat()
-            obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-            obj["timing_policy"] = "Narration is the master timeline for a roughly 60-second Short; 10-12 image beats follow its spoken phrases."
-            obj["story_policy"] = "absurd_but_coherent_stickman_comedy_about_60_seconds"
-            obj["style_policy"] = STYLE
-            return obj
-        except Exception as exc:
-            last = exc
-            msg = str(exc).lower()
-            wait = 65 if any(x in msg for x in ("429", "rate limit", "rate_limit")) else 5 + attempt * 5
-            if attempt < 2:
-                print(f"[SHORTS] attempt {attempt + 1} failed: {exc}; waiting {wait}s")
-                time.sleep(wait)
-    raise RuntimeError(f"Could not generate a valid Chispa-Pifia story package after quality checks: {last}")
+    """Compatibility entry point; all production writing now uses the script-first generator."""
+    from relic_loop_shorts_production import generate as production_generate
+    return production_generate(topic)
 
 
 def write(obj: dict[str, Any]) -> None:
