@@ -1,4 +1,4 @@
-"""Chispa-Pifia story generator: story-first 60-90 second mystery, suspense, dilemma and twist Shorts."""
+"""Chispa-Pifia one-minute absurd-but-coherent stickman comedy Shorts generator."""
 from __future__ import annotations
 
 import json
@@ -39,7 +39,7 @@ SYSTEM = f"""You write one-minute scripts for Chispa-Pifia, a Shorts channel abo
 
 Turn an ordinary situation into a funny escalating incident through a character choice, misunderstanding, overconfidence, failed plan or clever solution. Absurd is welcome; random disconnected events are not. Use natural spoken English, a strong immediate hook, clear cause and effect, visual actions, and a satisfying comedic payoff. No filler, moral, lesson, subscribe line or forced twist.
 
-The spoken narration must be 125-145 words. Return one complete JSON package with title, hook, narration, characters, locations, story_structure, scenes, flow_prompt, youtube_description and tags. Include a human stickman protagonist, 10-12 ordered scenes whose narration excerpts exactly reconstruct the master narration, and concrete 45-80 word visual prompts for each scene. Scene 1 must show the opening problem clearly. No text in images. story_structure must include problem, goal, causal_chain, escalations, twist and punchline. If there is no twist, say so plainly. Return JSON only.
+The spoken narration must be 125-145 words. Return one complete JSON package with title, hook, narration, characters, locations, story_structure, scenes, flow_prompt, youtube_description and tags. Include a human stickman protagonist, 10-12 ordered scenes whose narration excerpts exactly reconstruct the master narration, and concrete 45-80 word visual prompts for each scene (55-80 words for scene 1). Scene 1 must show the opening problem clearly. No text in images. story_structure must include problem, goal, causal_chain with at least 4 items, escalations with at least 3 items, twist and punchline. If there is no twist, say so plainly. Return JSON only.
 
 VISUAL STYLE: {STYLE}
 """
@@ -208,7 +208,7 @@ def request(client: Groq, user_prompt: str, temperature: float = 0.78) -> str:
         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt}],
         temperature=temperature,
         # Keep prompt + reserved completion budget below Groq's 8k TPM request ceiling.
-        # The production wrapper uses compact 150-210 word stories and 10-14 beats.
+        # The production wrapper uses compact 125-145 word stories and 10-12 beats.
         max_completion_tokens=4500,
         response_format={"type": "json_object"},
     )
