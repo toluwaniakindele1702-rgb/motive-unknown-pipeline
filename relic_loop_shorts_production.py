@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 import relic_loop_shorts_fixed as base
 
@@ -105,6 +106,14 @@ def generate(topic: str | None) -> dict:
         except Exception as exc:
             last_error = str(exc)
             print(f"[CHISPA] generation attempt {attempt}/2 failed: {exc}")
+            if attempt < 2:
+                message = str(exc).lower()
+                wait_seconds = 65 if any(
+                    marker in message
+                    for marker in ("429", "rate limit", "rate_limit", "tokens per minute", "tpm")
+                ) else 4
+                print(f"[CHISPA] retrying after {wait_seconds}s")
+                time.sleep(wait_seconds)
 
     else:
         selected = None
