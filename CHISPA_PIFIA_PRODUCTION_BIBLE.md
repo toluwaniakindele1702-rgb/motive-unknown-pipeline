@@ -1,7 +1,7 @@
 # Chispa-Pifia / absurd stickman Shorts production bible
 
 ## Goal
-Produce original 20–45 second absurd-comedy Shorts with an immediate hook, causal escalation, and a surprising payoff. This is a production specification, not a promise of virality.
+Produce original approximately 60-second absurd-comedy Shorts with a 125–145 word spoken script, an immediate hook, causal escalation, and a satisfying comedic payoff. This is a production specification, not a promise of virality.
 
 ## Visual identity
 - Expressive 2D stickman cartoon, bold clean black outlines, round simple head, minimal facial marks, thin limbs, readable hands and exaggerated poses.
@@ -21,9 +21,9 @@ Produce original 20–45 second absurd-comedy Shorts with an immediate hook, cau
 7. End immediately after the punchline; no moral or generic outro.
 
 ## Beat design
-- Target 18–28 distinct visual beats for a 20–45 second Short, with 16–32 accepted by validation.
+- Target 10–12 distinct visual beats for an approximately 60-second Short.
 - Split on meaningful changes in action, reaction, consequence, object state, location, reveal, or punchline—not automatically on every comma.
-- Most beats should last about 0.7–1.8 seconds; allow longer holds only for a deliberate reaction or reveal.
+- Let each still image hold for the share of narration it illustrates; use longer holds for deliberate reactions or reveals.
 - Vary wide, medium, close-up, and reaction framing when it improves clarity.
 - Every image must reenact the narration's exact beat. No unrelated visual gags.
 - The opening image must communicate the premise without requiring captions.
