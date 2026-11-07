@@ -242,7 +242,7 @@ characters must be a non-empty array of objects with name, role, appearance.
 The protagonist role must identify a human/person.
 story_structure must contain problem, goal, causal_chain (at least 5 separate array items),
 escalations (at least 3 separate items), twist, and punchline.
-Use an empty string for twist or punchline when not applicable; do not force either.
+Keep twist and punchline non-empty: if there is no twist, state that plainly; describe the actual payoff in punchline. Never invent a twist just to fill a field.
 Do not include scenes, visual prompts, flow_prompt, markdown, or commentary."""
 
 
