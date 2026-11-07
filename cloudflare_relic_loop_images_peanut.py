@@ -198,7 +198,15 @@ def _ovhcloud(prompt: str) -> bytes:
             response = requests.post(url, headers=headers, json=payload, timeout=240)
             _LAST_OVH_REQUEST_AT = time.monotonic()
             if not response.ok:
-                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:1000]}")
+                body = response.text[:1000]
+                if response.status_code == 401 and "not allowed to perform the required actions on any tenant" in body.lower():
+                    raise RuntimeError(
+                        "OVHcloud rejected this token for AI Endpoints. Create the key inside the intended "
+                        "Public Cloud project: AI & Machine Learning > AI Endpoints > API key. "
+                        "A general OVHcloud API token is not the AI Endpoints key, and the Public Cloud "
+                        "project must have a payment method attached (Discovery-mode projects cannot use AI Endpoints)."
+                    )
+                raise RuntimeError(f"HTTP {response.status_code}: {body}")
             return _normalize_image(_extract_image(response))
         except requests.RequestException as exc:
             last_error = f"{type(exc).__name__}: {exc}"
