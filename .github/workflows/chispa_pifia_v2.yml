@@ -99,7 +99,32 @@ jobs:
           ffprobe -version | sed -n '1p'
           tesseract --version | sed -n '1p'
           tesseract --list-langs | grep -qx eng || { echo "::error::Tesseract English language data is missing"; exit 1; }
-          python -c "import groq, requests, numpy, soundfile, edge_tts; from kokoro import KPipeline; from PIL import Image; from googleapiclient.discovery import build; from google.oauth2.credentials import Credentials; print('Production imports passed')"
+          ffmpeg -filters > /tmp/ffmpeg-filters.txt
+          grep -q 'zoompan' /tmp/ffmpeg-filters.txt || { echo "::error::FFmpeg zoompan filter is unavailable"; exit 1; }
+          python - <<'PY'
+          import groq, requests, numpy, soundfile, edge_tts
+          from kokoro import KPipeline
+          from PIL import Image
+          from googleapiclient.discovery import build
+          from google.oauth2.credentials import Credentials
+          from edge_tts import _get_pipeline
+          print("Production imports passed")
+          print("Loading Kokoro voice model before image generation...")
+          _get_pipeline()
+          print("Kokoro voice model preflight passed")
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          refs = [
+              Path("assets/visual_references/Generate_modern_stickman_character_20261027121745.jpg"),
+              Path("assets/visual_references/Remove_bag_and_animate_image_20261027125028.jpg"),
+          ]
+          for path in refs:
+              with Image.open(path) as image:
+                  image.verify()
+              print(f"Visual reference verified: {path.name}")
+          PY
           echo "Image route: authenticated OVHcloud SDXL primary; Cloudflare FLUX.2 Klein fallback when configured."
 
       - name: Verify YouTube channel access before image generation
