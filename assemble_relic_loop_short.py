@@ -26,7 +26,7 @@ FRAMES.mkdir(parents=True, exist_ok=True)
 FPS = 30
 W = 576
 H = 1024
-VOICE = __import__("os").environ.get("RELIC_LOOP_KOKORO_VOICE", "am_liam")
+VOICE = __import__("os").environ.get("RELIC_LOOP_TTS_VOICE", "en-US-GuyNeural")
 VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
 TTS_RETRIES = 3
@@ -145,7 +145,7 @@ def validate_image(image: Path, index: int) -> None:
             if im.width < W or im.height < H:
                 raise ValueError(f"image is only {im.width}x{im.height}; need at least {W}x{H}")
     except Exception as exc:
-        raise SystemExit(f"Invalid Cloudflare image for beat {index}: {exc}") from exc
+        raise SystemExit(f"Invalid generated image for beat {index}: {exc}") from exc
 
 
 def _ease(frame: str, frames: int) -> str:
