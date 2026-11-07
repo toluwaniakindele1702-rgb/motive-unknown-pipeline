@@ -1,7 +1,7 @@
 """Chispa-Pifia multi-provider image router.
 
-Priority: Pollinations (reference-guided edits) -> OVHcloud SDXL (prompt-only)
--> Cloudflare Workers AI (reference-guided final fallback).
+Priority: OVHcloud SDXL (free anonymous text-to-image) -> Cloudflare Workers AI
+(FLUX.2 Klein 4B, reference-guided fallback).
 The existing renderer retains storyboard, continuity, OCR, and manifest handling.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 
 import cloudflare_relic_loop_images as base
 
@@ -90,21 +90,18 @@ def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, atte
 
 base._scene_prompt = _peanut_scene_prompt
 
-POLLINATIONS_KEY = os.environ.get("POLLINATIONS_API_KEY", "").strip()
-POLLINATIONS_MODEL = os.environ.get(
-    "POLLINATIONS_IMAGE_MODEL", "bytedance/seedream-4.0"
-).strip()
-POLLINATIONS_URL = "https://gen.pollinations.ai/v1/images/edits"
-
 OVH_TOKEN = os.environ.get("OVH_AI_ENDPOINTS_ACCESS_TOKEN", "").strip()
 OVH_MODEL = os.environ.get("OVH_IMAGE_MODEL", "stable-diffusion-xl-base-v10").strip()
 OVH_URL = os.environ.get(
     "OVH_IMAGE_ENDPOINT",
     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations",
 ).strip()
+OVH_ANONYMOUS_URL = "https://stable-diffusion-xl.endpoints.kepler.ai.cloud.ovh.net/api/text2image"
+OVH_MIN_INTERVAL_SECONDS = 31.0
+_LAST_OVH_REQUEST_AT = 0.0
 
 PROVIDER_EVENTS: list[dict] = []
-PROVIDER_COUNTS: dict[str, int] = {"pollinations": 0, "ovhcloud": 0, "cloudflare": 0}
+PROVIDER_COUNTS: dict[str, int] = {"ovhcloud": 0, "cloudflare": 0}
 
 class PollinationsBalanceError(RuntimeError):
     """Pollinations accepted the request but the account has no spendable pollen."""
@@ -123,23 +120,20 @@ def _record(provider: str, status: str, detail: str = "") -> None:
 
 
 def _normalize_image(blob: bytes) -> bytes:
-    """Normalize every provider output to the renderer's required vertical canvas."""
+    """Fit provider output to 9:16 without cropping away important scene content."""
     try:
         with Image.open(BytesIO(blob)) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
-            target_ratio = base.WIDTH / base.HEIGHT
-            current_ratio = image.width / image.height
-            if current_ratio > target_ratio:
-                new_width = max(1, round(image.height * target_ratio))
-                left = (image.width - new_width) // 2
-                image = image.crop((left, 0, left + new_width, image.height))
-            elif current_ratio < target_ratio:
-                new_height = max(1, round(image.width / target_ratio))
-                top = (image.height - new_height) // 2
-                image = image.crop((0, top, image.width, top + new_height))
-            image = image.resize((base.WIDTH, base.HEIGHT), Image.Resampling.LANCZOS)
+            target = (base.WIDTH, base.HEIGHT)
+            background = ImageOps.fit(image, target, method=Image.Resampling.LANCZOS)
+            background = background.filter(ImageFilter.GaussianBlur(radius=28))
+            foreground = image.copy()
+            foreground.thumbnail(target, Image.Resampling.LANCZOS)
+            x = (target[0] - foreground.width) // 2
+            y = (target[1] - foreground.height) // 2
+            background.paste(foreground, (x, y))
             output = BytesIO()
-            image.save(output, format="PNG", optimize=True)
+            background.save(output, format="PNG", optimize=True)
             return output.getvalue()
     except Exception as exc:
         raise RuntimeError(f"Provider returned an unreadable image: {type(exc).__name__}: {exc}") from exc
@@ -171,78 +165,41 @@ def _extract_image(response: requests.Response) -> bytes:
     raise RuntimeError(f"Image API response has neither b64_json nor url: {json.dumps(item)[:500]}")
 
 
-def _pollinations(prompt: str, refs: list[tuple[str, bytes, str]] | None) -> bytes:
-    if not POLLINATIONS_KEY:
-        raise RuntimeError("POLLINATIONS_API_KEY is not configured")
-    if not refs:
-        raise RuntimeError("Pollinations reference-edit mode requires canonical reference images")
-    headers = {"Authorization": f"Bearer {POLLINATIONS_KEY}"}
-    files = []
-    for idx, (name, blob, mime) in enumerate(refs[:3]):
-        files.append(("image", (f"reference_{idx}.jpg", blob, mime or "image/jpeg")))
-    data = {
-        "model": POLLINATIONS_MODEL,
-        "prompt": prompt,
-        "size": f"{base.WIDTH}x{base.HEIGHT}",
-        "response_format": "b64_json",
-        "n": "1",
-    }
-    last_error = None
-    for attempt in range(1, 3):
-        try:
-            print(
-                f"[POLLINATIONS] edit attempt {attempt}/2 model={POLLINATIONS_MODEL} "
-                f"references={len(files)} size={base.WIDTH}x{base.HEIGHT}"
-            )
-            response = requests.post(
-                POLLINATIONS_URL, headers=headers, data=data, files=files, timeout=240
-            )
-            if not response.ok:
-                message = response.text[:1000]
-                if response.status_code == 402:
-                    try:
-                        error_payload = response.json()
-                    except ValueError:
-                        error_payload = {}
-                    error = error_payload.get("error") or {}
-                    if error.get("code") == "INSUFFICIENT_BALANCE":
-                        raise PollinationsBalanceError(
-                            "Pollinations returned HTTP 402 INSUFFICIENT_BALANCE: "
-                            + str(error.get("message") or message)
-                        )
-                raise RuntimeError(f"HTTP {response.status_code}: {message}")
-            return _normalize_image(_extract_image(response))
-        except requests.RequestException as exc:
-            last_error = f"{type(exc).__name__}: {exc}"
-            if attempt < 2:
-                time.sleep(5 * attempt)
-        except PollinationsBalanceError:
-            raise
-        except RuntimeError as exc:
-            last_error = str(exc)
-            status = getattr(locals().get("response"), "status_code", 0)
-            if status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                break
-            time.sleep(5 * attempt)
-    raise RuntimeError(last_error or "Pollinations image edit failed")
-
-
 def _ovhcloud(prompt: str) -> bytes:
-    if not OVH_TOKEN:
-        raise RuntimeError("OVH_AI_ENDPOINTS_ACCESS_TOKEN is not configured")
-    headers = {"Authorization": f"Bearer {OVH_TOKEN}"}
-    payload = {
-        "model": OVH_MODEL,
-        "prompt": prompt,
-        "size": "1024x1024",
-        "n": 1,
-        "response_format": "b64_json",
-    }
+    """Use OVH's free SDXL endpoint; anonymous access is rate-limited to 2/min."""
+    global _LAST_OVH_REQUEST_AT
+    headers = {"Content-Type": "application/json"}
+    if OVH_TOKEN:
+        headers["Authorization"] = f"Bearer {OVH_TOKEN}"
+        url = OVH_URL
+        payload = {
+            "model": OVH_MODEL,
+            "prompt": prompt,
+            "size": "1024x1024",
+            "n": 1,
+            "response_format": "b64_json",
+        }
+    else:
+        url = OVH_ANONYMOUS_URL
+        payload = {
+            "prompt": prompt,
+            "negative_prompt": "photorealistic, 3D, text, captions, speech bubbles, watermark",
+        }
     last_error = None
     for attempt in range(1, 3):
         try:
-            print(f"[OVHCLOUD] generation attempt {attempt}/2 model={OVH_MODEL} (text-to-image; no reference upload)")
-            response = requests.post(OVH_URL, headers=headers, json=payload, timeout=240)
+            if not OVH_TOKEN:
+                elapsed = time.monotonic() - _LAST_OVH_REQUEST_AT
+                wait = max(0.0, OVH_MIN_INTERVAL_SECONDS - elapsed)
+                if wait:
+                    print(f"[OVHCLOUD] anonymous free-tier pacing: waiting {wait:.1f}s")
+                    time.sleep(wait)
+            print(
+                f"[OVHCLOUD] generation attempt {attempt}/2 model={OVH_MODEL} "
+                f"auth={'yes' if OVH_TOKEN else 'anonymous'}"
+            )
+            response = requests.post(url, headers=headers, json=payload, timeout=240)
+            _LAST_OVH_REQUEST_AT = time.monotonic()
             if not response.ok:
                 raise RuntimeError(f"HTTP {response.status_code}: {response.text[:1000]}")
             return _normalize_image(_extract_image(response))
@@ -253,6 +210,9 @@ def _ovhcloud(prompt: str) -> bytes:
         except RuntimeError as exc:
             last_error = str(exc)
             status = getattr(locals().get("response"), "status_code", 0)
+            if status == 429 and not OVH_TOKEN:
+                time.sleep(31)
+                continue
             if status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
                 break
             time.sleep(5 * attempt)
@@ -261,7 +221,6 @@ def _ovhcloud(prompt: str) -> bytes:
 
 def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
     providers = (
-        ("pollinations", lambda: _pollinations(prompt, refs)),
         ("ovhcloud", lambda: _ovhcloud(prompt)),
         ("cloudflare", lambda: _normalize_image(_CLOUDFLARE_ORIGINAL(prompt, refs))),
     )
@@ -291,20 +250,19 @@ def main() -> None:
     PROVIDER_EVENTS.clear()
     for key in PROVIDER_COUNTS:
         PROVIDER_COUNTS[key] = 0
-    _record("router", "started", "Pollinations -> OVHcloud -> Cloudflare")
+    _record("router", "started", "OVHcloud free SDXL -> Cloudflare FLUX.2 Klein 4B")
     _original_main()
 
     manifest_path = base.RUN / "cloudflare_image_manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["media_generation"] = "multi_provider_image_router"
-        manifest["provider_priority"] = ["pollinations", "ovhcloud", "cloudflare"]
+        manifest["provider_priority"] = ["ovhcloud", "cloudflare"]
         manifest["provider_counts"] = PROVIDER_COUNTS
         manifest["provider_events"] = PROVIDER_EVENTS
         manifest["reference_policy"] = {
-            "pollinations": "canonical references plus previous accepted frame via /v1/images/edits",
-            "ovhcloud": "prompt-only SDXL; no direct reference-image input documented",
-            "cloudflare": "canonical references plus previous accepted frame",
+            "ovhcloud": "prompt-only SDXL; free anonymous endpoint, 2 requests/minute",
+            "cloudflare": "FLUX.2 Klein 4B with canonical references plus previous accepted frame",
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print("[PROVIDER SUMMARY] " + json.dumps(PROVIDER_COUNTS, sort_keys=True))
