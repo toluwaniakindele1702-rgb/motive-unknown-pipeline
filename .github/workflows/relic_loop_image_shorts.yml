@@ -116,11 +116,6 @@ jobs:
           else
             echo "::warning::Cloudflare fallback is unavailable; OVHcloud is the only image provider."
           fi
-          if [ -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" ]; then
-            echo "OVHcloud authenticated image endpoint: configured (value hidden)"
-          else
-            echo "::warning::OVHcloud token missing; image router will attempt the anonymous endpoint before fallback."
-          fi
           test -n "$YOUTUBE_TOKEN_JSON" || { echo "YOUTUBE_TOKEN_JSON is missing"; exit 1; }
           test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           # Avoid early-exit pipelines under pipefail (grep -q/head can SIGPIPE the producer).
