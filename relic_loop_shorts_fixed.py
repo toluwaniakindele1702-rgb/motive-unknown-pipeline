@@ -98,7 +98,7 @@ def _norm_text(text: str) -> str:
 
 def validate(obj: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    required = ("title", "hook", "narration", "characters", "locations", "story_structure", "scenes", "flow_prompt")
+    required = ("title", "hook", "narration", "characters", "locations", "story_structure", "scenes", "flow_prompt", "youtube_description", "tags")
     for key in required:
         if not obj.get(key):
             errors.append(f"missing:{key}")
@@ -112,10 +112,23 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not isinstance(chars, list) or not chars:
         errors.append("no_characters")
     else:
+        for index, character in enumerate(chars, 1):
+            if not isinstance(character, dict):
+                errors.append(f"character_{index}_not_object")
+                continue
+            for field in ("name", "role", "appearance"):
+                if not str(character.get(field, "")).strip():
+                    errors.append(f"character_{index}_missing_{field}")
         first = chars[0] if isinstance(chars[0], dict) else {}
         role = str(first.get("role", "")).lower()
         if "human" not in role and "person" not in role and "protagonist" not in role:
             errors.append("protagonist_not_human")
+
+    locations = obj.get("locations")
+    if not isinstance(locations, list) or not locations or any(not str(x).strip() for x in locations):
+        errors.append("locations_must_be_nonempty_string_list")
+    if not isinstance(obj.get("tags"), list):
+        errors.append("tags_must_be_list")
 
     structure = obj.get("story_structure")
     if isinstance(structure, dict):
@@ -136,7 +149,7 @@ def validate(obj: dict[str, Any]) -> list[str]:
         else:
             errors.append("causal_chain_invalid")
         escalations = structure.get("escalations")
-        if isinstance(escalations, list) and len(escalations) < 3:
+        if not isinstance(escalations, list) or len(escalations) < 3:
             errors.append("too_few_meaningful_escalations")
     else:
         errors.append("story_structure")
@@ -159,8 +172,8 @@ def validate(obj: dict[str, Any]) -> list[str]:
     if not isinstance(scenes, list) or not scenes:
         errors.append("no_visual_beats")
         return errors
-    if not 10 <= len(scenes) <= 14:
-        errors.append(f"visual_beat_count={len(scenes)}_hard_limit_10_14")
+    if not 10 <= len(scenes) <= 12:
+        errors.append(f"visual_beat_count={len(scenes)}_hard_limit_10_12")
 
     reconstructed = " ".join(_norm_text(str(s.get("narration", ""))) for s in scenes if isinstance(s, dict))
     if reconstructed != narration:
