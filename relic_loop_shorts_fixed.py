@@ -268,7 +268,7 @@ Approval gate: overall_score must be at least 8, opening_image must be at least 
 def make_prompt(topic: str | None, retry: bool = False, feedback: str = "") -> str:
     history_text = "; ".join(history()[-20:])
     seed = f"Start from this idea: {topic}" if topic else "Invent a fresh absurd-but-coherent stickman comedy situation."
-    return "\\n".join(part for part in (
+    return "\n".join(part for part in (
         seed,
         "Avoid repeating these previous titles or premises: " + history_text if history_text else "",
         "Write a complete 125-145 word spoken script and its 10-12 visual scenes.",
@@ -333,8 +333,8 @@ def generate(topic: str | None) -> dict[str, Any]:
             }
             obj["generated_at"] = datetime.now(timezone.utc).isoformat()
             obj["visual_policy"] = "Narration is source of truth; every image literally reenacts its corresponding contiguous narration excerpt."
-            obj["timing_policy"] = "Narration is the master timeline; 10-14 image beats follow exact contiguous spoken phrase excerpts; image durations scale to each excerpt's share of the actual voiceover duration, with no fixed seconds-per-image."
-            obj["story_policy"] = "story_first_mystery_suspense_dilemma_twist_60_90_seconds"
+            obj["timing_policy"] = "Narration is the master timeline for a roughly 60-second Short; 10-12 image beats follow its spoken phrases."
+            obj["story_policy"] = "absurd_but_coherent_stickman_comedy_about_60_seconds"
             obj["style_policy"] = STYLE
             return obj
         except Exception as exc:
@@ -358,8 +358,8 @@ def write(obj: dict[str, Any]) -> None:
     lines = [
         "CHISPA-PIFIA — MEANINGFUL STORY SHORT",
         "",
-        "STORY POLICY: MINI-MYSTERY / SUSPENSE / DILEMMA / PROBLEM-SOLVING / FAIR TWIST; COMEDY OPTIONAL",
-        "TIMING POLICY: 10-14 IMAGES; EACH IMAGE FOLLOWS ITS SPOKEN PHRASE; NO FIXED IMAGE DURATION",
+        "STORY POLICY: ABSURD-BUT-COHERENT STICKMAN COMEDY; ONE-MINUTE SPOKEN SCRIPT",
+        "TIMING POLICY: 10-12 IMAGES FOLLOW THE ONE-MINUTE SPOKEN SCRIPT",
         "",
         obj["flow_prompt"],
         "",
