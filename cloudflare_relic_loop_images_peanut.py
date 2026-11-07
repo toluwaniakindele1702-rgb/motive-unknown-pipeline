@@ -103,9 +103,6 @@ _LAST_OVH_REQUEST_AT = 0.0
 PROVIDER_EVENTS: list[dict] = []
 PROVIDER_COUNTS: dict[str, int] = {"ovhcloud": 0, "cloudflare": 0}
 
-class PollinationsBalanceError(RuntimeError):
-    """Pollinations accepted the request but the account has no spendable pollen."""
-
 REFERENCE_FILES = base.CANONICAL_REFERENCE_PATHS
 _CLOUDFLARE_ORIGINAL = base._cloudflare
 
