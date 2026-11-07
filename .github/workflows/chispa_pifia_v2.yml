@@ -18,6 +18,7 @@ on:
       - "cloudflare_relic_loop_images.py"
       - "cloudflare_relic_loop_images_peanut.py"
       - "assemble_relic_loop_short.py"
+      - "edge_tts.py"
       - "youtube_upload.py"
 
 concurrency:
@@ -46,7 +47,7 @@ jobs:
       RELIC_LOOP_IMAGE_RETRIES: "3"
       RELIC_LOOP_OCR_RETRIES: "2"
       RELIC_LOOP_OCR_STRICT: "1"
-      RELIC_LOOP_TTS_VOICE: en-US-GuyNeural
+      RELIC_LOOP_KOKORO_VOICE: am_liam
       CHANNEL_NAME: Chispa-Pifia
       YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
       YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
@@ -64,16 +65,17 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Install only V2 production dependencies
+      - name: Install V2 production dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install --retries 5 --timeout 120 --prefer-binary \
-            'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' 'edge-tts>=7.0,<8' \
+            'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' \
+            'numpy>=2.0,<3' 'soundfile>=0.13,<1.0' 'kokoro>=0.9.4,<1.0' \
             'google-api-python-client>=2.180,<3' 'google-auth>=2.40,<3' \
             'google-auth-httplib2>=0.2,<1' 'google-auth-oauthlib>=1.2,<2'
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
+          sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr espeak-ng
 
       - name: Verify configuration, references and media tools
         shell: bash
@@ -97,7 +99,7 @@ jobs:
           ffprobe -version | sed -n '1p'
           tesseract --version | sed -n '1p'
           tesseract --list-langs | grep -qx eng || { echo "::error::Tesseract English language data is missing"; exit 1; }
-          python -c "import groq, requests, edge_tts; from PIL import Image; from googleapiclient.discovery import build; from google.oauth2.credentials import Credentials; print('Production imports passed')"
+          python -c "import groq, requests, numpy, soundfile, edge_tts; from kokoro import KPipeline; from PIL import Image; from googleapiclient.discovery import build; from google.oauth2.credentials import Credentials; print('Production imports passed')"
           echo "Image route: authenticated OVHcloud SDXL primary; Cloudflare FLUX.2 Klein fallback when configured."
 
       - name: Verify YouTube channel access before image generation
@@ -108,7 +110,7 @@ jobs:
           set -euo pipefail
           python -m py_compile chispa_pifia_v2.py chispa_pifia_contact_sheet.py \
             cloudflare_relic_loop_images.py cloudflare_relic_loop_images_peanut.py \
-            assemble_relic_loop_short.py youtube_upload.py
+            assemble_relic_loop_short.py edge_tts.py youtube_upload.py
           python chispa_pifia_v2.py --self-test
 
       - name: Write story and deterministic storyboard
