@@ -164,6 +164,48 @@ jobs:
             youtube_upload.py
           echo "Python syntax check passed."
 
+          # Exercise the script-to-scenes handoff without calling any paid API.
+          python - <<'PY'
+          import relic_loop_shorts_production as gen
+          import relic_loop_shorts_fixed as base
+
+          narration = " ".join(["story."] * 132)
+          excerpts = gen._split_narration(narration, 11)
+          assert len(excerpts) == 11, f"Expected 11 excerpts, got {len(excerpts)}"
+          assert " ".join(excerpts) == narration, "Scene excerpts changed or lost narration"
+
+          characters = gen._normalise_characters(None)
+          locations = gen._normalise_locations(None)
+          scenes = []
+          total = base.words(narration)
+          for number, excerpt in enumerate(excerpts, 1):
+              scene = {
+                  "number": number,
+                  "duration_seconds": round(65.0 * base.words(excerpt) / total, 2),
+                  "beat_text": excerpt,
+                  "narration": excerpt,
+              }
+              scene.update(gen._fallback_visual(scene, number == 1))
+              scenes.append(scene)
+
+          package = {
+              "title": "Pipeline smoke test",
+              "hook": excerpts[0],
+              "narration": narration,
+              "characters": characters,
+              "locations": locations,
+              "story_structure": gen._make_story_structure(scenes),
+              "scenes": scenes,
+              "flow_prompt": "Chispa-Pifia 2D stickman comedy; vertical 9:16; no text.",
+              "youtube_description": "A Chispa-Pifia stickman comedy Short.",
+              "tags": ["shorts", "stickman", "comedy"],
+          }
+          errors = base.validate(package)
+          if errors:
+              raise SystemExit("Script-to-scenes smoke test failed: " + ", ".join(errors))
+          print("Script-to-scenes smoke test passed: 132 words, 11 exact excerpts, valid fallback visuals.")
+          PY
+
       - name: Generate and quality-gate story
         run: |
           set -o pipefail
