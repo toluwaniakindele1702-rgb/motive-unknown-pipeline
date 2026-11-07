@@ -31,13 +31,11 @@ jobs:
       GROQ_WRITER_MODEL: 'openai/gpt-oss-120b'
       GROQ_REVIEWER_MODEL: 'openai/gpt-oss-20b'
       RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
-      POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
-      POLLINATIONS_IMAGE_MODEL: 'bytedance/seedream-4.0'
       OVH_AI_ENDPOINTS_ACCESS_TOKEN: ${{ secrets.OVH_AI_ENDPOINTS_ACCESS_TOKEN }}
       OVH_IMAGE_MODEL: 'stable-diffusion-xl-base-v10'
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-dev'
+      CLOUDFLARE_IMAGE_MODEL: '@cf/black-forest-labs/flux-2-klein-4b'
       RELIC_LOOP_IMAGE_WIDTH: '576'
       RELIC_LOOP_IMAGE_HEIGHT: '1024'
       RELIC_LOOP_IMAGE_RETRIES: '3'
@@ -70,7 +68,6 @@ jobs:
             'requests>=2.32,<3' \
             'Pillow>=10,<13' \
             'kokoro>=0.9.4,<1.0' \
-            'edge-tts>=7.0,<8' \
             'soundfile>=0.13,<1.0' \
             'numpy>=2.0,<3' \
             'google-api-python-client>=2.180,<3' \
@@ -109,19 +106,21 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GROQ_API_KEY" || { echo "GROQ_API_KEY is missing"; exit 1; }
-          if [ -n "$POLLINATIONS_API_KEY" ]; then
-            echo "Pollinations API key: configured (value hidden)"
-          else
-            echo "Pollinations API key: not configured; router will skip Pollinations and try the remaining providers."
-          fi
           if [ -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" ]; then
             echo "OVHcloud API token: configured (value hidden)"
           else
             echo "OVHcloud API token: not configured; OVHcloud will be skipped until its GitHub secret is added."
           fi
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
-          echo "Cloudflare account ID suffix: ${CLOUDFLARE_ACCOUNT_ID: -4}"
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Cloudflare fallback credentials: configured (values hidden)"
+          else
+            echo "::warning::Cloudflare fallback is unavailable; OVHcloud is the only image provider."
+          fi
+          if [ -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" ]; then
+            echo "OVHcloud authenticated image endpoint: configured (value hidden)"
+          else
+            echo "::warning::OVHcloud token missing; image router will attempt the anonymous endpoint before fallback."
+          fi
           test -n "$YOUTUBE_TOKEN_JSON" || { echo "YOUTUBE_TOKEN_JSON is missing"; exit 1; }
           test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           # Avoid early-exit pipelines under pipefail (grep -q/head can SIGPIPE the producer).
@@ -141,8 +140,7 @@ jobs:
           print('Python imports passed.')
           print('Writer model:', __import__('os').environ['GROQ_WRITER_MODEL'])
           print('Reviewer model:', __import__('os').environ['GROQ_REVIEWER_MODEL'])
-          print('Image provider priority: Pollinations -> OVHcloud -> Cloudflare')
-          print('Pollinations model:', __import__('os').environ['POLLINATIONS_IMAGE_MODEL'])
+          print('Image provider priority: OVHcloud SDXL -> Cloudflare FLUX.2 Klein 4B')
           print('OVHcloud model:', __import__('os').environ['OVH_IMAGE_MODEL'])
           PY
 
@@ -211,7 +209,7 @@ jobs:
           set -o pipefail
           python relic_loop_shorts_production.py 2>&1 | tee shorts_flow.log
 
-      - name: Render story beats with FLUX.2 dev and approved references
+      - name: Render story beats with OVHcloud SDXL and Cloudflare fallback
         run: |
           set -o pipefail
           python cloudflare_relic_loop_images_peanut.py 2>&1 | tee cloudflare_images.log
@@ -240,7 +238,7 @@ jobs:
             echo "sha=${GITHUB_SHA}"
             echo "writer_model=${GROQ_WRITER_MODEL}"
             echo "reviewer_model=${GROQ_REVIEWER_MODEL}"
-            echo "image_model=${CLOUDFLARE_IMAGE_MODEL}"
+            echo "image_fallback_model=${CLOUDFLARE_IMAGE_MODEL}"
             echo "cloudflare_account_id_suffix=${CLOUDFLARE_ACCOUNT_ID: -4}"
             echo "image_size=${RELIC_LOOP_IMAGE_WIDTH}x${RELIC_LOOP_IMAGE_HEIGHT}"
             echo "voice=${RELIC_LOOP_KOKORO_VOICE}"
