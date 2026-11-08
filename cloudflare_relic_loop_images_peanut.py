@@ -108,23 +108,33 @@ def _record(provider: str, status: str, detail: str = "") -> None:
 
 
 def _normalize_image(blob: bytes) -> bytes:
-    """Fit provider output to 9:16 without cropping away important scene content."""
+    """Validate a real portrait source, then pad to exact 9:16 without blur/crop."""
     try:
         with Image.open(BytesIO(blob)) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
+            width, height = image.size
+            ratio = height / max(1, width)
+            if width < 512 or height < 768 or ratio < 1.45:
+                raise RuntimeError(
+                    f"Source is not a usable portrait image ({width}x{height}); "
+                    "rejecting instead of manufacturing a blurred vertical canvas."
+                )
+            # Reject severely soft/placeholder captures. Real illustrated frames
+            # should contain a meaningful amount of edge detail.
+            edge = image.convert("L").filter(ImageFilter.FIND_EDGES)
+            if float(__import__("PIL.ImageStat", fromlist=["ImageStat"]).ImageStat.Stat(edge).stddev[0]) < 8.0:
+                raise RuntimeError("Source image is too blurred or visually empty.")
             target = (base.WIDTH, base.HEIGHT)
-            background = ImageOps.fit(image, target, method=Image.Resampling.LANCZOS)
-            background = background.filter(ImageFilter.GaussianBlur(radius=28))
-            foreground = image.copy()
-            foreground.thumbnail(target, Image.Resampling.LANCZOS)
-            x = (target[0] - foreground.width) // 2
-            y = (target[1] - foreground.height) // 2
-            background.paste(foreground, (x, y))
+            fitted = ImageOps.contain(image, target, method=Image.Resampling.LANCZOS)
+            canvas = Image.new("RGB", target, (24, 27, 34))
+            x = (target[0] - fitted.width) // 2
+            y = (target[1] - fitted.height) // 2
+            canvas.paste(fitted, (x, y))
             output = BytesIO()
-            background.save(output, format="PNG", optimize=True)
+            canvas.save(output, format="PNG", optimize=True)
             return output.getvalue()
     except Exception as exc:
-        raise RuntimeError(f"Provider returned an unreadable image: {type(exc).__name__}: {exc}") from exc
+        raise RuntimeError(f"Provider image failed validation: {type(exc).__name__}: {exc}") from exc
 
 
 def _extract_image(response: requests.Response) -> bytes:
