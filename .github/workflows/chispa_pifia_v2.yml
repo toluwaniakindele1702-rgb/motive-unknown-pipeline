@@ -224,9 +224,5 @@ jobs:
             v2_images.log
             v2_assembly.log
             v2_youtube.log
-            v2_story.log
-            v2_images.log
-            v2_assembly.log
-            v2_youtube.log
           if-no-files-found: warn
           retention-days: 14
