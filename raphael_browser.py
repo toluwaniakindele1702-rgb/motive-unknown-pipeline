@@ -7,6 +7,7 @@ the configured Cloudflare fallback is used.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -24,6 +25,17 @@ MODEL_PREFERENCE = [
     ).split(",") if x.strip()
 ]
 STORAGE_STATE = os.getenv("RAPHAEL_STORAGE_STATE", "").strip()
+STORAGE_STATE_JSON = os.getenv("RAPHAEL_STORAGE_STATE_JSON", "").strip()
+if STORAGE_STATE_JSON and not STORAGE_STATE:
+    # Optional user-supplied Playwright session state; never attempt to create
+    # or bypass an account verification challenge.
+    state_path = Path("/tmp/raphael_storage_state.json")
+    try:
+        json.loads(STORAGE_STATE_JSON)
+        state_path.write_text(STORAGE_STATE_JSON, encoding="utf-8")
+        STORAGE_STATE = str(state_path)
+    except (ValueError, OSError) as exc:
+        print(f"[RAPHAEL] ignoring invalid storage-state secret: {type(exc).__name__}")
 
 
 def _visible(locator) -> bool:
