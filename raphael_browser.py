@@ -64,7 +64,7 @@ def _select_model(page) -> str:
 def _select_portrait_ratio(page) -> bool:
     # Best-effort use of the public UI's visible aspect-ratio control.
     for label in ("9:16", "Portrait"):
-        candidates = page.get_by_text(re.compile(r"^\\s*" + re.escape(label) + r"\\s*$", re.I))
+        candidates = page.get_by_text(re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.I))
         for i in range(min(candidates.count(), 6)):
             item = candidates.nth(i)
             try:
