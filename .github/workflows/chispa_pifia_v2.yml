@@ -217,7 +217,13 @@ jobs:
             state/current_run/timing_manifest.json
             state/current_run/relic_loop_short.mp4
             state/current_run/contact_sheet.jpg
+            state/current_run/images/*.png
+            state/current_run/images/*.jpg
             state/current_run/youtube_upload.json
+            v2_story.log
+            v2_images.log
+            v2_assembly.log
+            v2_youtube.log
             v2_story.log
             v2_images.log
             v2_assembly.log
