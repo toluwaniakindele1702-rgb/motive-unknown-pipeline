@@ -61,6 +61,24 @@ def _select_model(page) -> str:
     return "Raphael default model (UI did not expose a matching model selector)"
 
 
+def _select_portrait_ratio(page) -> bool:
+    # Best-effort use of the public UI's visible aspect-ratio control.
+    for label in ("9:16", "Portrait"):
+        candidates = page.get_by_text(re.compile(r"^\\s*" + re.escape(label) + r"\\s*$", re.I))
+        for i in range(min(candidates.count(), 6)):
+            item = candidates.nth(i)
+            try:
+                if item.is_visible() and item.is_enabled():
+                    item.click(timeout=1800)
+                    time.sleep(0.5)
+                    print(f"[RAPHAEL] selected aspect ratio: {label}")
+                    return True
+            except Exception:
+                continue
+    print("[RAPHAEL] no visible portrait ratio control; output will be checked and rejected if not portrait")
+    return False
+
+
 def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
@@ -72,14 +90,12 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
         try:
             page.goto(RAPHAEL_URL, wait_until="domcontentloaded", timeout=90000)
             page.wait_for_timeout(5000)
-
             body = (page.locator("body").inner_text(timeout=15000) or "").lower()
             if any(term in body for term in ("verify you are human", "turnstile", "captcha")):
                 raise RuntimeError("Raphael requires human verification; automated verification is intentionally not attempted.")
             if any(term in body for term in ("sign in to continue", "sign in required", "log in to generate")):
                 raise RuntimeError("Raphael requires a signed-in browser session. Configure RAPHAEL_STORAGE_STATE as a valid Playwright storage-state file.")
 
-            # Attach canonical visual references when the UI exposes an upload control.
             uploads = page.locator('input[type="file"]')
             if refs and uploads.count():
                 paths = []
@@ -96,6 +112,7 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
 
             model_used = _select_model(page)
             print(f"[RAPHAEL] selected model: {model_used}")
+            _select_portrait_ratio(page)
 
             prompt_boxes = page.locator("textarea, [contenteditable='true'], input[type='text']")
             prompt_box = None
@@ -110,6 +127,16 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
             if prompt_box is None:
                 raise RuntimeError("Could not locate Raphael's prompt field; UI may have changed.")
             prompt_box.fill(prompt, timeout=15000)
+
+            # Remember pre-existing reference/gallery images so they cannot be
+            # mistaken for the newly generated result.
+            before = set()
+            imgs = page.locator("img")
+            for i in range(imgs.count()):
+                try:
+                    before.add(imgs.nth(i).evaluate("(e) => e.currentSrc || e.src || ''"))
+                except Exception:
+                    pass
 
             buttons = page.get_by_role("button")
             generate_button = None
@@ -131,24 +158,49 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
                     raise RuntimeError("Raphael requested human verification; stopping without bypass.")
                 if any(term in text for term in ("insufficient credits", "not enough credits", "sign in to generate")):
                     raise RuntimeError("Raphael account has no usable generation credit or requires sign-in.")
+
                 imgs = page.locator("img")
-                for idx in reversed(range(imgs.count())):
+                candidates = []
+                for idx in range(imgs.count()):
                     img = imgs.nth(idx)
                     try:
                         if not img.is_visible():
                             continue
-                        dimensions = img.evaluate("(e) => ({w:e.naturalWidth,h:e.naturalHeight,src:e.currentSrc||e.src})")
-                        if dimensions["w"] >= 512 and dimensions["h"] >= 512:
-                            # Screenshot the actual rendered image element, avoiding private API calls.
-                            blob = img.screenshot(timeout=15000)
-                            with Image.open(BytesIO(blob)) as check:
-                                check.verify()
-                            print(f"[RAPHAEL] captured rendered output {dimensions['w']}x{dimensions['h']}")
-                            return blob
+                        meta = img.evaluate("""e => ({
+                          w:e.naturalWidth,h:e.naturalHeight,src:e.currentSrc||e.src||'',
+                          complete:e.complete,area:(e.getBoundingClientRect().width*e.getBoundingClientRect().height)
+                        })""")
+                        if meta["w"] >= 512 and meta["h"] >= 512 and meta["src"] not in before:
+                            candidates.append((meta["area"], idx, meta))
                     except Exception as exc:
                         last_error = str(exc)
-                        continue
-            raise RuntimeError("Timed out waiting for a rendered Raphael image. " + last_error[:300])
+                for _, idx, meta in sorted(candidates, reverse=True):
+                    try:
+                        img = imgs.nth(idx)
+                        encoded = img.evaluate("""async e => {
+                          const src=e.currentSrc||e.src;
+                          const response=await fetch(src,{credentials:'include'});
+                          if(!response.ok) throw new Error('image fetch HTTP '+response.status);
+                          const blob=await response.blob();
+                          const bytes=new Uint8Array(await blob.arrayBuffer());
+                          let binary='';
+                          for(let i=0;i<bytes.length;i+=0x8000)
+                            binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+                          return {mime:blob.type||'image/png',data:btoa(binary)};
+                        }""")
+                        import base64
+                        blob = base64.b64decode(encoded["data"], validate=True)
+                        with Image.open(BytesIO(blob)) as check:
+                            check.verify()
+                        with Image.open(BytesIO(blob)) as check:
+                            width, height = check.size
+                        print(f"[RAPHAEL] captured source image {width}x{height}; UI element {meta['w']}x{meta['h']}")
+                        if height / width < 1.45:
+                            raise RuntimeError(f"Raphael output is not portrait ({width}x{height}); refusing to fake 9:16 with a blurred background.")
+                        return blob
+                    except Exception as exc:
+                        last_error = str(exc)
+            raise RuntimeError("Timed out waiting for a new, directly captured Raphael output. " + last_error[:300])
         finally:
             context.close()
             browser.close()
