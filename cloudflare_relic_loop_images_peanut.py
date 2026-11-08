@@ -104,8 +104,8 @@ def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, atte
     number = int(scene.get("number", 1)) if isinstance(scene, dict) else 1
     variation = _SHOT_VARIATIONS[(max(1, number) - 1) % len(_SHOT_VARIATIONS)]
     return (
-        prompt + "\\n\\nMANDATORY SHOT-DIVERSITY DIRECTION — " + variation +
-        "\\nDo not repeat the previous frame's camera distance, angle, framing, protagonist screen position, "
+        prompt + "\n\nMANDATORY SHOT-DIVERSITY DIRECTION — " + variation +
+        "\nDo not repeat the previous frame's camera distance, angle, framing, protagonist screen position, "
         "or dominant foreground shape. Preserve the same location and character identity, but visibly change "
         "the composition. The current beat's exact action remains the focal point. Never add unrelated props, "
         "characters, events, or visual gags. Use a distinct camera setup, not merely a different facial expression."
