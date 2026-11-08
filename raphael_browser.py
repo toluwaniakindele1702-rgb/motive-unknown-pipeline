@@ -17,11 +17,11 @@ from io import BytesIO
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-RAPHAEL_URL = os.getenv("RAPHAEL_URL", "https://raphael.app/ai-image-generator")
+RAPHAEL_URL = os.getenv("RAPHAEL_URL", "https://raphael.app/text-to-image")
 MODEL_PREFERENCE = [
     x.strip() for x in os.getenv(
         "RAPHAEL_MODEL_PREFERENCE",
-        "GPT Image 2,Seedream 5.0 Pro,Nano Banana Pro,Seedream 4.5,Seedream 3.5"
+        "GPT Image 2.6 Sunburst,GPT Image 2.6 Flare,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
     ).split(",") if x.strip()
 ]
 STORAGE_STATE = os.getenv("RAPHAEL_STORAGE_STATE", "").strip()
@@ -63,7 +63,7 @@ def _select_model(page) -> str:
 
 def _select_portrait_ratio(page) -> bool:
     # Best-effort use of the public UI's visible aspect-ratio control.
-    for label in ("9:16", "Portrait"):
+    for label in ("9:16", "2:3", "3:4", "Portrait"):
         candidates = page.get_by_text(re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.I))
         for i in range(min(candidates.count(), 6)):
             item = candidates.nth(i)
