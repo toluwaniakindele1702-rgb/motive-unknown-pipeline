@@ -140,7 +140,7 @@ def visual_prompts(client,title,narration,characters,setting,scenes):
                     candidate[s["number"]]={"visual_prompt":p,"camera":cam,"action":act,"mood":norm(x.get("mood")) or "comedy"}
                 accepted=candidate; break
             except Exception as e:
-                print(f"[V2 VISUAL] batch {offset//3+1} attempt {attempt+1}/2: {type(e).__name__}: {e}")
+                print(f"[V2 VISUAL] batch {offset//2+1} attempt {attempt+1}/2: {type(e).__name__}: {e}")
                 if attempt==0: time.sleep(2)
         for s in batch:
             s.update(accepted.get(s["number"]) or fallback_visual(s,s["number"]==1))
