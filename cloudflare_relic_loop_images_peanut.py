@@ -78,6 +78,19 @@ base._reference_blurb = lambda: (
 )
 
 _original_scene_prompt = base._scene_prompt
+_SHOT_VARIATIONS = [
+    "SHOT 1: dramatic wide establishing view from slightly above, show the ride and protagonist clearly; strong diagonal composition.",
+    "SHOT 2: tight face-and-phone close-up, illustrated depth, carousel only as contextual shapes behind.",
+    "SHOT 3: dynamic low-angle side view, protagonist gripping the moving ride; strong foreshortening and diagonal motion.",
+    "SHOT 4: high overhead view looking down onto the carousel, clear circular geometry and protagonist position.",
+    "SHOT 5: extreme close-up of the protagonist's hands and phone with expressive face partly visible; distinct foreground framing.",
+    "SHOT 6: side-on medium tracking composition, protagonist off-centre, ride structure sweeping across the frame.",
+    "SHOT 7: long view through foreground ride elements, protagonist's expression remains clearly readable.",
+    "SHOT 8: rear three-quarter view over the protagonist's shoulder toward the story-critical object; change screen direction.",
+    "SHOT 9: very wide view with strong foreground, middle-ground and background layers; new perspective.",
+    "SHOT 10: low close-medium shot from platform level, emphasize physical action and reaction.",
+    "SHOT 11: decisive payoff composition, protagonist large in frame, clear pose and prop interaction; distinct from earlier shots.",
+]
 def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, attempt=1):
     cleaned = []
     for character in characters or []:
@@ -87,7 +100,16 @@ def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, atte
             "match its appearance exactly; do not redesign or invent wardrobe"
         )
         cleaned.append(item)
-    return _original_scene_prompt(scene, cleaned, locations, previous_scene, attempt)
+    prompt = _original_scene_prompt(scene, cleaned, locations, previous_scene, attempt)
+    number = int(scene.get("number", 1)) if isinstance(scene, dict) else 1
+    variation = _SHOT_VARIATIONS[(max(1, number) - 1) % len(_SHOT_VARIATIONS)]
+    return (
+        prompt + "\\n\\nMANDATORY SHOT-DIVERSITY DIRECTION — " + variation +
+        "\\nDo not repeat the previous frame's camera distance, angle, framing, protagonist screen position, "
+        "or dominant foreground shape. Preserve the same location and character identity, but visibly change "
+        "the composition. The current beat's exact action remains the focal point. Never add unrelated props, "
+        "characters, events, or visual gags. Use a distinct camera setup, not merely a different facial expression."
+    )
 
 base._scene_prompt = _peanut_scene_prompt
 
