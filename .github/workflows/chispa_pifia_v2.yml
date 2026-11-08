@@ -42,8 +42,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_IMAGE_MODEL: "@cf/black-forest-labs/flux-2-klein-4b"
-      RAPHAEL_URL: "https://raphael.app/text-to-image"
-      RAPHAEL_MODEL_PREFERENCE: "GPT Image 2.6 Sunburst,GPT Image 2.6 Flare,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
+      RAPHAEL_URL: "https://raphael.app/gpt-image-2-6-flare"
+      RAPHAEL_MODEL_PREFERENCE: "GPT Image 2.6 Flare,GPT Image 2.6 Sunburst,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
       RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
       RELIC_LOOP_IMAGE_WIDTH: "576"
       RELIC_LOOP_IMAGE_HEIGHT: "1024"
