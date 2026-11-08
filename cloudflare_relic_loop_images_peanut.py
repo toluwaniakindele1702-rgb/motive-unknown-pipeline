@@ -79,17 +79,17 @@ base._reference_blurb = lambda: (
 
 _original_scene_prompt = base._scene_prompt
 _SHOT_VARIATIONS = [
-    "SHOT 1: dramatic wide establishing view from slightly above, show the ride and protagonist clearly; strong diagonal composition.",
-    "SHOT 2: tight face-and-phone close-up, illustrated depth, carousel only as contextual shapes behind.",
-    "SHOT 3: dynamic low-angle side view, protagonist gripping the moving ride; strong foreshortening and diagonal motion.",
-    "SHOT 4: high overhead view looking down onto the carousel, clear circular geometry and protagonist position.",
-    "SHOT 5: extreme close-up of the protagonist's hands and phone with expressive face partly visible; distinct foreground framing.",
-    "SHOT 6: side-on medium tracking composition, protagonist off-centre, ride structure sweeping across the frame.",
-    "SHOT 7: long view through foreground ride elements, protagonist's expression remains clearly readable.",
-    "SHOT 8: rear three-quarter view over the protagonist's shoulder toward the story-critical object; change screen direction.",
-    "SHOT 9: very wide view with strong foreground, middle-ground and background layers; new perspective.",
-    "SHOT 10: low close-medium shot from platform level, emphasize physical action and reaction.",
-    "SHOT 11: decisive payoff composition, protagonist large in frame, clear pose and prop interaction; distinct from earlier shots.",
+    "SHOT 1: bold wide establishing composition with a readable protagonist and clear location; use a strong diagonal layout.",
+    "SHOT 2: tight character reaction close-up; keep the story-critical object partly visible for context.",
+    "SHOT 3: dynamic low-angle medium shot with expressive body language and purposeful perspective.",
+    "SHOT 4: high-angle or overhead composition that clearly maps the character's position in the environment.",
+    "SHOT 5: close insert framing around the story-critical prop or hand action, with enough character visible to identify the moment.",
+    "SHOT 6: side-on medium tracking composition; place the protagonist off-centre and use environmental lines to imply movement.",
+    "SHOT 7: layered composition looking through a relevant foreground element toward the protagonist.",
+    "SHOT 8: over-the-shoulder or rear three-quarter angle that reveals what the protagonist is reacting to.",
+    "SHOT 9: wider environmental composition with distinct foreground, middle-ground and background layers.",
+    "SHOT 10: low close-medium action shot emphasizing the physical consequence of the current beat.",
+    "SHOT 11: payoff composition with the protagonist's decisive expression, pose and story-critical object clearly readable.",
 ]
 def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, attempt=1):
     cleaned = []
