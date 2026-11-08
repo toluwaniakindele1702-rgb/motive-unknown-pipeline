@@ -8,6 +8,7 @@ on:
       - ".github/workflows/chispa_pifia_v2.yml"
       - "cloudflare_relic_loop_images_peanut.py"
       - "cloudflare_relic_loop_images.py"
+      - "chispa_pifia_v2.py"
       - "raphael_browser.py"
   workflow_dispatch:
     inputs:
