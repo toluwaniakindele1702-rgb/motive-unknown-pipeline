@@ -1,7 +1,7 @@
 """Chispa-Pifia multi-provider image router.
 
-Priority: OVHcloud SDXL (free anonymous text-to-image) -> Cloudflare Workers AI
-(FLUX.2 Klein 4B, reference-guided fallback).
+Priority: Raphael web UI (quality-model preference, reference-guided where supported)
+-> Cloudflare Workers AI (FLUX.2 Klein 4B, reference-guided fallback).
 The existing renderer retains storyboard, continuity, OCR, and manifest handling.
 """
 from __future__ import annotations
