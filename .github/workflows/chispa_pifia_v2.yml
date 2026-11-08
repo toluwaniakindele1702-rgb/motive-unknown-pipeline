@@ -142,7 +142,7 @@ jobs:
           set -o pipefail
           python chispa_pifia_v2.py 2>&1 | tee v2_story.log
 
-      - name: Render images (OVHcloud SDXL primary; Cloudflare fallback)
+      - name: Render images (Raphael quality models primary; Cloudflare FLUX.2 fallback)
         run: |
           set -o pipefail
           python cloudflare_relic_loop_images_peanut.py 2>&1 | tee v2_images.log
