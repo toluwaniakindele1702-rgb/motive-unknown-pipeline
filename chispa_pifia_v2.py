@@ -55,12 +55,22 @@ def spans(s): return list(re.finditer(r"\b[\w'’\-]+\b",s))
 def wc(s): return len(spans(s))
 def parse_json(s):
     s=(s or "").strip().replace(chr(96)*3+"json","").replace(chr(96)*3,"").strip()
-    x=json.loads(s)
+    # Some Groq model responses include a short preamble despite JSON-only prompting.
+    # Extract the outermost object, then let Python validate the JSON strictly.
+    start=s.find("{")
+    end=s.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("Model response did not contain a JSON object")
+    x=json.loads(s[start:end+1])
     if not isinstance(x,dict): raise ValueError("Expected JSON object")
     return x
 def call(client,model,system,user,tokens=1500,temp=0.65):
+    # Do not request Groq's server-side json_object constrained decoding here.
+    # It returned HTTP 400 json_validate_failed for openai/gpt-oss models before
+    # generation began. The prompts already require JSON; parse_json extracts and
+    # validates the returned object locally, allowing retries to handle bad output.
     r=client.chat.completions.create(model=model,messages=[{"role":"system","content":system},{"role":"user","content":user}],
-      temperature=temp,max_completion_tokens=tokens,response_format={"type":"json_object"})
+      temperature=temp,max_completion_tokens=tokens)
     return parse_json(r.choices[0].message.content or "")
 def validate_story(raw):
     s={"title":norm(raw.get("title"))[:90],"narration":norm(raw.get("narration")),
