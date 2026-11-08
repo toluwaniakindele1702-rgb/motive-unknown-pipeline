@@ -9,6 +9,11 @@ on:
         required: false
         default: ""
         type: string
+      upload_video:
+        description: "Publish the finished Short to YouTube (leave off for a safe test run)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: chispa-pifia-v2
@@ -26,11 +31,12 @@ jobs:
       GROQ_WRITER_MODEL: openai/gpt-oss-120b
       GROQ_REVIEWER_MODEL: openai/gpt-oss-20b
       RELIC_LOOP_TOPIC: ${{ inputs.topic || vars.RELIC_LOOP_TOPIC || '' }}
-      OVH_AI_ENDPOINTS_ACCESS_TOKEN: ${{ secrets.OVH_AI_ENDPOINTS_ACCESS_TOKEN }}
-      OVH_IMAGE_MODEL: stable-diffusion-xl-base-v10
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_IMAGE_MODEL: "@cf/black-forest-labs/flux-2-klein-4b"
+      RAPHAEL_URL: "https://raphael.app/ai-image-generator"
+      RAPHAEL_MODEL_PREFERENCE: "GPT Image 2,Seedream 5.0 Pro,Nano Banana Pro,Seedream 4.5,Seedream 3.5"
+      RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
       RELIC_LOOP_IMAGE_WIDTH: "576"
       RELIC_LOOP_IMAGE_HEIGHT: "1024"
       RELIC_LOOP_IMAGE_RETRIES: "3"
@@ -61,24 +67,27 @@ jobs:
           python -m pip install --retries 5 --timeout 120 --prefer-binary \
             'groq>=0.31,<1.0' 'requests>=2.32,<3' 'Pillow>=10,<13' \
             'numpy>=2.0,<3' 'soundfile>=0.13,<1.0' 'kokoro>=0.9.4,<1.0' \
+            'playwright>=1.50,<2' \
             'google-api-python-client>=2.180,<3' 'google-auth>=2.40,<3' \
             'google-auth-httplib2>=0.2,<1' 'google-auth-oauthlib>=1.2,<2'
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr espeak-ng
+          python -m playwright install --with-deps chromium
 
       - name: Verify configuration, references and media tools
         shell: bash
         run: |
           set -euo pipefail
           test -n "$GROQ_API_KEY" || { echo "::error::GROQ_API_KEY is missing"; exit 1; }
-          test -n "$OVH_AI_ENDPOINTS_ACCESS_TOKEN" || { echo "::error::OVH_AI_ENDPOINTS_ACCESS_TOKEN is missing"; exit 1; }
           if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
-            echo "Cloudflare fallback credentials are configured."
+            echo "Cloudflare FLUX.2 fallback credentials are configured."
           else
-            echo "::warning::Cloudflare fallback is unavailable; OVHcloud is the only image provider."
+            echo "::warning::Cloudflare fallback credentials are unavailable."
           fi
-          test -n "$YOUTUBE_TOKEN_JSON" || { echo "::error::YOUTUBE_TOKEN_JSON is missing"; exit 1; }
-          test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "::error::YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
+          if [[ "${{ inputs.upload_video }}" == "true" ]]; then
+            test -n "$YOUTUBE_TOKEN_JSON" || { echo "::error::YOUTUBE_TOKEN_JSON is missing"; exit 1; }
+            test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "::error::YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
+          fi
           for f in \
             assets/visual_references/Generate_modern_stickman_character_20261027121745.jpg \
             assets/visual_references/Remove_bag_and_animate_image_20261027125028.jpg; do
@@ -114,9 +123,10 @@ jobs:
                   image.verify()
               print(f"Visual reference verified: {path.name}")
           PY
-          echo "Image route: authenticated OVHcloud SDXL primary; Cloudflare FLUX.2 Klein fallback when configured."
+          echo "Image route: Raphael web UI with quality-model preference; Cloudflare FLUX.2 Klein fallback. CAPTCHA/Turnstile is never bypassed."
 
-      - name: Verify YouTube channel access before image generation
+      - name: Verify YouTube channel access before publishing
+        if: inputs.upload_video
         run: python youtube_upload.py --check-auth
 
       - name: Run deterministic V2 tests
@@ -146,7 +156,7 @@ jobs:
           python assemble_relic_loop_short.py 2>&1 | tee v2_assembly.log
 
       - name: Upload completed Short to Chispa-Pifia
-        if: success()
+        if: success() && inputs.upload_video
         run: |
           set -o pipefail
           python youtube_upload.py 2>&1 | tee v2_youtube.log
@@ -160,6 +170,7 @@ jobs:
             echo "- Run: ${GITHUB_RUN_NUMBER}"
             echo "- Commit: ${GITHUB_SHA}"
             echo "- Trigger: ${GITHUB_EVENT_NAME}"
+            echo "- YouTube publish requested: ${{ inputs.upload_video }}"
             for f in v2_story.log v2_images.log v2_assembly.log v2_youtube.log; do
               if [ -f "$f" ]; then
                 echo "## $f"
