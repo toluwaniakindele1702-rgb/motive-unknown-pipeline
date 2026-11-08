@@ -71,7 +71,16 @@ def call(client,model,system,user,tokens=1500,temp=0.65):
     # validates the returned object locally, allowing retries to handle bad output.
     r=client.chat.completions.create(model=model,messages=[{"role":"system","content":system},{"role":"user","content":user}],
       temperature=temp,max_completion_tokens=tokens)
-    return parse_json(r.choices[0].message.content or "")
+    choice=r.choices[0]
+    content=choice.message.content or ""
+    try:
+        return parse_json(content)
+    except Exception as exc:
+        finish=getattr(choice,"finish_reason",None)
+        usage=getattr(r,"usage",None)
+        completion=getattr(usage,"completion_tokens",None) if usage else None
+        print(f"[V2 MODEL] invalid JSON model={model} finish_reason={finish} completion_tokens={completion} content_preview={content[:500]!r}")
+        raise ValueError(f"Model returned invalid/empty JSON (finish_reason={finish}, completion_tokens={completion}): {exc}") from exc
 def validate_story(raw):
     s={"title":norm(raw.get("title"))[:90],"narration":norm(raw.get("narration")),
        "protagonist":norm(raw.get("protagonist")) or "The protagonist",
@@ -109,13 +118,13 @@ def fallback_visual(scene,first=False):
       "No text, letters, symbols, captions or watermark.")
     return {"visual_prompt":prompt,"camera":camera,"action":"Literally reenact the supplied narration excerpt with the protagonist visibly acting.","mood":"expressive comedy"}
 def visual_prompts(client,title,narration,characters,setting,scenes):
-    for offset in range(0,len(scenes),3):
-        batch=scenes[offset:offset+3]; accepted={}
+    for offset in range(0,len(scenes),2):
+        batch=scenes[offset:offset+2]; accepted={}
         payload={"title":title,"setting":setting,"characters":[{"name":c["name"],"role":c["role"]} for c in characters],
           "full_story_for_continuity":narration,"requested_scenes":[{"number":s["number"],"exact_excerpt":s["narration"]} for s in batch]}
         for attempt in range(2):
             try:
-                obj=call(client,MODEL,VISUAL_SYSTEM,json.dumps(payload,ensure_ascii=False),1500,0.5)
+                obj=call(client,MODEL,VISUAL_SYSTEM,json.dumps(payload,ensure_ascii=False),2800,0.5)
                 returned=obj.get("scenes")
                 if not isinstance(returned,list): raise ValueError("Missing scenes array")
                 bynum={}
@@ -139,7 +148,7 @@ def visual_prompts(client,title,narration,characters,setting,scenes):
 def review_story(client,story):
     review={"score":None,"main_problem":"Review unavailable","rewrite_attempted":False}
     try:
-        review=call(client,REVIEW_MODEL,REVIEW_SYSTEM,json.dumps({"title":story["title"],"narration":story["narration"]}),300,0.2)
+        review=call(client,REVIEW_MODEL,REVIEW_SYSTEM,json.dumps({"title":story["title"],"narration":story["narration"]}),900,0.2)
         score=int(review.get("score",0)); print(f"[V2 REVIEW] {score}/10: {norm(review.get('main_problem'))}")
         if score<7 and norm(review.get("rewrite_instruction")):
             revised=call(client,MODEL,REWRITE_SYSTEM,json.dumps({"current_story":story,"editor_instruction":norm(review["rewrite_instruction"])}),1500,0.5)
@@ -167,7 +176,7 @@ def main():
     except Exception: pass
     raw=None; last=None
     for attempt in range(2):
-        try: raw=call(client,MODEL,STORY_SYSTEM,user,1700,0.78 if attempt==0 else 0.58); validate_story(raw); break
+        try: raw=call(client,MODEL,STORY_SYSTEM,user,4200,0.78 if attempt==0 else 0.58); validate_story(raw); break
         except Exception as e:
             last=e; print(f"[V2 STORY] attempt {attempt+1}/2: {type(e).__name__}: {e}")
             if attempt==0: time.sleep(3)
