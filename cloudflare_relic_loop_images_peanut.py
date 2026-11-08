@@ -17,6 +17,7 @@ import requests
 from PIL import Image, ImageOps, ImageFilter
 
 import cloudflare_relic_loop_images as base
+import raphael_browser
 
 # The two checked-in Chispa-Pifia images are the canonical visual bible.
 base.CANONICAL_REFERENCE_PATHS = (
@@ -90,18 +91,8 @@ def _peanut_scene_prompt(scene, characters, locations, previous_scene=None, atte
 
 base._scene_prompt = _peanut_scene_prompt
 
-OVH_TOKEN = os.environ.get("OVH_AI_ENDPOINTS_ACCESS_TOKEN", "").strip()
-OVH_MODEL = os.environ.get("OVH_IMAGE_MODEL", "stable-diffusion-xl-base-v10").strip()
-OVH_URL = os.environ.get(
-    "OVH_IMAGE_ENDPOINT",
-    "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/images/generations",
-).strip()
-OVH_ANONYMOUS_URL = "https://stable-diffusion-xl.endpoints.kepler.ai.cloud.ovh.net/api/text2image"
-OVH_MIN_INTERVAL_SECONDS = 31.0
-_LAST_OVH_REQUEST_AT = 0.0
-
 PROVIDER_EVENTS: list[dict] = []
-PROVIDER_COUNTS: dict[str, int] = {"ovhcloud": 0, "cloudflare": 0}
+PROVIDER_COUNTS: dict[str, int] = {"raphael": 0, "cloudflare": 0}
 
 REFERENCE_FILES = base.CANONICAL_REFERENCE_PATHS
 _CLOUDFLARE_ORIGINAL = base._cloudflare
@@ -162,71 +153,9 @@ def _extract_image(response: requests.Response) -> bytes:
     raise RuntimeError(f"Image API response has neither b64_json nor url: {json.dumps(item)[:500]}")
 
 
-def _ovhcloud(prompt: str) -> bytes:
-    """Use OVH's free SDXL endpoint; anonymous access is rate-limited to 2/min."""
-    global _LAST_OVH_REQUEST_AT
-    headers = {"Content-Type": "application/json"}
-    if OVH_TOKEN:
-        headers["Authorization"] = f"Bearer {OVH_TOKEN}"
-        url = OVH_URL
-        payload = {
-            "model": OVH_MODEL,
-            "prompt": prompt,
-            "size": "1024x1024",
-            "n": 1,
-            "response_format": "b64_json",
-        }
-    else:
-        url = OVH_ANONYMOUS_URL
-        payload = {
-            "prompt": prompt,
-            "negative_prompt": "photorealistic, 3D, text, captions, speech bubbles, watermark",
-        }
-    last_error = None
-    for attempt in range(1, 3):
-        try:
-            if not OVH_TOKEN:
-                elapsed = time.monotonic() - _LAST_OVH_REQUEST_AT
-                wait = max(0.0, OVH_MIN_INTERVAL_SECONDS - elapsed)
-                if wait:
-                    print(f"[OVHCLOUD] anonymous free-tier pacing: waiting {wait:.1f}s")
-                    time.sleep(wait)
-            print(
-                f"[OVHCLOUD] generation attempt {attempt}/2 model={OVH_MODEL} "
-                f"auth={'yes' if OVH_TOKEN else 'anonymous'}"
-            )
-            response = requests.post(url, headers=headers, json=payload, timeout=240)
-            _LAST_OVH_REQUEST_AT = time.monotonic()
-            if not response.ok:
-                body = response.text[:1000]
-                if response.status_code == 401 and "not allowed to perform the required actions on any tenant" in body.lower():
-                    raise RuntimeError(
-                        "OVHcloud rejected this token for AI Endpoints. Create the key inside the intended "
-                        "Public Cloud project: AI & Machine Learning > AI Endpoints > API key. "
-                        "A general OVHcloud API token is not the AI Endpoints key, and the Public Cloud "
-                        "project must have a payment method attached (Discovery-mode projects cannot use AI Endpoints)."
-                    )
-                raise RuntimeError(f"HTTP {response.status_code}: {body}")
-            return _normalize_image(_extract_image(response))
-        except requests.RequestException as exc:
-            last_error = f"{type(exc).__name__}: {exc}"
-            if attempt < 2:
-                time.sleep(5 * attempt)
-        except RuntimeError as exc:
-            last_error = str(exc)
-            status = getattr(locals().get("response"), "status_code", 0)
-            if status == 429 and not OVH_TOKEN:
-                time.sleep(31)
-                continue
-            if status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                break
-            time.sleep(5 * attempt)
-    raise RuntimeError(last_error or "OVHcloud image generation failed")
-
-
 def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
     providers = (
-        ("ovhcloud", lambda: _ovhcloud(prompt)),
+        ("raphael", lambda: _normalize_image(raphael_browser.generate(prompt, refs))),
         ("cloudflare", lambda: _normalize_image(_CLOUDFLARE_ORIGINAL(prompt, refs))),
     )
     failures = []
@@ -255,18 +184,18 @@ def main() -> None:
     PROVIDER_EVENTS.clear()
     for key in PROVIDER_COUNTS:
         PROVIDER_COUNTS[key] = 0
-    _record("router", "started", "OVHcloud free SDXL -> Cloudflare FLUX.2 Klein 4B")
+    _record("router", "started", "Raphael browser UI (quality-model preference) -> Cloudflare FLUX.2 Klein 4B fallback")
     _original_main()
 
     manifest_path = base.RUN / "cloudflare_image_manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["media_generation"] = "multi_provider_image_router"
-        manifest["provider_priority"] = ["ovhcloud", "cloudflare"]
+        manifest["provider_priority"] = ["raphael", "cloudflare"]
         manifest["provider_counts"] = PROVIDER_COUNTS
         manifest["provider_events"] = PROVIDER_EVENTS
         manifest["reference_policy"] = {
-            "ovhcloud": "prompt-only SDXL; free anonymous endpoint, 2 requests/minute",
+            "raphael": "official web UI automation; selected high-quality model where available; canonical references uploaded when supported; no CAPTCHA/Turnstile bypass",
             "cloudflare": "FLUX.2 Klein 4B with canonical references plus previous accepted frame",
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
