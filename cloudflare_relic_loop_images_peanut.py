@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps, ImageFilter, ImageStat
 
 import cloudflare_relic_loop_images as base
 import raphael_browser
@@ -122,7 +122,7 @@ def _normalize_image(blob: bytes) -> bytes:
             # Reject severely soft/placeholder captures. Real illustrated frames
             # should contain a meaningful amount of edge detail.
             edge = image.convert("L").filter(ImageFilter.FIND_EDGES)
-            if float(__import__("PIL.ImageStat", fromlist=["ImageStat"]).ImageStat.Stat(edge).stddev[0]) < 8.0:
+            if float(ImageStat.Stat(edge).stddev[0]) < 8.0:
                 raise RuntimeError("Source image is too blurred or visually empty.")
             target = (base.WIDTH, base.HEIGHT)
             fitted = ImageOps.contain(image, target, method=Image.Resampling.LANCZOS)
