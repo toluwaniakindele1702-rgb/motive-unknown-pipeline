@@ -17,11 +17,11 @@ from io import BytesIO
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-RAPHAEL_URL = os.getenv("RAPHAEL_URL", "https://raphael.app/gpt-image-2-6-flare")
+RAPHAEL_URL = os.getenv("RAPHAEL_URL", "https://raphael.app/gpt-image-2-6-sunburst")
 MODEL_PREFERENCE = [
     x.strip() for x in os.getenv(
         "RAPHAEL_MODEL_PREFERENCE",
-        "GPT Image 2.6 Flare,GPT Image 2.6 Sunburst,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
+        "GPT Image 2.6 Sunburst,GPT Image 2.6 Flare,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
     ).split(",") if x.strip()
 ]
 STORAGE_STATE = os.getenv("RAPHAEL_STORAGE_STATE", "").strip()
