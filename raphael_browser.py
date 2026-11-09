@@ -61,42 +61,59 @@ def _select_model(page) -> str:
     return "Raphael default model (UI did not expose a matching model selector)"
 
 
-def _select_portrait_ratio(page) -> bool:
-    """Open Raphael's ratio picker, explicitly choose 9:16, and verify the choice."""
-    # Raphael keeps the aspect-ratio options in a closed popover. The old
-    # implementation searched for 9:16 before opening it, so the click never
-    # happened and the model silently used its square default.
-    opened = False
-    triggers = [
-        page.get_by_role("button", name=re.compile(r"aspect\s*ratio", re.I)),
-        page.get_by_text(re.compile(r"^\s*Aspect Ratio\s*$", re.I)),
-    ]
-    for trigger in triggers:
+def _ratio_ui_diagnostics(page) -> str:
+    """Capture visible controls to diagnose UI changes without bypassing verification."""
+    rows=[]
+    controls=page.locator("button,[role='button'],[role='combobox'],[role='radio'],[role='option']")
+    for i in range(min(controls.count(),100)):
+        el=controls.nth(i)
         try:
-            if trigger.count() and trigger.first.is_visible():
-                trigger.first.click(timeout=3000)
-                page.wait_for_timeout(400)
-                opened = True
-                break
-        except Exception:
-            continue
-    if not opened:
-        print("[RAPHAEL] aspect-ratio menu trigger not found")
-        return False
+            if not el.is_visible(): continue
+            rows.append(el.evaluate("""e => ({tag:e.tagName,text:(e.innerText||e.textContent||'').trim().slice(0,90),aria:e.getAttribute('aria-label'),title:e.getAttribute('title'),role:e.getAttribute('role'),expanded:e.getAttribute('aria-expanded'),html:e.outerHTML.slice(0,300)})"""))
+        except Exception: pass
+    return json.dumps(rows[:45],ensure_ascii=False)
 
-    for label in ("9:16", "Portrait (9:16)", "9 : 16"):
-        options = page.get_by_text(re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.I))
-        for i in range(min(options.count(), 8)):
-            option = options.nth(i)
-            try:
-                if option.is_visible() and option.is_enabled():
-                    option.click(timeout=3000)
-                    page.wait_for_timeout(500)
-                    print(f"[RAPHAEL] selected aspect ratio: {label}")
-                    return True
-            except Exception:
-                continue
-    print("[RAPHAEL] ratio menu opened but 9:16 was not selectable")
+
+def _select_portrait_ratio(page) -> bool:
+    """Discover the current ratio control and positively select 9:16."""
+    controls=page.locator("button,[role='button'],[role='combobox']")
+    ranked=[]
+    for i in range(min(controls.count(),120)):
+        el=controls.nth(i)
+        try:
+            if not el.is_visible() or not el.is_enabled(): continue
+            meta=el.evaluate("""e => ({text:(e.innerText||e.textContent||'').trim(),aria:e.getAttribute('aria-label')||'',title:e.getAttribute('title')||'',html:e.outerHTML.slice(0,450)})""")
+            blob=" ".join([meta["text"],meta["aria"],meta["title"],meta["html"]]).lower()
+            score=(8 if "aspect" in blob or "ratio" in blob else 0)+(5 if "1:1" in blob or "square" in blob or "9:16" in blob else 0)+(4 if "portrait" in blob or "dimension" in blob else 0)
+            if score: ranked.append((score,i))
+        except Exception: pass
+    for _,idx in sorted(ranked,reverse=True):
+        try:
+            controls.nth(idx).click(timeout=3000)
+            page.wait_for_timeout(400)
+            for selector in ["[role='option']","[role='radio']","[role='menuitem']","button"]:
+                opts=page.locator(selector).filter(has_text=re.compile(r"^\\s*(?:Portrait\\s*)?9\\s*:\\s*16\\s*$",re.I))
+                for j in range(min(opts.count(),10)):
+                    opt=opts.nth(j)
+                    try:
+                        if opt.is_visible() and opt.is_enabled():
+                            opt.click(timeout=3000)
+                            page.wait_for_timeout(500)
+                            print("[RAPHAEL] selected 9:16 via discovered ratio control")
+                            return True
+                    except Exception: pass
+            portrait=page.get_by_text(re.compile(r"^\\s*Portrait\\s*$",re.I))
+            for j in range(min(portrait.count(),5)):
+                try:
+                    if portrait.nth(j).is_visible():
+                        portrait.nth(j).click(timeout=3000)
+                        page.wait_for_timeout(500)
+                        if page.get_by_text(re.compile(r"9\\s*:\\s*16")).count():
+                            print("[RAPHAEL] selected Portrait option")
+                            return True
+                except Exception: pass
+        except Exception: pass
+    print("[RAPHAEL] ratio selector unresolved; live UI controls="+_ratio_ui_diagnostics(page))
     return False
 
 
@@ -133,7 +150,8 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
 
             model_used = _select_model(page)
             print(f"[RAPHAEL] selected model: {model_used}")
-            _select_portrait_ratio(page)
+            if not _select_portrait_ratio(page):
+                raise RuntimeError("Could not positively select Raphael 9:16 portrait mode; refusing to generate a square image.")
 
             prompt_boxes = page.locator("textarea, [contenteditable='true'], input[type='text']")
             prompt_box = None
