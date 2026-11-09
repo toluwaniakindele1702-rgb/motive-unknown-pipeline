@@ -18,9 +18,9 @@ on:
         default: ""
         type: string
       upload_video:
-        description: "Publish the finished Short to YouTube (leave off for a safe test run)"
+        description: "Upload the finished, quality-approved Short to YouTube (unlisted by default)"
         required: false
-        default: false
+        default: true
         type: boolean
 
 concurrency:
@@ -52,7 +52,7 @@ jobs:
       RELIC_LOOP_OCR_STRICT: "1"
       RELIC_LOOP_KOKORO_VOICE: am_liam
       CHANNEL_NAME: Chispa-Pifia
-      YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'public' }}
+      YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS || 'unlisted' }}
       YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
       YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
       PYTHONUNBUFFERED: "1"
@@ -131,7 +131,7 @@ jobs:
                   image.verify()
               print(f"Visual reference verified: {path.name}")
           PY
-          echo "Image route: Raphael web UI with quality-model preference; Cloudflare FLUX.2 Klein fallback. CAPTCHA/Turnstile is never bypassed."
+          echo "Image route: Raphael with explicit portrait selection; Cloudflare FLUX.2 Klein fallback. CAPTCHA/Turnstile is never bypassed."
 
       - name: Verify YouTube channel access before publishing
         if: inputs.upload_video
