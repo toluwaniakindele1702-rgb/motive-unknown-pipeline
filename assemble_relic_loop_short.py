@@ -31,7 +31,7 @@ VOICE_PITCH = "+0Hz"
 VOICE_VOLUME = "+0%"
 TTS_RETRIES = 3
 TTS_TIMEOUT_SECONDS = 240
-MIN_SHORT_SECONDS = 60.0
+MIN_SHORT_SECONDS = 50.0
 MAX_SHORT_SECONDS = 90.0
 TARGET_SHORT_SECONDS = 65.0
 
@@ -101,7 +101,7 @@ def make_voiceover(text: str) -> float:
         measured_duration = media_duration(AUDIO)
         print(f"[VOICE] Candidate duration: {measured_duration:.2f}s at rate={rate}")
         if MIN_SHORT_SECONDS <= measured_duration <= MAX_SHORT_SECONDS:
-            print(f"[VOICE] Ready: {measured_duration:.2f}s; inside required 60-90s target")
+            print(f"[VOICE] Ready: {measured_duration:.2f}s; inside required 50-90s target")
             return measured_duration
 
         if correction_attempt < 2:
@@ -110,7 +110,7 @@ def make_voiceover(text: str) -> float:
             if next_rate == rate:
                 next_rate = "-10%" if measured_duration < MIN_SHORT_SECONDS else "+10%"
             rates.append(next_rate)
-            print(f"[VOICE] Duration outside 60-90s; retiming narration toward {target:.0f}s with rate={next_rate}")
+            print(f"[VOICE] Duration outside 50-90s; retiming narration toward {target:.0f}s with rate={next_rate}")
 
     # Last-resort duration guard: if Kokoro's speed response is nonlinear or
     # a correction still misses the window, time-stretch the already-generated
@@ -132,7 +132,7 @@ def make_voiceover(text: str) -> float:
     retimed.replace(AUDIO)
     final_duration = media_duration(AUDIO)
     if not MIN_SHORT_SECONDS <= final_duration <= MAX_SHORT_SECONDS:
-        raise SystemExit(f"Local narration retiming fallback still outside 60-90s: {final_duration:.2f}s")
+        raise SystemExit(f"Local narration retiming fallback still outside 50-90s: {final_duration:.2f}s")
     print(f"[VOICE] Local retiming fallback passed: {final_duration:.2f}s")
     return final_duration
 
@@ -309,13 +309,13 @@ def main() -> None:
     if abs(final_duration - audio_duration) > 0.35:
         raise SystemExit(f"Final duration mismatch: narration={audio_duration:.2f}s, final={final_duration:.2f}s")
     if not MIN_SHORT_SECONDS <= final_duration <= MAX_SHORT_SECONDS:
-        raise SystemExit(f"Final MP4 duration {final_duration:.2f}s is outside the required 60-90s range after narration retiming")
+        raise SystemExit(f"Final MP4 duration {final_duration:.2f}s is outside the required 50-90s range after narration retiming")
     if final_duration < 5:
         raise SystemExit("Final MP4 is unusably short")
 
     timing = {
         "timing_policy": "narration_is_master_timeline",
-        "duration_policy": "neural_narration_is_automatically_retimed_to_60_90_seconds_before_visual_assembly",
+        "duration_policy": "neural_narration_is_automatically_retimed_to_50_90_seconds_before_visual_assembly",
         "image_count_policy": "10_to_12_phrase_aligned_beats; durations follow narration segment word share; no fixed seconds per image",
         "camera_policy": "story_aware_2d_camera_profiles",
         "master_narration_seconds": audio_duration,
