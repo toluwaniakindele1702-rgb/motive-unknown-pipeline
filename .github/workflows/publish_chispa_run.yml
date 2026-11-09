@@ -1,0 +1,83 @@
+name: Publish an existing Chispa-Pifia Short
+run-name: "Publish Chispa-Pifia production artifact"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "GitHub Actions run ID containing the finished video"
+        required: true
+        default: "42567755891"
+        type: string
+      artifact_name:
+        description: "Artifact name from that production run"
+        required: true
+        default: "chispa-pifia-v2-40"
+        type: string
+      privacy_status:
+        description: "YouTube visibility"
+        required: true
+        default: "public"
+        type: choice
+        options:
+          - public
+          - unlisted
+          - private
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout uploader
+        uses: actions/checkout@v5
+
+      - name: Download production artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.run_id }}
+
+      - name: Prepare video and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p state/current_run
+          video="$(find artifact -type f -name 'relic_loop_short.mp4' -print -quit)"
+          test -n "$video" || { echo "::error::No completed MP4 found in selected artifact"; exit 1; }
+          cp "$video" state/current_run/relic_loop_short.mp4
+          for f in relic_loop_short.json flow_manifest.json; do
+            src="$(find artifact -type f -name "$f" -print -quit || true)"
+            if [ -n "$src" ]; then cp "$src" "state/current_run/$f"; fi
+          done
+          echo "Selected video:"
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 state/current_run/relic_loop_short.mp4
+
+      - name: Upload to YouTube
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+          YOUTUBE_PRIVACY_STATUS: ${{ inputs.privacy_status }}
+          CHANNEL_NAME: Chispa-Pifia
+        run: |
+          set -euo pipefail
+          test -n "$YOUTUBE_TOKEN_JSON" || { echo "::error::YOUTUBE_TOKEN_JSON is missing"; exit 1; }
+          test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "::error::YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
+          python -m pip install --upgrade pip
+          python -m pip install 'google-api-python-client>=2.180,<3' 'google-auth>=2.40,<3' 'google-auth-httplib2>=0.2,<1'
+          python youtube_upload.py
+
+      - name: Save YouTube upload receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chispa-pifia-publish-receipt
+          path: state/current_run/youtube_upload.json
+          if-no-files-found: ignore
+          retention-days: 30
