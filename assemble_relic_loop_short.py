@@ -121,7 +121,7 @@ def make_voiceover(text: str) -> float:
     target = min(MAX_SHORT_SECONDS, max(MIN_SHORT_SECONDS, TARGET_SHORT_SECONDS))
     tempo = measured_duration / target
     # FFmpeg atempo supports 0.5-2.0; this range is safely within those limits.
-    tempo = max(0.75, min(1.25, tempo))
+    tempo = max(0.5, min(2.0, tempo))
     print(f"[VOICE] Applying local atempo fallback: factor={tempo:.3f}; target={target:.0f}s")
     run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(AUDIO),
          "-filter:a", f"atempo={tempo:.6f}", "-ac", "1", "-ar", "48000",
