@@ -13,31 +13,31 @@ REVIEW_MODEL=os.getenv("GROQ_REVIEWER_MODEL","openai/gpt-oss-20b")
 KEY=os.getenv("GROQ_API_KEY","").strip()
 SCENES=11
 
-STORY_SYSTEM="""You are the head comedy writer for CHISPA-PIFIA, a short-form channel built around absurd, coherent, visual stickman comedy.
+STORY_SYSTEM="""You are the head comedy writer for CHISPA-PIFIA, a short-form channel built around original, tightly structured absurd stickman comedy.
 
-WRITE A TINY COMEDY FILM, NOT RANDOM AI GAGS.
-Build ONE original story around one clear human goal and one unusual but understandable obstacle, object, misunderstanding, rule or bad idea. The protagonist must actively choose what to do. Their first solution is understandable but flawed; that choice causes the next problem. They then double down or improvise, making things worse. Include at least three distinct escalation steps, each caused by the previous choice or consequence. End with a specific, satisfying punchline that pays off something planted earlier. A twist is optional; never force one.
+WRITE A COMPLETE COMEDY SHORT, NOT A RANDOM AI GAG.
+Create ONE original story around a concrete human goal and one unusual but understandable obstacle, object, misunderstanding or bad decision. The protagonist must actively choose what to do. Their first solution should be understandable but flawed; that choice causes the next problem. They then improvise or double down, creating at least three distinct causal escalations. End with a specific, surprising-but-logical punchline that pays off an earlier detail.
 
-QUALITY RULES:
-- First sentence starts inside the funniest, strangest or most urgent moment. No greeting, biography, "one day", "have you ever", or channel intro.
-- Give the protagonist a concrete goal the audience understands immediately.
-- Use a fresh, specific premise. Avoid generic laziness, random aliens, unexplained magic, generic school embarrassment and familiar viral-story clichés unless the execution is genuinely original.
-- Events must connect through simple cause and effect. Escalation should become increasingly ridiculous without becoming confusing.
-- Use concrete physical actions, visible objects and simple settings that can be illustrated in 2D.
-- Protagonist has agency; events do not merely happen to them.
-- Final line is the punchline. No lesson, moral, summary, subscribe request or generic outro.
-- Natural conversational English, punchy spoken rhythm, varied sentence openings, no filler.
-- No screenplay directions, dialogue formatting, scene labels, camera directions or image prompts.
+QUALITY REQUIREMENTS:
+- First sentence starts inside the funniest, strangest or most urgent moment. No greeting, biography, "one day", "have you ever", channel intro or generic setup.
+- Establish the protagonist's goal and central comic problem within the first two sentences.
+- Use a fresh, specific premise. Avoid generic laziness, random aliens, unexplained magic, school embarrassment, recycled viral-story setups and obvious AI clichés.
+- Every escalation must be caused by the protagonist's previous action or a clear consequence. No unrelated gags.
+- Use concrete physical actions, visible objects and simple locations that can be illustrated in 2D stickman scenes.
+- Give the protagonist agency and distinct reactions. Supporting characters must have a clear function.
+- Build toward one strongest final joke. The last sentence is the punchline; no moral, lesson, summary, subscribe request or generic outro.
+- Natural conversational English, punchy spoken rhythm, varied sentence lengths and openings. Avoid filler and repetitive phrasing.
+- No screenplay directions, scene labels, camera directions, image prompts or dialogue formatting.
 - Safe, non-graphic, non-sexual comedy. No dangerous stunts or harmful instructions.
 
-LENGTH: 125–145 spoken words; aim for 130–138. Count narration only.
+LENGTH: 180–205 spoken words. Count narration only. Aim for 188–198 words so the finished narration naturally fits a 50–90 second Short.
 
 OUTPUT: Return exactly one valid JSON object, no markdown, with ONLY:
 {"title":"short curiosity-building title","narration":"complete spoken story","protagonist":"short character name or role","supporting_characters":["zero to two names or roles"],"setting":"main location in a few words"}
-Do not create scenes, beats, excerpts, visual prompts, story outlines, metadata or extra keys. Python creates those."""
+Do not create scenes, beats, excerpts, visual prompts, outlines, metadata or extra keys. Python creates those."""
 
-REVIEW_SYSTEM="""Act as a strict comedy script editor. Score this story 1–10 for immediate hook, originality, clarity on first listen, protagonist agency, causal escalation, visual filmability and punchline. Penalize random events, passive protagonist, repetitive escalation, generic AI phrasing and endings that explain the joke. Do not require a twist. Return JSON only: {"score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
-REWRITE_SYSTEM="""Rewrite the supplied Chispa-Pifia narration to fix the editor's criticism. Preserve its core premise only if it is worth keeping. Ensure an immediate hook, active protagonist, causal escalation and a satisfying final punchline. Natural spoken English, concrete visual actions, 125–145 narration words (ideally 130–138). Return exactly the compact JSON keys title,narration,protagonist,supporting_characters,setting. No scenes, prompts, metadata or commentary."""
+REVIEW_SYSTEM="""Act as a demanding professional comedy script editor. Score the story 1–10 using: immediate hook, originality, clarity on first listen, protagonist agency, causal escalation, visual filmability, rhythm and punchline payoff. A score of 7 means publishable with minor imperfections; 8 means strong; 9–10 is exceptional. Score 6 or below if the premise is generic, events are disconnected, the protagonist is passive, escalation repeats, the story is hard to visualize, the ending explains the joke, or the final punchline is weak. Do not inflate scores. Return JSON only: {"score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
+REWRITE_SYSTEM="""Rewrite the supplied Chispa-Pifia narration to fix the editor's criticism. Keep the premise only if it is original and strong. Make the opening immediate, protagonist active, escalations causally connected, and final punchline specific and earned. Use natural spoken English, concrete physical actions, varied sentence rhythm, and 180–205 narration words. Do not pad with filler. Return exactly the compact JSON keys title,narration,protagonist,supporting_characters,setting. No scenes, prompts, metadata or commentary."""
 VISUAL_SYSTEM="""You are a top-tier storyboard artist for polished 2D stickman comedy. For EACH numbered narration excerpt, design one distinct frozen image literally depicting that exact moment. Excerpt is source of truth: do not invent plot events, props, characters or locations. Preserve character identity, outfit, prop state, screen direction and setting continuity. Make each frame readable on a phone.
 
 Match approved Chispa-Pifia reference images exactly: same expressive 2D stickman, pale round head, eyes/eyebrows/mouth, proportions and outline weight. All environments and props are also illustrated 2D cartoons, never photographic or 3D. Vertical 9:16, strong silhouette, expressive body language, one dominant action, clear depth and readable lighting. Vary shot sizes and angles when useful.
@@ -87,25 +87,37 @@ def validate_story(raw):
        "setting":norm(raw.get("setting")) or "An everyday location",
        "supporting_characters":raw.get("supporting_characters",[])}
     if not s["title"]: raise ValueError("Missing title")
-    if not 125<=wc(s["narration"])<=145: raise ValueError(f"Narration has {wc(s['narration'])} words; required 125–145")
+    if not 180<=wc(s["narration"])<=205: raise ValueError(f"Narration has {wc(s['narration'])} words; required 180–205")
     if not isinstance(s["supporting_characters"],list): s["supporting_characters"]=[]
     s["supporting_characters"]=[norm(x) for x in s["supporting_characters"] if norm(x)][:2]
     return s
 def split_exact(text,count=SCENES):
+    """Split on sentence boundaries first; use clause/word boundaries only as a last resort."""
     text=norm(text); w=spans(text); total=len(w)
-    if total<count*8: raise ValueError("Not enough narration words for scene split")
+    minimum=10
+    if total<count*minimum: raise ValueError("Not enough narration words for scene split")
+    sentence=set(); clause=set()
+    for pos in range(1,total):
+        gap=text[w[pos-1].end():w[pos].start()]
+        if re.search(r"[.!?][\"')\\]]*$",gap): sentence.add(pos)
+        elif re.search(r"[;:—–][\"')\\]]*$",gap) or re.search(r",[\"')\\]]*$",gap): clause.add(pos)
+    ranked={p:0 for p in sentence}
+    for p in clause: ranked.setdefault(p,8)
+    for p in range(1,total): ranked.setdefault(p,24)
     cuts=[]; prev=0
     for i in range(1,count):
-        ideal=round(i*total/count); lo=prev+8; hi=total-(count-i)*8
-        def cost(pos):
-            gap=text[w[pos-1].end():w[pos].start()]
-            penalty=0 if re.search(r"[.!?][\"')\]]?$",gap) else 0.5 if re.search(r"[;:][\"')\]]?$",gap) else 1 if "," in gap else 2
-            return (abs(pos-ideal)+penalty,abs(pos-ideal))
-        chosen=min(range(lo,hi+1),key=cost); cuts.append(w[chosen].start()); prev=chosen
+        ideal=round(i*total/count)
+        lo=prev+minimum
+        hi=total-(count-i)*minimum
+        options=[p for p in ranked if lo<=p<=hi]
+        if not options: raise ValueError("Could not create balanced sentence-aware scene split")
+        chosen=min(options,key=lambda p:(abs(p-ideal)+ranked[p],abs(p-ideal),p))
+        cuts.append(w[chosen].start()); prev=chosen
     out=[]; start=0
     for cut in cuts: out.append(text[start:cut].strip()); start=cut
     out.append(text[start:].strip())
     if len(out)!=count or " ".join(out)!=text: raise ValueError("Exact scene split invariant failed")
+    if any(wc(x)<minimum for x in out): raise ValueError("Scene excerpt below minimum word count")
     return out
 def fallback_visual(scene,first=False):
     camera=("Close-medium vertical 9:16 shot, slightly low angle, protagonist and key object large in frame."
@@ -146,16 +158,28 @@ def visual_prompts(client,title,narration,characters,setting,scenes):
             s.update(accepted.get(s["number"]) or fallback_visual(s,s["number"]==1))
             if s["number"] not in accepted: print(f"[V2 VISUAL] scene {s['number']}: deterministic fallback used")
 def review_story(client,story):
-    review={"score":None,"main_problem":"Review unavailable","rewrite_attempted":False}
-    try:
-        review=call(client,REVIEW_MODEL,REVIEW_SYSTEM,json.dumps({"title":story["title"],"narration":story["narration"]}),900,0.2)
-        score=int(review.get("score",0)); print(f"[V2 REVIEW] {score}/10: {norm(review.get('main_problem'))}")
-        if score<7 and norm(review.get("rewrite_instruction")):
-            revised=call(client,MODEL,REWRITE_SYSTEM,json.dumps({"current_story":story,"editor_instruction":norm(review["rewrite_instruction"])}),1500,0.5)
-            try: story=validate_story(revised); review["rewrite_attempted"]=True; print("[V2 REVIEW] one editorial rewrite accepted")
-            except Exception as e: print(f"[V2 REVIEW] rewrite rejected; retaining original: {e}")
-    except Exception as e: print(f"[V2 REVIEW] advisory review skipped: {type(e).__name__}: {e}")
-    return story,review
+    """Require an editorial pass; rewrite once and re-score before acceptance."""
+    review=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
+        json.dumps({"title":story["title"],"narration":story["narration"]}),900,0.2)
+    score=int(review.get("score",0))
+    print(f"[V2 REVIEW] initial score={score}/10: {norm(review.get('main_problem'))}")
+    if score>=7:
+        review["rewrite_attempted"]=False
+        return story,review
+    instruction=norm(review.get("rewrite_instruction"))
+    if not instruction:
+        raise ValueError("Story failed editorial gate and reviewer supplied no rewrite instruction")
+    revised=validate_story(call(client,MODEL,REWRITE_SYSTEM,
+        json.dumps({"current_story":story,"editor_instruction":instruction}),1800,0.55))
+    second=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
+        json.dumps({"title":revised["title"],"narration":revised["narration"]}),900,0.2)
+    second_score=int(second.get("score",0))
+    print(f"[V2 REVIEW] rewritten score={second_score}/10: {norm(second.get('main_problem'))}")
+    if second_score<7:
+        raise ValueError(f"Story failed editorial gate after rewrite: {second_score}/10")
+    second["rewrite_attempted"]=True
+    second["initial_score"]=score
+    return revised,second
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
     parts=split_exact(sample,11)
@@ -166,7 +190,7 @@ def main():
     if args.self_test: self_test(); return
     if not KEY: raise SystemExit("GROQ_API_KEY is missing")
     RUN.mkdir(parents=True,exist_ok=True); client=Groq(api_key=KEY)
-    user="Write one fresh original Chispa-Pifia story. 125–145 spoken words, ideally 130–138. Immediate visual hook, protagonist with a clear goal, three causal escalations, and a satisfying final punchline."
+    user="Write one fresh original Chispa-Pifia story of 180–205 spoken words, ideally 188–198. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a strong ending over random absurdity."
     topic=os.getenv("RELIC_LOOP_TOPIC","").strip()
     if topic: user+=" Optional story seed (use only if it improves the story): "+topic
     history_path=ROOT/"state"/"story_history.json"
@@ -174,14 +198,20 @@ def main():
         old=json.loads(history_path.read_text()); titles=[norm(x) for x in old if norm(x)]
         if titles: user+=" Avoid repeating these recent titles: "+"; ".join(titles[-12:])
     except Exception: pass
-    raw=None; last=None
-    for attempt in range(2):
-        try: raw=call(client,MODEL,STORY_SYSTEM,user,4200,0.78 if attempt==0 else 0.58); validate_story(raw); break
+    story=None; review=None; last=None
+    for attempt in range(1,4):
+        try:
+            raw=call(client,MODEL,STORY_SYSTEM,user,5200,0.82 if attempt==1 else 0.68)
+            candidate=validate_story(raw)
+            candidate,editorial=review_story(client,candidate)
+            story,review=candidate,editorial
+            break
         except Exception as e:
-            last=e; print(f"[V2 STORY] attempt {attempt+1}/2: {type(e).__name__}: {e}")
-            if attempt==0: time.sleep(3)
-    if raw is None: raise SystemExit(f"Compact story generation failed: {last}")
-    story,review=review_story(client,validate_story(raw))
+            last=e
+            print(f"[V2 STORY] candidate {attempt}/3 rejected: {type(e).__name__}: {e}")
+            if attempt<3: time.sleep(3)
+    if story is None:
+        raise SystemExit(f"No story passed editorial quality gate after 3 candidates: {last}")
     excerpts=split_exact(story["narration"],SCENES)
     characters=[{"name":story["protagonist"],"role":"human stickman protagonist",
       "appearance":"The approved canonical Chispa-Pifia 2D stickman design; preserve round pale head, facial design, proportions, outline weight and established outfit."}]
@@ -209,5 +239,5 @@ def main():
     except Exception: old=[]
     old.append(package["title"]); history_path.parent.mkdir(parents=True,exist_ok=True)
     history_path.write_text(json.dumps(old[-100:],ensure_ascii=False,indent=2),encoding="utf-8")
-    print(f"[V2 STORY] READY: {package['title']} | {total} words | {len(scenes)} exact scenes")
+    print(f"[V2 STORY] READY: {package['title']} | {total} words | editorial score={review.get('score')}/10 | {len(scenes)} sentence-aware scenes")
 if __name__=="__main__": main()
