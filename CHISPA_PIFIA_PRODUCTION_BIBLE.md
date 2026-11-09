@@ -1,7 +1,7 @@
 # Chispa-Pifia / absurd stickman Shorts production bible
 
 ## Goal
-Produce original approximately 60-second absurd-comedy Shorts with a 125–145 word spoken script, an immediate hook, causal escalation, and a satisfying comedic payoff. This is a production specification, not a promise of virality.
+Produce original 50–90 second absurd-comedy Shorts with a 180–205 word spoken script, an immediate hook, causal escalation, and a satisfying comedic payoff. This is a production specification, not a promise of virality.
 
 ## Visual identity
 - Expressive 2D stickman cartoon, bold clean black outlines, round simple head, minimal facial marks, thin limbs, readable hands and exaggerated poses.
