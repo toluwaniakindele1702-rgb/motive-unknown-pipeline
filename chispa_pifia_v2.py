@@ -30,14 +30,14 @@ QUALITY REQUIREMENTS:
 - No screenplay directions, scene labels, camera directions, image prompts or dialogue formatting.
 - Safe, non-graphic, non-sexual comedy. No dangerous stunts or harmful instructions.
 
-LENGTH: 180–205 spoken words. Count narration only. Aim for 188–198 words so the finished narration naturally fits a 50–90 second Short.
+LENGTH: 180–205 spoken words. Count narration only. Aim for 188–198 words so the finished narration naturally fits a 50–90 second Short. Prioritize a strong final laugh over clever-sounding but weak puns.
 
 OUTPUT: Return exactly one valid JSON object, no markdown, with ONLY:
 {"title":"short curiosity-building title","narration":"complete spoken story","protagonist":"short character name or role","supporting_characters":["zero to two names or roles"],"setting":"main location in a few words"}
 Do not create scenes, beats, excerpts, visual prompts, outlines, metadata or extra keys. Python creates those."""
 
-REVIEW_SYSTEM="""Act as a demanding professional comedy script editor. Score the story 1–10 using: immediate hook, originality, clarity on first listen, protagonist agency, causal escalation, visual filmability, rhythm and punchline payoff. A score of 7 means publishable with minor imperfections; 8 means strong; 9–10 is exceptional. Score 6 or below if the premise is generic, events are disconnected, the protagonist is passive, escalation repeats, the story is hard to visualize, the ending explains the joke, or the final punchline is weak. Do not inflate scores. Return JSON only: {"score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
-REWRITE_SYSTEM="""Rewrite the supplied Chispa-Pifia narration to fix the editor's criticism. Keep the premise only if it is original and strong. Make the opening immediate, protagonist active, escalations causally connected, and final punchline specific and earned. Use natural spoken English, concrete physical actions, varied sentence rhythm, and 180–205 narration words. Do not pad with filler. Return exactly the compact JSON keys title,narration,protagonist,supporting_characters,setting. No scenes, prompts, metadata or commentary."""
+REVIEW_SYSTEM="""You are a strict commissioning editor deciding whether a finished comedy Short is publishable. Score hook, originality, first-listen clarity, protagonist agency, causal escalation, visual filmability, rhythm and especially the final punchline. The last sentence must be a genuinely funny, specific payoff set up by an earlier detail; a pun alone, weak callback, surprising event, or abrupt ending is NOT a strong punchline. Weak ending means overall score cannot exceed 6. Fewer than three distinct causal escalations means score cannot exceed 6. Dangerous stunts cannot pass. 8 is the minimum publishable score; 7 is borderline and MUST be rejected. Be conservative. Return JSON only: {"score":1,"hook_score":1,"escalation_score":1,"punchline_score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
+REWRITE_SYSTEM="""Rewrite the supplied Chispa-Pifia narration as a publishable comedy Short. Fix every editor criticism; replace the premise if its core idea or ending is weak. Build one clear goal, an immediate visual hook, at least three distinct cause-and-effect escalations, and a final laugh-out-loud punchline paying off a concrete earlier detail. The final sentence must land as a joke, not merely describe the last event; do not rely on a lazy pun. Keep actions safe and physically plausible. Use natural spoken English, concrete filmable actions, varied rhythm, and 180–205 narration words. Do not pad. Return exactly title,narration,protagonist,supporting_characters,setting as JSON. No commentary."""
 VISUAL_SYSTEM="""You are a top-tier storyboard artist for polished 2D stickman comedy. For EACH numbered narration excerpt, design one distinct frozen image literally depicting that exact moment. Excerpt is source of truth: do not invent plot events, props, characters or locations. Preserve character identity, outfit, prop state, screen direction and setting continuity. Make each frame readable on a phone.
 
 Match approved Chispa-Pifia reference images exactly: same expressive 2D stickman, pale round head, eyes/eyebrows/mouth, proportions and outline weight. All environments and props are also illustrated 2D cartoons, never photographic or 3D. Vertical 9:16, strong silhouette, expressive body language, one dominant action, clear depth and readable lighting. Vary shot sizes and angles when useful.
@@ -158,28 +158,32 @@ def visual_prompts(client,title,narration,characters,setting,scenes):
             s.update(accepted.get(s["number"]) or fallback_visual(s,s["number"]==1))
             if s["number"] not in accepted: print(f"[V2 VISUAL] scene {s['number']}: deterministic fallback used")
 def review_story(client,story):
-    """Require an editorial pass; rewrite once and re-score before acceptance."""
-    review=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
-        json.dumps({"title":story["title"],"narration":story["narration"]}),900,0.2)
-    score=int(review.get("score",0))
-    print(f"[V2 REVIEW] initial score={score}/10: {norm(review.get('main_problem'))}")
-    if score>=7:
-        review["rewrite_attempted"]=False
-        return story,review
-    instruction=norm(review.get("rewrite_instruction"))
-    if not instruction:
-        raise ValueError("Story failed editorial gate and reviewer supplied no rewrite instruction")
-    revised=validate_story(call(client,MODEL,REWRITE_SYSTEM,
-        json.dumps({"current_story":story,"editor_instruction":instruction}),1800,0.55))
-    second=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
-        json.dumps({"title":revised["title"],"narration":revised["narration"]}),900,0.2)
-    second_score=int(second.get("score",0))
-    print(f"[V2 REVIEW] rewritten score={second_score}/10: {norm(second.get('main_problem'))}")
-    if second_score<7:
-        raise ValueError(f"Story failed editorial gate after rewrite: {second_score}/10")
-    second["rewrite_attempted"]=True
-    second["initial_score"]=score
-    return revised,second
+    """Only accept a strong story with separately checked hook, escalation and punchline."""
+    def assess(candidate):
+        result=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
+            json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1100,0.1)
+        def rating(key):
+            try: return max(0,min(10,int(result.get(key,0))))
+            except (TypeError,ValueError): return 0
+        scores=tuple(rating(k) for k in ("score","hook_score","escalation_score","punchline_score"))
+        print(f"[V2 REVIEW] overall={scores[0]}/10 hook={scores[1]}/10 escalation={scores[2]}/10 punchline={scores[3]}/10: {norm(result.get('main_problem'))}")
+        return result,all(x>=8 for x in scores),scores
+    current=story
+    initial=None
+    for revision in range(3):
+        review,passed,scores=assess(current)
+        if initial is None: initial=scores[0]
+        if passed:
+            review["rewrite_attempted"]=(revision>0)
+            review["initial_score"]=initial
+            return current,review
+        instruction=norm(review.get("rewrite_instruction"))
+        if not instruction: raise ValueError("Story failed strict editorial gate; no rewrite instruction returned")
+        if revision==2: break
+        print(f"[V2 REVIEW] rewrite {revision+1}/2 required; scores={scores}")
+        current=validate_story(call(client,MODEL,REWRITE_SYSTEM,
+            json.dumps({"current_story":current,"editor_instruction":instruction,"failed_scores":scores}),2200,0.62))
+    raise ValueError(f"Story rejected after two rewrites: overall/hook/escalation/punchline={scores}; each must be at least 8")
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
     parts=split_exact(sample,8)
@@ -190,7 +194,7 @@ def main():
     if args.self_test: self_test(); return
     if not KEY: raise SystemExit("GROQ_API_KEY is missing")
     RUN.mkdir(parents=True,exist_ok=True); client=Groq(api_key=KEY)
-    user="Write one fresh original Chispa-Pifia story of 180–205 spoken words, ideally 188–198. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a strong ending over random absurdity."
+    user="Write one fresh original Chispa-Pifia story of 180–205 spoken words, ideally 188–198. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a genuinely funny earned final punchline over random absurdity. Do not use a weak pun as the entire ending."
     topic=os.getenv("RELIC_LOOP_TOPIC","").strip()
     if topic: user+=" Optional story seed (use only if it improves the story): "+topic
     history_path=ROOT/"state"/"story_history.json"
