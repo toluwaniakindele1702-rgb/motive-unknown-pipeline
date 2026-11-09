@@ -62,20 +62,41 @@ def _select_model(page) -> str:
 
 
 def _select_portrait_ratio(page) -> bool:
-    # Best-effort use of the public UI's visible aspect-ratio control.
-    for label in ("9:16", "2:3", "3:4", "Portrait"):
-        candidates = page.get_by_text(re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.I))
-        for i in range(min(candidates.count(), 6)):
-            item = candidates.nth(i)
+    """Open Raphael's ratio picker, explicitly choose 9:16, and verify the choice."""
+    # Raphael keeps the aspect-ratio options in a closed popover. The old
+    # implementation searched for 9:16 before opening it, so the click never
+    # happened and the model silently used its square default.
+    opened = False
+    triggers = [
+        page.get_by_role("button", name=re.compile(r"aspect\s*ratio", re.I)),
+        page.get_by_text(re.compile(r"^\s*Aspect Ratio\s*$", re.I)),
+    ]
+    for trigger in triggers:
+        try:
+            if trigger.count() and trigger.first.is_visible():
+                trigger.first.click(timeout=3000)
+                page.wait_for_timeout(400)
+                opened = True
+                break
+        except Exception:
+            continue
+    if not opened:
+        print("[RAPHAEL] aspect-ratio menu trigger not found")
+        return False
+
+    for label in ("9:16", "Portrait (9:16)", "9 : 16"):
+        options = page.get_by_text(re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.I))
+        for i in range(min(options.count(), 8)):
+            option = options.nth(i)
             try:
-                if item.is_visible() and item.is_enabled():
-                    item.click(timeout=1800)
-                    time.sleep(0.5)
+                if option.is_visible() and option.is_enabled():
+                    option.click(timeout=3000)
+                    page.wait_for_timeout(500)
                     print(f"[RAPHAEL] selected aspect ratio: {label}")
                     return True
             except Exception:
                 continue
-    print("[RAPHAEL] no visible portrait ratio control; output will be checked and rejected if not portrait")
+    print("[RAPHAEL] ratio menu opened but 9:16 was not selectable")
     return False
 
 
@@ -200,6 +221,10 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
                         return blob
                     except Exception as exc:
                         last_error = str(exc)
+                        if "not portrait" in last_error.lower():
+                            # A fresh square result proves the ratio selection did
+                            # not apply. Stop immediately and use Cloudflare fallback.
+                            raise RuntimeError(last_error) from exc
             raise RuntimeError("Timed out waiting for a new, directly captured Raphael output. " + last_error[:300])
         finally:
             context.close()
