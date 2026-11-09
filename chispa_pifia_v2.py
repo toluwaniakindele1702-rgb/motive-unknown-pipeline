@@ -98,9 +98,9 @@ def split_exact(text,count=SCENES):
     if total<count*minimum: raise ValueError("Not enough narration words for scene split")
     sentence=set(); clause=set()
     for pos in range(1,total):
-        gap=text[w[pos-1].end():w[pos].start()]
-        if re.search(r"[.!?][\"')\\]]*$",gap): sentence.add(pos)
-        elif re.search(r"[;:—–][\"')\\]]*$",gap) or re.search(r",[\"')\\]]*$",gap): clause.add(pos)
+        gap=text[w[pos-1].end():w[pos].start()].strip()
+        if re.search(r"[.!?][\"')\]]*$",gap): sentence.add(pos)
+        elif re.search(r"[;:—–,][\"')\]]*$",gap): clause.add(pos)
     ranked={p:0 for p in sentence}
     for p in clause: ranked.setdefault(p,8)
     for p in range(1,total): ranked.setdefault(p,24)
@@ -182,7 +182,7 @@ def review_story(client,story):
     return revised,second
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
-    parts=split_exact(sample,11)
+    parts=split_exact(sample,8)
     assert len(parts)==11 and " ".join(parts)==sample and sum(wc(x) for x in parts)==wc(sample)
     print(f"[V2 SELF-TEST] PASS: {len(parts)} exact excerpts, {wc(sample)} words")
 def main():
