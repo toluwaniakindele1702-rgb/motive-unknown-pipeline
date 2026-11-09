@@ -94,7 +94,7 @@ def validate_story(raw):
 def split_exact(text,count=SCENES):
     """Split on sentence boundaries first; use clause/word boundaries only as a last resort."""
     text=norm(text); w=spans(text); total=len(w)
-    minimum=10
+    minimum=8
     if total<count*minimum: raise ValueError("Not enough narration words for scene split")
     sentence=set(); clause=set()
     for pos in range(1,total):
