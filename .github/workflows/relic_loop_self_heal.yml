@@ -7,7 +7,7 @@ on:
     types: [completed]
 
 permissions:
-  actions: read
+  actions: write
   contents: write
   pull-requests: write
 
@@ -88,7 +88,7 @@ jobs:
             echo "::error::Independent repair validation failed; refusing to merge."
             exit 1
           fi
-          gh pr merge "$PR_URL" --repo "$GH_REPOSITORY" --squash --delete-branch
+          gh pr merge "$PR_URL" --repo "$GH_REPOSITORY" --squash --delete-branch --match-head-commit "$HEAD_SHA"
           echo "Validated repair merged into main: $PR_URL"
 
       - name: Preserve diagnosis report
