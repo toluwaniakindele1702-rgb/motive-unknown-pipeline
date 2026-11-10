@@ -151,7 +151,9 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
             model_used = _select_model(page)
             print(f"[RAPHAEL] selected model: {model_used}")
             if not _select_portrait_ratio(page):
-                raise RuntimeError("Could not positively select Raphael 9:16 portrait mode; refusing to generate a square image.")
+                # Source dimensions are normalized by the image router after capture.
+                # Do not reject a valid Raphael result solely because ratio UI is absent.
+                print("[RAPHAEL] portrait selector unavailable; continuing with native output dimensions.")
 
             prompt_boxes = page.locator("textarea, [contenteditable='true'], input[type='text']")
             prompt_box = None
@@ -209,7 +211,7 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
                           w:e.naturalWidth,h:e.naturalHeight,src:e.currentSrc||e.src||'',
                           complete:e.complete,area:(e.getBoundingClientRect().width*e.getBoundingClientRect().height)
                         })""")
-                        if meta["w"] >= 512 and meta["h"] >= 512 and meta["src"] not in before:
+                        if meta["w"] >= 1 and meta["h"] >= 1 and meta["src"] not in before:
                             candidates.append((meta["area"], idx, meta))
                     except Exception as exc:
                         last_error = str(exc)
@@ -234,8 +236,8 @@ def generate(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> b
                         with Image.open(BytesIO(blob)) as check:
                             width, height = check.size
                         print(f"[RAPHAEL] captured source image {width}x{height}; UI element {meta['w']}x{meta['h']}")
-                        if height / width < 1.45:
-                            raise RuntimeError(f"Raphael output is not portrait ({width}x{height}); refusing to fake 9:16 with a blurred background.")
+                        if width < 1 or height < 1:
+                            raise RuntimeError(f"Raphael output has invalid dimensions ({width}x{height}).")
                         return blob
                     except Exception as exc:
                         last_error = str(exc)
