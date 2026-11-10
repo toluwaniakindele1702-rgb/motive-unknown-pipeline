@@ -121,14 +121,14 @@ def plain_text_story(raw):
     words=spans(text)
     if len(words)>205:
         # Trim only at a sentence boundary; never cut a sentence in half.
-        eligible=[m.end() for m in re.finditer(r"[.!?][\"')\\]]*(?:\\s+|$)",text)
+        eligible=[m.end() for m in re.finditer(r"[.!?][\"') ]?(?=\s|$)",text)
                  if wc(text[:m.end()])<=205]
         if eligible:
             text=text[:eligible[-1]].strip()
         else:
             text=" ".join(text.split()[:205])
     title=norm(" ".join(text.split()[:7])).strip(" .,!?:;—-") or "A Stickman Misadventure"
-    match=re.search(r"\\bStickman\\s+([A-Z][a-z]+)\\b",text)
+    match=re.search(r"\bStickman\s+([A-Z][a-z]+)\b",text)
     protagonist=match.group(1) if match else "The stickman"
     return {"title":title[:90],"narration":text,"protagonist":protagonist,
             "supporting_characters":[],"setting":"Everyday location"}
