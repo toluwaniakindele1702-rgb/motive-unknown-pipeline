@@ -153,10 +153,16 @@ def split_exact(text,count=SCENES):
     if total<count*minimum: raise ValueError("Not enough narration words for scene split")
     sentence=set(); clause=set()
     for pos in range(1,total):
-        gap=text[w[pos-1].end():w[pos].start()].strip()
-        if re.search(r"[.!?][\"')\]]*$",gap): sentence.add(pos)
-        elif re.search(r"[;:—–,][\"')\]]*$",gap): clause.add(pos)
-    ranked={p:0 for p in sentence}
+        # Only cut where the source has a real whitespace separator. A word
+        # boundary beside an em dash or other attached punctuation is not a
+        # safe split: joining excerpts with one space would alter narration.
+        raw_gap=text[w[pos-1].end():w[pos].start()]
+        if not any(ch.isspace() for ch in raw_gap):
+            continue
+        gap=raw_gap.strip()
+        if re.search(r"[.!?][\"')\\]]*$",gap): sentence.add(pos)
+        elif re.search(r"[;:—–,][\"')\\]]*$",gap): clause.add(pos)
+        ranked={p:0 for p in sentence}
     for p in clause: ranked.setdefault(p,8)
     for p in range(1,total): ranked.setdefault(p,24)
     cuts=[]; prev=0
