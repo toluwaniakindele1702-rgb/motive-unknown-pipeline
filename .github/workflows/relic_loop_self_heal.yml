@@ -69,6 +69,8 @@ jobs:
             --title "Automated Relic Loop repair for production run ${SOURCE_RUN}" \
             --body "## Automated failure diagnosis\n\nTriggered by production run [${SOURCE_RUN}](${{ github.event.workflow_run.html_url }}).\n\nThe patch passed initial safety, syntax and applicable self-tests. A separate pull-request validation workflow must pass before this repair is merged into main. No test video is published.")"
           echo "Created repair PR: $PR_URL"
+          # Explicit dispatch works with GITHUB_TOKEN and avoids relying on PR-event side effects.
+          gh workflow run relic_loop_repair_validation.yml --repo "$GH_REPOSITORY" --ref "$BRANCH" -f base_ref=main
           VALIDATION_RUN=""
           for attempt in $(seq 1 60); do
             VALIDATION_RUN="$(gh run list --repo "$GH_REPOSITORY" --workflow relic_loop_repair_validation.yml --branch "$BRANCH" --limit 10 --json databaseId,headSha,status,conclusion \
