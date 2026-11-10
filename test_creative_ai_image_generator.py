@@ -11,8 +11,13 @@ from creative_ai_image_generator import (
 def fixture_image():
     image = Image.new("RGB", (512, 768), "white")
     draw = ImageDraw.Draw(image)
+    # Fine illustrated background detail keeps the fixture representative of a
+    # real rendered frame without introducing random/non-deterministic pixels.
+    for x in range(0, 512, 8):
+        draw.line((x, 0, x, 767), fill=(220 - (x % 80), 230, 240), width=2)
     draw.rectangle((80, 100, 430, 680), outline="black", width=12)
     draw.ellipse((160, 150, 350, 340), fill="#e8d2bb", outline="black", width=8)
+    draw.arc((190, 190, 320, 300), 0, 180, fill="black", width=5)
     out = BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()
