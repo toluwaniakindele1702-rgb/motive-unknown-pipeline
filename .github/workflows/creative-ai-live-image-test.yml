@@ -1,0 +1,70 @@
+name: Creative AI Live Image Test (No Publishing)
+
+on:
+  push:
+    branches: [feature/relic-loop-creative-ai]
+    paths:
+      - "creative_ai_image_generator.py"
+      - "creative_ai_live_image_test.py"
+      - "cloudflare_relic_loop_images.py"
+      - "cloudflare_relic_loop_images_peanut.py"
+      - "raphael_browser.py"
+      - ".github/workflows/creative-ai-live-image-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-image-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_IMAGE_MODEL: "@cf/black-forest-labs/flux-2-klein-4b"
+      RAPHAEL_URL: "https://raphael.app/gpt-image-2-6-sunburst"
+      RAPHAEL_MODEL_PREFERENCE: "GPT Image 2.6 Sunburst,GPT Image 2.6 Flare,GPT Image 2.5 Flare,GPT Image 2,Seedream 5.0 Pro,Seedream 3.5 Pro"
+      RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
+      RELIC_LOOP_IMAGE_WIDTH: "576"
+      RELIC_LOOP_IMAGE_HEIGHT: "1024"
+      RELIC_LOOP_IMAGE_RETRIES: "2"
+      RELIC_LOOP_PROVIDER_CYCLES: "2"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout Creative AI branch
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install image dependencies and Chromium
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "Pillow>=11,<13" "requests>=2.32,<3" "playwright>=1.50,<2"
+          python -m playwright install --with-deps chromium
+      - name: Verify provider credentials and canonical references
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" -a -n "$CLOUDFLARE_API_TOKEN" || {
+            echo "::error::Cloudflare fallback credentials are missing"; exit 1;
+          }
+          test -s assets/visual_references/Generate_modern_stickman_character_20261027121745.jpg
+          test -s assets/visual_references/Remove_bag_and_animate_image_20261027125028.jpg
+          echo "Provider credentials are present; no publishing credentials are used."
+      - name: Compile Creative AI and provider adapters
+        run: python -m py_compile creative_ai_image_generator.py creative_ai_live_image_test.py cloudflare_relic_loop_images.py cloudflare_relic_loop_images_peanut.py raphael_browser.py
+      - name: Generate three real connected test frames (Raphael then Cloudflare fallback)
+        run: python creative_ai_live_image_test.py 2>&1 | tee creative_ai_live_test.log
+      - name: Upload test images and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: creative-ai-live-image-test-${{ github.run_number }}
+          path: |
+            state/creative_ai_live_test/
+            creative_ai_live_test.log
+          if-no-files-found: warn
+          retention-days: 14
