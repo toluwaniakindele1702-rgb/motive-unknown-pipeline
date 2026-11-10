@@ -186,34 +186,50 @@ def visual_prompts(client,title,narration,characters,setting,scenes):
             s.update(accepted.get(s["number"]) or fallback_visual(s,s["number"]==1))
             if s["number"] not in accepted: print(f"[V2 VISUAL] scene {s['number']}: deterministic fallback used")
 def review_story(client,story):
-    """Only accept a strong story with separately checked hook, escalation and punchline."""
+    """Grade once, allow one rewrite, then return the best available draft even below threshold."""
     def assess(candidate):
-        result=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
-            json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1800,0.1)
+        try:
+            result=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
+                json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1800,0.1)
+        except Exception as exc:
+            result={"score":0,"hook_score":0,"escalation_score":0,"punchline_score":0,
+                    "main_problem":f"Reviewer unavailable: {type(exc).__name__}: {exc}",
+                    "rewrite_instruction":"Strengthen the opening hook, causal escalation and earned final punchline."}
         def rating(key):
             try: return max(0,min(10,int(result.get(key,0))))
             except (TypeError,ValueError): return 0
         scores=tuple(rating(k) for k in ("score","hook_score","escalation_score","punchline_score"))
+        result["score"]=scores[0]
         print(f"[V2 REVIEW] overall={scores[0]}/10 hook={scores[1]}/10 escalation={scores[2]}/10 punchline={scores[3]}/10: {norm(result.get('main_problem'))}")
         return result,all(x>=8 for x in scores),scores
-    current=story
-    initial=None
-    for revision in range(4):
-        review,passed,scores=assess(current)
-        if initial is None: initial=scores[0]
-        if passed:
-            review["rewrite_attempted"]=(revision>0)
-            review["initial_score"]=initial
-            return current,review
-        instruction=norm(review.get("rewrite_instruction"))
-        if not instruction: raise ValueError("Story failed strict editorial gate; no rewrite instruction returned")
-        if revision==3: break
-        print(f"[V2 REVIEW] rewrite {revision+1}/3 required; scores={scores}")
-        current=validate_story(call(client,MODEL,REWRITE_SYSTEM,
-            json.dumps({"current_story":current,"editor_main_problem":norm(review.get("main_problem")),
-                "editor_rewrite_instruction":instruction,"failed_scores":{"overall":scores[0],"hook":scores[1],
-                "escalation":scores[2],"punchline":scores[3]},"required_action":"Fix the lowest-scoring dimensions first. Replace the premise if the current comic engine cannot support a strong payoff."}),5200,0.68))
-    raise ValueError(f"Story rejected after three rewrites: overall/hook/escalation/punchline={scores}; each must be at least 8")
+    first_review,passed,first_scores=assess(story)
+    first_review["initial_score"]=first_scores[0]
+    first_review["rewrite_attempted"]=False
+    if passed:
+        first_review["grading_passed"]=True
+        return story,first_review,first_scores
+    instruction=norm(first_review.get("rewrite_instruction")) or "Improve the weakest dimensions with a clear hook, safe causal escalation and earned final payoff."
+    print(f"[V2 REVIEW] one rewrite attempt allowed; first scores={first_scores}")
+    try:
+        rewritten=validate_story(call(client,MODEL,REWRITE_SYSTEM,
+            json.dumps({"current_story":story,"editor_main_problem":norm(first_review.get("main_problem")),
+                "editor_rewrite_instruction":instruction,
+                "failed_scores":{"overall":first_scores[0],"hook":first_scores[1],"escalation":first_scores[2],"punchline":first_scores[3]},
+                "required_action":"Fix the weakest dimensions first; preserve safe, filmable cause and effect."}),
+            5200,0.68))
+        second_review,second_passed,second_scores=assess(rewritten)
+        second_review["initial_score"]=first_scores[0]
+        second_review["rewrite_attempted"]=True
+        second_review["grading_passed"]=second_passed
+        if (second_scores[0],sum(second_scores[1:])) > (first_scores[0],sum(first_scores[1:])):
+            print(f"[V2 REVIEW] rewrite selected; scores improved from {first_scores} to {second_scores}")
+            return rewritten,second_review,second_scores
+        print(f"[V2 REVIEW] original retained; rewrite did not improve score ({first_scores} vs {second_scores})")
+    except Exception as exc:
+        print(f"[V2 REVIEW] rewrite failed; retaining original: {type(exc).__name__}: {exc}")
+    first_review["grading_passed"]=False
+    first_review["rewrite_attempted"]=True
+    return story,first_review,first_scores
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
     parts=split_exact(sample,8)
@@ -232,35 +248,48 @@ def main():
         old=json.loads(history_path.read_text()); titles=[norm(x) for x in old if norm(x)]
         if titles: user+=" Avoid repeating these recent titles: "+"; ".join(titles[-12:])
     except Exception: pass
-    story=None; review=None; last=None
-    for attempt in range(1,6):
+    candidates=[]; last=None
+    for attempt in range(1,3):
         try:
-            # Plan several distinct premises first; write only after selecting a strong comic engine.
             concept_pack=call(client,MODEL,PREMISE_SYSTEM,
                 json.dumps({"channel":"Chispa-Pifia","recent_titles":titles[-12:] if 'titles' in locals() else [],
                             "creative_brief":user},ensure_ascii=False),4200,0.9)
             concepts=concept_pack.get("concepts")
-            if not isinstance(concepts,list) or len(concepts)<3:
-                raise ValueError("Premise room must return three distinct concepts")
-            selected=concepts[0]
-            if not isinstance(selected,dict) or len(norm(selected.get("hook")))<12 or len(norm(selected.get("payoff")))<12:
-                raise ValueError("Top premise lacks a concrete hook or payoff")
-            print(f"[V2 STORY] candidate {attempt}/5 selected premise: {norm(selected.get('title'))}")
+            if not isinstance(concepts,list) or not concepts:
+                raise ValueError("Premise room returned no usable concepts")
+            selected=next((x for x in concepts if isinstance(x,dict)
+                           and len(norm(x.get("hook")))>=12 and len(norm(x.get("payoff")))>=12),None)
+            if selected is None:
+                raise ValueError("Premise room returned no concept with a concrete hook and payoff")
+            print(f"[V2 STORY] story attempt {attempt}/2 selected premise: {norm(selected.get('title'))}")
             raw=call(client,MODEL,STORY_SYSTEM,
                 json.dumps({"creative_brief":user,"selected_concept":selected,
-                            "instruction":"Write the complete narration from this premise. Strengthen weak beats and make the final punchline land."},ensure_ascii=False),
+                            "instruction":"Write the strongest complete narration possible from this premise. Prioritize a scroll-stopping opening and an earned final punchline."},ensure_ascii=False),
                 7000,0.78 if attempt==1 else 0.72)
             candidate=validate_story(raw)
-            candidate,editorial=review_story(client,candidate)
-            story,review=candidate,editorial
-            review["selected_premise"]=norm(selected.get("title"))
-            break
-        except Exception as e:
-            last=e
-            print(f"[V2 STORY] candidate {attempt}/5 rejected: {type(e).__name__}: {e}")
-            if attempt<5: time.sleep(3)
-    if story is None:
-        raise SystemExit(f"No story passed editorial quality gate after 5 candidates: {last}")
+            candidate,editorial,scores=review_story(client,candidate)
+            editorial["selected_premise"]=norm(selected.get("title"))
+            editorial["story_attempt"]=attempt
+            editorial["component_scores"]={"overall":scores[0],"hook":scores[1],"escalation":scores[2],"punchline":scores[3]}
+            candidates.append((candidate,editorial,scores))
+            if editorial.get("grading_passed"):
+                print(f"[V2 STORY] attempt {attempt} passed required grading; selecting it")
+                break
+            print(f"[V2 STORY] attempt {attempt} below grading threshold; retaining candidate for comparison")
+        except Exception as exc:
+            last=exc
+            print(f"[V2 STORY] attempt {attempt}/2 generation failed: {type(exc).__name__}: {exc}")
+        if attempt<2:
+            time.sleep(2)
+    if not candidates:
+        raise SystemExit(f"Both permitted story attempts failed to produce a structurally valid story. Last error: {last}")
+    if len(candidates)==1:
+        story,review,scores=candidates[0]
+    else:
+        story,review,scores=max(candidates,key=lambda item:(item[2][0],sum(item[2][1:])))
+        print(f"[V2 STORY] both attempts completed; selected highest-scoring story with scores={scores}")
+    review["grading_passed"]=all(x>=8 for x in scores)
+    review["selection_policy"]="highest_scoring_of_two_attempts" if len(candidates)==2 and not review["grading_passed"] else "first_passing_candidate_or_best_available"
     excerpts=split_exact(story["narration"],SCENES)
     characters=[{"name":story["protagonist"],"role":"human stickman protagonist",
       "appearance":"The approved canonical Chispa-Pifia 2D stickman design; preserve round pale head, facial design, proportions, outline weight and established outfit."}]
