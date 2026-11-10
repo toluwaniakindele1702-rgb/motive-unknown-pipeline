@@ -100,7 +100,7 @@ STRICTLY AVOID: {", ".join(brief.avoid)}.
 Return only the image, not a contact sheet, storyboard, collage, model sheet or multiple panels."""
 
 
-def inspect_image(image_bytes: bytes, min_bytes: int = 8_000) -> ImageInspection:
+def inspect_image(image_bytes: bytes, min_bytes: int = 2_048) -> ImageInspection:
     """Conservative technical/usability checks; not a substitute for human art review."""
     result = ImageInspection(valid=False, bytes_size=len(image_bytes or b""))
     if not image_bytes or len(image_bytes) < min_bytes:
