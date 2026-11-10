@@ -267,7 +267,10 @@ def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
     parts=split_exact(sample,8)
     assert len(parts)==8 and " ".join(parts)==sample and sum(wc(x) for x in parts)==wc(sample)
-    print(f"[V2 SELF-TEST] PASS: {len(parts)} exact excerpts, {wc(sample)} words")
+    edge=norm("Max grabbed the phone—then the screen flashed. He said, ‘Perfect!’ and tried again. The shopkeeper watched quietly, holding Max's receipt. A tiny bell rang; everyone turned toward the door. Max finally noticed the receipt was still attached to his sleeve.")
+    edge_parts=split_exact(edge,5)
+    assert " ".join(edge_parts)==edge and sum(wc(x) for x in edge_parts)==wc(edge)
+    print(f"[V2 SELF-TEST] PASS: {len(parts)} standard excerpts and {len(edge_parts)} punctuation-edge excerpts")
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--self-test",action="store_true"); args=ap.parse_args()
     if args.self_test: self_test(); return
