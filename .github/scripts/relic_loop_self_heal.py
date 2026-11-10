@@ -35,7 +35,7 @@ def validate_patch_paths(patch: str) -> list[str]:
     if any(token in patch for token in forbidden):
         raise ValueError("Binary, add/delete, mode-change, rename or copy patches are forbidden")
     old_paths = re.findall(r"^--- a/(.+)$", patch, flags=re.M)
-    new_paths = re.findall(r"^\\+\\+\\+ b/(.+)$", patch, flags=re.M)
+    new_paths = re.findall(r"^\+\+\+ b/(.+)$", patch, flags=re.M)
     if not old_paths or len(old_paths) != len(new_paths) or len(old_paths) != len(set(old_paths)):
         raise ValueError("Patch must contain matching old/new headers for each unique file")
     if old_paths != new_paths:
