@@ -183,7 +183,7 @@ def review_story(client,story):
         print(f"[V2 REVIEW] rewrite {revision+1}/3 required; scores={scores}")
         current=validate_story(call(client,MODEL,REWRITE_SYSTEM,
             json.dumps({"current_story":current,"editor_instruction":instruction,"failed_scores":scores}),3200,0.62))
-    raise ValueError(f"Story rejected after two rewrites: overall/hook/escalation/punchline={scores}; each must be at least 8")
+    raise ValueError(f"Story rejected after three rewrites: overall/hook/escalation/punchline={scores}; each must be at least 8")
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
     parts=split_exact(sample,8)
