@@ -1,1 +1,3 @@
 One-time production validation trigger for the two-attempt story selector and Raphael -> Cloudflare recovery router. No YouTube publishing requested by this push-triggered test.
+
+Follow-up validation after adding prose-to-story recovery for GPT-OSS JSON-schema noncompliance. Push-triggered test must not publish to YouTube.
