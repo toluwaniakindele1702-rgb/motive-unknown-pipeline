@@ -2,6 +2,10 @@ name: Chispa-Pifia V2 Production
 run-name: "Chispa-Pifia V2 ${{ github.run_number }}"
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/triggers/run-production-test.txt"
   schedule:
     # Nigeria time (WAT, UTC+1): 09:00, 15:00 and 21:00 every day.
     - cron: "0 8,14,20 * * *"
@@ -43,6 +47,7 @@ jobs:
       RELIC_LOOP_IMAGE_WIDTH: "576"
       RELIC_LOOP_IMAGE_HEIGHT: "1024"
       RELIC_LOOP_IMAGE_RETRIES: "3"
+      RELIC_LOOP_PROVIDER_CYCLES: "3"
       RELIC_LOOP_OCR_RETRIES: "2"
       RELIC_LOOP_OCR_STRICT: "1"
       RELIC_LOOP_KOKORO_VOICE: am_liam
@@ -163,6 +168,17 @@ jobs:
         run: |
           set -o pipefail
           python youtube_upload.py 2>&1 | tee v2_youtube.log
+
+      - name: Notify immediately if production fails
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## PRODUCTION FAILED"
+            echo "Run ${GITHUB_RUN_NUMBER} could not complete a video."
+            echo "Open the failed Actions run and inspect the first failed step for the exact cause."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Chispa-Pifia production failed::Run ${GITHUB_RUN_NUMBER} did not produce a completed video. Check the failed step logs."
 
       - name: Write production report
         if: always()
