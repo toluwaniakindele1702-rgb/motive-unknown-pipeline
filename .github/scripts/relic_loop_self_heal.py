@@ -34,13 +34,13 @@ def request(url: str, binary=False):
 
 def redact(s: str) -> str:
     patterns = [
-        r"(?i)(authorization:\s*bearer\s+)\S+",
-        r"(?i)((?:api[_-]?key|token|password|client_secret)\s*[=:]\s*)[^\s,;]+",
-        r"(?i)(gh[pousr]_[A-Za-z0-9_]{20,})",
-        r"(?i)(sk-[A-Za-z0-9_-]{16,})",
+        (r"(?i)(authorization:\s*bearer\s+)\S+", r"\1[REDACTED]"),
+        (r"(?i)((?:api[_-]?key|token|password|client_secret)\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]"),
+        (r"(?i)gh[pousr]_[A-Za-z0-9_]{20,}", "[REDACTED]"),
+        (r"(?i)sk-[A-Za-z0-9_-]{16,}", "[REDACTED]"),
     ]
-    for p in patterns:
-        s = re.sub(p, r"\1[REDACTED]" if "(" in p else "[REDACTED]", s)
+    for pattern, replacement in patterns:
+        s = re.sub(pattern, replacement, s)
     return s
 
 def main():
@@ -105,13 +105,15 @@ Produce a diagnosis and, only if clearly justified, a minimal patch. Do not inve
         "tests": result.get("tests", []), "risks": result.get("risks", []),
     }
     Path("repair_report.json").write_text(json.dumps(report, indent=2))
-    summary = Path(os.environ.get("GITHUB_STEP_SUMMARY", "repair_summary.md"))
-    summary.write_text("# Relic Loop self-healing report\n\n" +
+    summary_text = ("# Relic Loop self-healing report\n\n" +
         f"- Source run: [{RUN_ID}]({run.get('html_url')})\n" +
         f"- Category: {report['category']}\n- Confidence: {report['confidence']}\n\n" +
         report["diagnosis"] + "\n\n## Tests / checks\n" +
         "\n".join(f"- {x}" for x in report["tests"]) +
         "\n\n## Risks\n" + "\n".join(f"- {x}" for x in report["risks"]))
+    Path("repair_summary.md").write_text(summary_text)
+    with open(os.environ.get("GITHUB_STEP_SUMMARY", "repair_summary.md"), "a") as stream:
+        stream.write(summary_text + "\n")
     patch = result.get("patch", "")
     if not report["repairable"] or report["category"] != "code_bug" or report["confidence"] < 0.78 or not patch.strip():
         print("Diagnosis recorded; no safe, high-confidence code patch proposed.")
