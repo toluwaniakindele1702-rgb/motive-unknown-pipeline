@@ -161,7 +161,7 @@ def review_story(client,story):
     """Only accept a strong story with separately checked hook, escalation and punchline."""
     def assess(candidate):
         result=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
-            json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1100,0.1)
+            json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1800,0.1)
         def rating(key):
             try: return max(0,min(10,int(result.get(key,0))))
             except (TypeError,ValueError): return 0
@@ -170,7 +170,7 @@ def review_story(client,story):
         return result,all(x>=8 for x in scores),scores
     current=story
     initial=None
-    for revision in range(3):
+    for revision in range(4):
         review,passed,scores=assess(current)
         if initial is None: initial=scores[0]
         if passed:
@@ -179,10 +179,10 @@ def review_story(client,story):
             return current,review
         instruction=norm(review.get("rewrite_instruction"))
         if not instruction: raise ValueError("Story failed strict editorial gate; no rewrite instruction returned")
-        if revision==2: break
-        print(f"[V2 REVIEW] rewrite {revision+1}/2 required; scores={scores}")
+        if revision==3: break
+        print(f"[V2 REVIEW] rewrite {revision+1}/3 required; scores={scores}")
         current=validate_story(call(client,MODEL,REWRITE_SYSTEM,
-            json.dumps({"current_story":current,"editor_instruction":instruction,"failed_scores":scores}),2200,0.62))
+            json.dumps({"current_story":current,"editor_instruction":instruction,"failed_scores":scores}),3200,0.62))
     raise ValueError(f"Story rejected after two rewrites: overall/hook/escalation/punchline={scores}; each must be at least 8")
 def self_test():
     sample=norm("The shop owner offered Max one free balloon if he carried it home carefully. Max tied it to his wrist, then decided the safest place was inside his jacket. The balloon pushed the jacket open, so he added a belt. The belt trapped his arms. He tried walking sideways, but the balloon kept turning him toward the shop. A gust pulled him backwards, and he grabbed a street sign to stop. The owner ran over and cut the string. Max thanked him for saving the balloon. Then the owner pointed at the tiny receipt still tied to Max's wrist.")
@@ -203,19 +203,19 @@ def main():
         if titles: user+=" Avoid repeating these recent titles: "+"; ".join(titles[-12:])
     except Exception: pass
     story=None; review=None; last=None
-    for attempt in range(1,4):
+    for attempt in range(1,6):
         try:
-            raw=call(client,MODEL,STORY_SYSTEM,user,5200,0.82 if attempt==1 else 0.68)
+            raw=call(client,MODEL,STORY_SYSTEM,user,7000,0.82 if attempt==1 else 0.68)
             candidate=validate_story(raw)
             candidate,editorial=review_story(client,candidate)
             story,review=candidate,editorial
             break
         except Exception as e:
             last=e
-            print(f"[V2 STORY] candidate {attempt}/3 rejected: {type(e).__name__}: {e}")
-            if attempt<3: time.sleep(3)
+            print(f"[V2 STORY] candidate {attempt}/5 rejected: {type(e).__name__}: {e}")
+            if attempt<5: time.sleep(3)
     if story is None:
-        raise SystemExit(f"No story passed editorial quality gate after 3 candidates: {last}")
+        raise SystemExit(f"No story passed editorial quality gate after 5 candidates: {last}")
     excerpts=split_exact(story["narration"],SCENES)
     characters=[{"name":story["protagonist"],"role":"human stickman protagonist",
       "appearance":"The approved canonical Chispa-Pifia 2D stickman design; preserve round pale head, facial design, proportions, outline weight and established outfit."}]
