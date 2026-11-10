@@ -92,15 +92,15 @@ def parse_json(s):
     x=json.loads(s[start:end+1])
     if not isinstance(x,dict): raise ValueError("Expected JSON object")
     return x
-def call(client,model,system,user,tokens=1500,temp=0.65):
-    # Do not request Groq's server-side json_object constrained decoding here.
-    # It returned HTTP 400 json_validate_failed for openai/gpt-oss models before
-    # generation began. The prompts already require JSON; parse_json extracts and
-    # validates the returned object locally, allowing retries to handle bad output.
+def call(client,model,system,user,tokens=1500,temp=0.65,allow_plain_text=False):
+    # GPT-OSS occasionally ignores JSON-only instructions and returns a complete
+    # story as ordinary prose. For story-writing calls only, preserve that usable
+    # text and normalize it into the same internal schema instead of discarding it.
+    # Reviewer and storyboard calls remain strict JSON.
     r=client.chat.completions.create(model=model,messages=[{"role":"system","content":system},{"role":"user","content":user}],
       temperature=temp,max_completion_tokens=tokens)
     choice=r.choices[0]
-    content=choice.message.content or ""
+    content=(choice.message.content or "").strip()
     try:
         return parse_json(content)
     except Exception as exc:
@@ -108,7 +108,34 @@ def call(client,model,system,user,tokens=1500,temp=0.65):
         usage=getattr(r,"usage",None)
         completion=getattr(usage,"completion_tokens",None) if usage else None
         print(f"[V2 MODEL] invalid JSON model={model} finish_reason={finish} completion_tokens={completion} content_preview={content[:500]!r}")
+        if allow_plain_text and content:
+            print("[V2 MODEL] recovering non-JSON writer response as narration text")
+            return {"_plain_text":content}
         raise ValueError(f"Model returned invalid/empty JSON (finish_reason={finish}, completion_tokens={completion}): {exc}") from exc
+def plain_text_story(raw):
+    text=norm(raw.get("_plain_text"))
+    # Remove a short standalone title/header if the model supplied one.
+    lines=[x.strip() for x in text.splitlines() if x.strip()]
+    if len(lines)>1 and len(lines[0].split())<=10 and not re.search(r"[.!?]$",lines[0]):
+        text=norm(" ".join(lines[1:]))
+    words=spans(text)
+    if len(words)>205:
+        # Trim only at a sentence boundary; never cut a sentence in half.
+        eligible=[m.end() for m in re.finditer(r"[.!?][\"')\\]]*(?:\\s+|$)",text)
+                 if wc(text[:m.end()])<=205]
+        if eligible:
+            text=text[:eligible[-1]].strip()
+        else:
+            text=" ".join(text.split()[:205])
+    title=norm(" ".join(text.split()[:7])).strip(" .,!?:;—-") or "A Stickman Misadventure"
+    match=re.search(r"\\bStickman\\s+([A-Z][a-z]+)\\b",text)
+    protagonist=match.group(1) if match else "The stickman"
+    return {"title":title[:90],"narration":text,"protagonist":protagonist,
+            "supporting_characters":[],"setting":"Everyday location"}
+def normalize_writer_response(raw):
+    if isinstance(raw,dict) and raw.get("_plain_text"):
+        raw=plain_text_story(raw)
+    return validate_story(raw)
 def validate_story(raw):
     s={"title":norm(raw.get("title"))[:90],"narration":norm(raw.get("narration")),
        "protagonist":norm(raw.get("protagonist")) or "The protagonist",
@@ -253,7 +280,19 @@ def main():
         try:
             concept_pack=call(client,MODEL,PREMISE_SYSTEM,
                 json.dumps({"channel":"Chispa-Pifia","recent_titles":titles[-12:] if 'titles' in locals() else [],
-                            "creative_brief":user},ensure_ascii=False),4200,0.9)
+                            "creative_brief":user},ensure_ascii=False),4200,0.9,allow_plain_text=True)
+            # If GPT-OSS ignores the premise JSON schema and writes the story
+            # directly, salvage that narration instead of failing the run.
+            if concept_pack.get("_plain_text"):
+                candidate=normalize_writer_response(concept_pack)
+                candidate,editorial,scores=review_story(client,candidate)
+                editorial["selected_premise"]="Recovered direct writer response"
+                editorial["story_attempt"]=attempt
+                editorial["component_scores"]={"overall":scores[0],"hook":scores[1],"escalation":scores[2],"punchline":scores[3]}
+                candidates.append((candidate,editorial,scores))
+                print(f"[V2 STORY] attempt {attempt}: direct prose recovered as a valid story")
+                if editorial.get("grading_passed"): break
+                continue
             concepts=concept_pack.get("concepts")
             if not isinstance(concepts,list) or not concepts:
                 raise ValueError("Premise room returned no usable concepts")
@@ -265,8 +304,8 @@ def main():
             raw=call(client,MODEL,STORY_SYSTEM,
                 json.dumps({"creative_brief":user,"selected_concept":selected,
                             "instruction":"Write the strongest complete narration possible from this premise. Prioritize a scroll-stopping opening and an earned final punchline."},ensure_ascii=False),
-                7000,0.78 if attempt==1 else 0.72)
-            candidate=validate_story(raw)
+                7000,0.78 if attempt==1 else 0.72,allow_plain_text=True)
+            candidate=normalize_writer_response(raw)
             candidate,editorial,scores=review_story(client,candidate)
             editorial["selected_premise"]=norm(selected.get("title"))
             editorial["story_attempt"]=attempt
