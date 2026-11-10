@@ -2,14 +2,9 @@ name: Chispa-Pifia V2 Production
 run-name: "Chispa-Pifia V2 ${{ github.run_number }}"
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/chispa_pifia_v2.yml"
-      - "cloudflare_relic_loop_images_peanut.py"
-      - "cloudflare_relic_loop_images.py"
-      - "chispa_pifia_v2.py"
-      - "raphael_browser.py"
+  schedule:
+    # Nigeria time (WAT, UTC+1): 09:00, 15:00 and 21:00 every day.
+    - cron: "0 8,14,20 * * *"
   workflow_dispatch:
     inputs:
       topic:
@@ -18,7 +13,7 @@ on:
         default: ""
         type: string
       upload_video:
-        description: "Upload the finished, quality-approved Short to YouTube (unlisted by default)"
+        description: "Upload the finished, quality-approved Short publicly to YouTube"
         required: false
         default: true
         type: boolean
@@ -134,7 +129,7 @@ jobs:
           echo "Image route: Raphael with explicit portrait selection; Cloudflare FLUX.2 Klein fallback. CAPTCHA/Turnstile is never bypassed."
 
       - name: Verify YouTube channel access before publishing
-        if: inputs.upload_video
+        if: github.event_name == 'schedule' || inputs.upload_video
         run: python youtube_upload.py --check-auth
 
       - name: Run deterministic V2 tests
@@ -164,7 +159,7 @@ jobs:
           python assemble_relic_loop_short.py 2>&1 | tee v2_assembly.log
 
       - name: Upload completed Short to Chispa-Pifia
-        if: success() && inputs.upload_video
+        if: success() && (github.event_name == 'schedule' || inputs.upload_video)
         run: |
           set -o pipefail
           python youtube_upload.py 2>&1 | tee v2_youtube.log
@@ -178,7 +173,7 @@ jobs:
             echo "- Run: ${GITHUB_RUN_NUMBER}"
             echo "- Commit: ${GITHUB_SHA}"
             echo "- Trigger: ${GITHUB_EVENT_NAME}"
-            echo "- YouTube publish requested: ${{ inputs.upload_video }}"
+            echo "- YouTube publish requested: ${{ github.event_name == 'schedule' || inputs.upload_video }}"
             for f in v2_story.log v2_images.log v2_assembly.log v2_youtube.log; do
               if [ -f "$f" ]; then
                 echo "## $f"
