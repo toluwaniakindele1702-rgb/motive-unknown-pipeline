@@ -6,7 +6,7 @@ allowlisted application .py files, never workflows, credentials, or secrets.
 It creates a candidate patch, validates it independently, and merges only after CI passes.
 """
 from __future__ import annotations
-import io, json, os, re, subprocess, sys, urllib.request, zipfile
+import io, json, math, os, re, subprocess, sys, urllib.request, zipfile
 from pathlib import Path
 from groq import Groq
 
@@ -156,13 +156,35 @@ Produce a diagnosis and, only if clearly justified, a minimal patch. Do not inve
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
     )
     result = json.loads(response.choices[0].message.content)
+    if not isinstance(result, dict):
+        raise ValueError("Repair model response must be a JSON object")
+    category = result.get("category")
+    if category not in {"code_bug", "transient_service", "configuration", "unknown"}:
+        category = "unknown"
+    raw_confidence = result.get("confidence")
+    confidence = (float(raw_confidence) if type(raw_confidence) in (int, float)
+                  and math.isfinite(raw_confidence) else 0.0)
+    repairable = result.get("repairable") is True
+    patch = result.get("patch")
+    if not isinstance(patch, str):
+        patch = ""
+    diagnosis = result.get("diagnosis")
+    if not isinstance(diagnosis, str):
+        diagnosis = "The repair model returned no usable diagnosis."
+    tests = result.get("tests")
+    risks = result.get("risks")
+    if not isinstance(tests, list):
+        tests = []
+    if not isinstance(risks, list):
+        risks = []
     report = {
         "source_run": RUN_ID, "source_url": run.get("html_url"),
-        "diagnosis": result.get("diagnosis", ""),
-        "category": result.get("category", "unknown"),
-        "confidence": result.get("confidence", 0),
-        "repairable": bool(result.get("repairable")),
-        "tests": result.get("tests", []), "risks": result.get("risks", []),
+        "diagnosis": diagnosis,
+        "category": category,
+        "confidence": confidence,
+        "repairable": repairable,
+        "tests": [str(x)[:500] for x in tests[:20]],
+        "risks": [str(x)[:500] for x in risks[:20]],
     }
     Path("repair_report.json").write_text(json.dumps(report, indent=2))
     summary_text = ("# Relic Loop self-healing report\n\n" +
@@ -174,7 +196,6 @@ Produce a diagnosis and, only if clearly justified, a minimal patch. Do not inve
     Path("repair_summary.md").write_text(summary_text)
     with open(os.environ.get("GITHUB_STEP_SUMMARY", "repair_summary.md"), "a") as stream:
         stream.write(summary_text + "\n")
-    patch = result.get("patch", "")
     if not report["repairable"] or report["category"] != "code_bug" or report["confidence"] < 0.78 or not patch.strip():
         print("Diagnosis recorded; no safe, high-confidence code patch proposed.")
         return 0
