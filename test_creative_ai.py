@@ -33,7 +33,7 @@ class CreativeAITests(unittest.TestCase):
             "setting": "A shop",
         })
         self.assertEqual(word_count(story["narration"]), 190)
-        self.assertEqual(story["supporting_characters"], ["A neighbour"])
+        self.assertEqual(story["supporting_characters"], ["A neighbour", "Extra"])
 
     def test_rejects_invalid_length(self):
         with self.assertRaises(ValueError):
