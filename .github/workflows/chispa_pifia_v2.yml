@@ -87,7 +87,7 @@ jobs:
           else
             echo "::warning::Cloudflare fallback credentials are unavailable."
           fi
-          if [[ "${{ inputs.upload_video }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.upload_video }}" == "true" ]]; then
             test -n "$YOUTUBE_TOKEN_JSON" || { echo "::error::YOUTUBE_TOKEN_JSON is missing"; exit 1; }
             test -n "$YOUTUBE_CLIENT_SECRET_JSON" || { echo "::error::YOUTUBE_CLIENT_SECRET_JSON is missing"; exit 1; }
           fi
