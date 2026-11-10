@@ -10,9 +10,9 @@ import io, json, os, re, subprocess, sys, urllib.request, zipfile
 from pathlib import Path
 from groq import Groq
 
-REPO = os.environ["GITHUB_REPOSITORY"]
-RUN_ID = os.environ["TARGET_RUN_ID"]
-TOKEN = os.environ["GH_TOKEN"]
+REPO = os.getenv("GITHUB_REPOSITORY", "")
+RUN_ID = os.getenv("TARGET_RUN_ID", "")
+TOKEN = os.getenv("GH_TOKEN", "")
 API = "https://api.github.com"
 ALLOW = {
     "chispa_pifia_v2.py", "cloudflare_relic_loop_images.py",
@@ -21,6 +21,50 @@ ALLOW = {
     "chispa_pifia_contact_sheet.py",
 }
 MAX_LOG_CHARS = 42000
+MAX_LOG_ARCHIVE_BYTES = 25 * 1024 * 1024
+MAX_LOG_EXPANDED_BYTES = 8 * 1024 * 1024
+MAX_LOG_FILES = 100
+
+def validate_patch_paths(patch: str) -> list[str]:
+    """Accept only ordinary edits to allowlisted root-level Python files."""
+    if not patch.strip():
+        raise ValueError("Empty patch")
+    forbidden = ("GIT binary patch", "Binary files ", "new file mode ", "deleted file mode ",
+                 "old mode ", "new mode ", "rename from ", "rename to ",
+                 "copy from ", "copy to ")
+    if any(token in patch for token in forbidden):
+        raise ValueError("Binary, add/delete, mode-change, rename or copy patches are forbidden")
+    old_paths = re.findall(r"^--- a/(.+)$", patch, flags=re.M)
+    new_paths = re.findall(r"^\\+\\+\\+ b/(.+)$", patch, flags=re.M)
+    if not old_paths or len(old_paths) != len(new_paths) or len(old_paths) != len(set(old_paths)):
+        raise ValueError("Patch must contain matching old/new headers for each unique file")
+    if old_paths != new_paths:
+        raise ValueError("Patch may not add, delete, rename or swap files")
+    for name in old_paths:
+        if name.startswith("/") or "\\\\" in name or ".." in Path(name).parts or name not in ALLOW:
+            raise ValueError(f"Disallowed patch path: {name}")
+    header_count = len(re.findall(r"^(?:---|\\+\\+) ", patch, flags=re.M))
+    if header_count != 2 * len(old_paths):
+        raise ValueError("Unexpected or malformed diff file headers")
+    return old_paths
+
+def self_test():
+    good = "diff --git a/chispa_pifia_v2.py b/chispa_pifia_v2.py\\n--- a/chispa_pifia_v2.py\\n+++ b/chispa_pifia_v2.py\\n@@ -1 +1 @@\\n-a\\n+b\\n"
+    assert validate_patch_paths(good) == ["chispa_pifia_v2.py"]
+    bad = [
+        good.replace("+++ b/chispa_pifia_v2.py", "+++ b/.github/workflows/evil.yml"),
+        good + "diff --git a/README.md b/README.md\\n--- a/README.md\\n+++ b/README.md\\n",
+        good.replace("--- a/chispa_pifia_v2.py", "--- /dev/null"),
+        good + "rename from chispa_pifia_v2.py\\n",
+        good.replace("+++ b/chispa_pifia_v2.py", "+++ b/../evil.py"),
+    ]
+    for candidate in bad:
+        try:
+            validate_patch_paths(candidate)
+        except ValueError:
+            continue
+        raise AssertionError("Unsafe patch unexpectedly passed validation")
+    print("[SELF-HEAL TEST] PASS: allowlist and unsafe-diff rejection checks")
 
 def request(url: str, binary=False):
     req = urllib.request.Request(url, headers={
@@ -44,6 +88,11 @@ def redact(s: str) -> str:
     return s
 
 def main():
+    if "--self-test" in sys.argv:
+        self_test()
+        return 0
+    if not all((REPO, RUN_ID, TOKEN, os.getenv("GROQ_API_KEY"))):
+        raise RuntimeError("Required GitHub/Groq environment is missing")
     run = request(f"{API}/repos/{REPO}/actions/runs/{RUN_ID}")
     if run.get("conclusion") != "failure":
         print(f"Run conclusion is {run.get('conclusion')}; no repair attempted.")
@@ -54,14 +103,21 @@ def main():
         print("Run failed but no failed job was returned. Manual investigation required.")
         return 0
     logs = request(f"{API}/repos/{REPO}/actions/runs/{RUN_ID}/logs", binary=True)
+    if len(logs) > MAX_LOG_ARCHIVE_BYTES:
+        raise RuntimeError("Workflow log archive exceeds the 25 MB safety limit")
     chunks = []
+    expanded = 0
     with zipfile.ZipFile(io.BytesIO(logs)) as z:
-        for info in z.infolist():
-            if info.is_dir():
-                continue
+        files = [info for info in z.infolist() if not info.is_dir()]
+        if len(files) > MAX_LOG_FILES:
+            raise RuntimeError("Workflow log archive contains too many files")
+        for info in files:
+            expanded += info.file_size
+            if expanded > MAX_LOG_EXPANDED_BYTES:
+                raise RuntimeError("Expanded workflow logs exceed the 8 MB safety limit")
             raw = z.read(info).decode("utf-8", "replace")
-            chunks.append(f"\n===== {info.filename} =====\n{raw[-14000:]}")
-    log_text = redact("\n".join(chunks))[-MAX_LOG_CHARS:]
+            chunks.append(f"\\n===== {Path(info.filename).name} =====\\n{raw[-14000:]}")
+    log_text = redact("\\n".join(chunks))[-MAX_LOG_CHARS:]
     job_summary = [{
         "name": j.get("name"),
         "conclusion": j.get("conclusion"),
@@ -118,17 +174,17 @@ Produce a diagnosis and, only if clearly justified, a minimal patch. Do not inve
     if not report["repairable"] or report["category"] != "code_bug" or report["confidence"] < 0.78 or not patch.strip():
         print("Diagnosis recorded; no safe, high-confidence code patch proposed.")
         return 0
-    # Strict allowlist check on diff file headers.
-    files = re.findall(r"^\+\+\+ b/(.+)$", patch, flags=re.M)
-    if not files or any(f not in ALLOW for f in files):
-        raise RuntimeError(f"Patch touched disallowed paths: {files}")
+    # Parse and validate every old/new path before applying untrusted model output.
+    files = validate_patch_paths(patch)
     Path("/tmp/relic-repair.patch").write_text(patch)
     subprocess.run(["git", "apply", "--check", "/tmp/relic-repair.patch"], check=True)
-    subprocess.run(["git", "apply", "/tmp/relic-repair.patch"], check=True)
-    # Syntax validation across all changed Python files.
-    changed = sorted(set(files))
+    subprocess.run(["git", "apply", "--", "/tmp/relic-repair.patch"], check=True)
+    actual = subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+    if sorted(actual) != sorted(files):
+        raise RuntimeError(f"Applied diff changed unexpected paths: {actual}")
+    subprocess.run(["git", "diff", "--check"], check=True)
+    changed = sorted(files)
     subprocess.run([sys.executable, "-m", "py_compile", *changed], check=True)
-    # Run the deterministic story/schema tests if the story engine is touched.
     if "chispa_pifia_v2.py" in changed:
         subprocess.run([sys.executable, "chispa_pifia_v2.py", "--self-test"], check=True, timeout=180)
     diff = subprocess.check_output(["git", "diff", "--", *changed], text=True)
