@@ -243,3 +243,34 @@ if __name__ == "__main__":
         self_test()
     else:
         parser.error("Use --self-test; pipeline integration is a separate tested step.")
+
+
+# Visual generation is a first-class Creative AI capability. The renderer is
+# injected so provider selection remains replaceable and tests stay offline.
+from creative_ai_image_generator import (
+    ImageGenerationBrief,
+    build_image_prompt,
+    inspect_image,
+    render_scene as generate_scene_image,
+)
+
+
+def create_visual_brief(
+    scene_number: int,
+    narration_beat: str,
+    protagonist_identity: str,
+    setting: str,
+    previous_scene_state: str = "",
+    shot_direction: str = "medium vertical 9:16 action shot, strong readable silhouette",
+    important_props: Sequence[str] = (),
+) -> ImageGenerationBrief:
+    """Translate a storyboard beat into a locked, scene-specific visual brief."""
+    return ImageGenerationBrief(
+        scene_number=scene_number,
+        narration_beat=narration_beat,
+        protagonist_identity=protagonist_identity,
+        setting=setting,
+        previous_scene_state=previous_scene_state,
+        shot_direction=shot_direction,
+        important_props=tuple(important_props),
+    )
