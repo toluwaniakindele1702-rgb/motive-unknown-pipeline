@@ -434,6 +434,24 @@ def main() -> None:
         accepted = False
         ocr_suspected = False
         prompt = ""
+        # Reuse a previously completed scene on an in-place retry.
+        if output.is_file() and output.stat().st_size > 0:
+            try:
+                with Image.open(output) as cached:
+                    cached.verify()
+                previous_image = output.read_bytes()
+                previous_scene = scene
+                manifest["beats"].append({
+                    "number": index, "duration_seconds": float(scene.get("duration_seconds", 1.0)),
+                    "image": str(output), "beat_text": scene.get("beat_text"),
+                    "narration": scene.get("narration"), "cached_reused": True,
+                    "used_previous_frame_reference": index > 1
+                })
+                print(f"[IMAGE {index}/{len(scenes)}] reused cached image")
+                continue
+            except Exception as exc:
+                print(f"[IMAGE {index}/{len(scenes)}] cached image invalid; regenerating: {exc}")
+                output.unlink(missing_ok=True)
         for attempt in range(1, OCR_RETRIES + 1):
             prompt = _scene_prompt(
                 scene,
