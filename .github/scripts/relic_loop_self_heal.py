@@ -3,7 +3,7 @@
 
 This agent treats Actions logs as untrusted diagnostic data. It may only edit
 allowlisted application .py files, never workflows, credentials, or secrets.
-It creates a candidate patch; the workflow validates it before opening a PR.
+It creates a candidate patch, validates it independently, and merges only after CI passes.
 """
 from __future__ import annotations
 import io, json, os, re, subprocess, sys, urllib.request, zipfile
@@ -41,21 +41,21 @@ def validate_patch_paths(patch: str) -> list[str]:
     if old_paths != new_paths:
         raise ValueError("Patch may not add, delete, rename or swap files")
     for name in old_paths:
-        if name.startswith("/") or "\\\\" in name or ".." in Path(name).parts or name not in ALLOW:
+        if name.startswith("/") or "\\" in name or ".." in Path(name).parts or name not in ALLOW:
             raise ValueError(f"Disallowed patch path: {name}")
-    header_count = len(re.findall(r"^(?:---|\\+\\+) ", patch, flags=re.M))
+    header_count = len(re.findall(r"^(?:---|\+\+\+) ", patch, flags=re.M))
     if header_count != 2 * len(old_paths):
         raise ValueError("Unexpected or malformed diff file headers")
     return old_paths
 
 def self_test():
-    good = "diff --git a/chispa_pifia_v2.py b/chispa_pifia_v2.py\\n--- a/chispa_pifia_v2.py\\n+++ b/chispa_pifia_v2.py\\n@@ -1 +1 @@\\n-a\\n+b\\n"
+    good = "diff --git a/chispa_pifia_v2.py b/chispa_pifia_v2.py\n--- a/chispa_pifia_v2.py\n+++ b/chispa_pifia_v2.py\n@@ -1 +1 @@\n-a\n+b\n"
     assert validate_patch_paths(good) == ["chispa_pifia_v2.py"]
     bad = [
         good.replace("+++ b/chispa_pifia_v2.py", "+++ b/.github/workflows/evil.yml"),
-        good + "diff --git a/README.md b/README.md\\n--- a/README.md\\n+++ b/README.md\\n",
+        good + "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n",
         good.replace("--- a/chispa_pifia_v2.py", "--- /dev/null"),
-        good + "rename from chispa_pifia_v2.py\\n",
+        good + "rename from chispa_pifia_v2.py\n",
         good.replace("+++ b/chispa_pifia_v2.py", "+++ b/../evil.py"),
     ]
     for candidate in bad:
