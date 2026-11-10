@@ -130,34 +130,23 @@ def _record(provider: str, status: str, detail: str = "") -> None:
 
 
 def _normalize_image(blob: bytes) -> bytes:
-    """Validate a real portrait source, then pad to exact 9:16 without blur/crop."""
+    """Accept any decodable provider dimensions and adapt to the production canvas."""
     try:
         with Image.open(BytesIO(blob)) as source:
+            source.verify()
+        with Image.open(BytesIO(blob)) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
-            width, height = image.size
-            ratio = height / max(1, width)
-            if width < 512 or height < 768 or ratio < 1.45:
-                raise RuntimeError(
-                    f"Source is not a usable portrait image ({width}x{height}); "
-                    "rejecting instead of manufacturing a blurred vertical canvas."
-                )
-            # Reject severely soft/placeholder captures. Real illustrated frames
-            # should contain a meaningful amount of edge detail.
-            edge = image.convert("L").filter(ImageFilter.FIND_EDGES)
-            if float(ImageStat.Stat(edge).stddev[0]) < 8.0:
-                raise RuntimeError("Source image is too blurred or visually empty.")
+            if image.width < 1 or image.height < 1:
+                raise RuntimeError("Provider returned a zero-dimension image.")
             target = (base.WIDTH, base.HEIGHT)
-            fitted = ImageOps.contain(image, target, method=Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", target, (24, 27, 34))
-            x = (target[0] - fitted.width) // 2
-            y = (target[1] - fitted.height) // 2
-            canvas.paste(fitted, (x, y))
+            # Fill the final 9:16 frame regardless of source ratio or resolution.
+            # This intentionally permits square, landscape and lower-resolution output.
+            fitted = ImageOps.fit(image, target, method=Image.Resampling.LANCZOS, centering=(0.5, 0.45))
             output = BytesIO()
-            canvas.save(output, format="PNG", optimize=True)
+            fitted.save(output, format="PNG", optimize=True)
             return output.getvalue()
     except Exception as exc:
-        raise RuntimeError(f"Provider image failed validation: {type(exc).__name__}: {exc}") from exc
-
+        raise RuntimeError(f"Provider returned an unusable image: {type(exc).__name__}: {exc}") from exc
 
 def _extract_image(response: requests.Response) -> bytes:
     content_type = response.headers.get("content-type", "").lower()
@@ -186,24 +175,35 @@ def _extract_image(response: requests.Response) -> bytes:
 
 
 def _route_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
-    providers = (
-        ("raphael", lambda: _normalize_image(raphael_browser.generate(prompt, refs))),
-        ("cloudflare", lambda: _normalize_image(_CLOUDFLARE_ORIGINAL(prompt, refs))),
-    )
-    failures = []
-    for provider, generate in providers:
-        try:
-            image = generate()
-            if not image:
-                raise RuntimeError("provider returned an empty image")
-            PROVIDER_COUNTS[provider] += 1
-            _record(provider, "success")
-            return image
-        except Exception as exc:
-            detail = f"{type(exc).__name__}: {exc}"
-            failures.append(f"{provider}: {detail}")
-            _record(provider, "fallback", detail)
-    raise RuntimeError("All configured image providers failed. " + " || ".join(failures))
+    """Try Raphael then Cloudflare; restart at Raphael after each failed pair."""
+    cycles=max(1,int(os.getenv("RELIC_LOOP_PROVIDER_CYCLES","3")))
+    failures=[]
+    for cycle in range(1,cycles+1):
+        print(f"[PROVIDER ROUTER] image attempt cycle {cycle}/{cycles}")
+        providers=(
+            ("raphael",lambda:_normalize_image(raphael_browser.generate(prompt,refs))),
+            ("cloudflare",lambda:_normalize_image(_CLOUDFLARE_ORIGINAL(prompt,refs))),
+        )
+        for provider,generate in providers:
+            try:
+                image=generate()
+                if not image:
+                    raise RuntimeError("provider returned an empty image")
+                PROVIDER_COUNTS[provider]+=1
+                _record(provider,"success",f"cycle {cycle}")
+                return image
+            except Exception as exc:
+                detail=f"cycle {cycle}: {type(exc).__name__}: {exc}"
+                failures.append(f"{provider}: {detail}")
+                _record(provider,"retry",detail)
+        if cycle<cycles:
+            wait=min(8,2*cycle)
+            print(f"[PROVIDER ROUTER] both providers failed; restarting with Raphael in {wait}s")
+            time.sleep(wait)
+    summary=" || ".join(failures[-6:])
+    message=f"All image providers failed after {cycles} Raphael->Cloudflare cycles. {summary}"
+    print(f"::error title=Image generation exhausted::{message[:900]}")
+    raise RuntimeError(message)
 
 
 # The base renderer calls this function for each storyboard beat. Keep its
