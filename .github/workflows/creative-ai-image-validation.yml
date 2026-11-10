@@ -1,0 +1,40 @@
+name: Creative AI Image Generator Validation
+
+on:
+  push:
+    branches: [feature/relic-loop-creative-ai]
+    paths:
+      - "creative_ai.py"
+      - "creative_ai_image_generator.py"
+      - "test_creative_ai.py"
+      - "test_creative_ai_image_generator.py"
+      - ".github/workflows/creative-ai-image-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "creative_ai.py"
+      - "creative_ai_image_generator.py"
+      - "test_creative_ai.py"
+      - "test_creative_ai_image_generator.py"
+      - ".github/workflows/creative-ai-image-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install image test dependency
+        run: python -m pip install --disable-pip-version-check "Pillow>=11,<13"
+      - name: Compile Creative AI modules
+        run: python -m py_compile creative_ai.py creative_ai_image_generator.py
+      - name: Run story and image unit tests
+        run: python -m unittest -v test_creative_ai test_creative_ai_image_generator
+      - name: Run offline image-generator self-test
+        run: python creative_ai_image_generator.py
