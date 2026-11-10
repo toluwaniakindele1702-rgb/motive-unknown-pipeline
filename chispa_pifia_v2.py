@@ -13,28 +13,50 @@ REVIEW_MODEL=os.getenv("GROQ_REVIEWER_MODEL","openai/gpt-oss-20b")
 KEY=os.getenv("GROQ_API_KEY","").strip()
 SCENES=11
 
-STORY_SYSTEM="""You are the head comedy writer for CHISPA-PIFIA, a short-form channel built around original, tightly structured absurd stickman comedy.
+PREMISE_SYSTEM="""You are a senior comedy-room story editor creating original concepts for CHISPA-PIFIA, a fast, visual 2D stickman comedy Shorts channel.
 
-WRITE A COMPLETE COMEDY SHORT, NOT A RANDOM AI GAG.
-Create ONE original story around a concrete human goal and one unusual but understandable obstacle, object, misunderstanding or bad decision. The protagonist must actively choose what to do. Their first solution should be understandable but flawed; that choice causes the next problem. They then improvise or double down, creating at least three distinct causal escalations. End with a specific, surprising-but-logical punchline that pays off an earlier detail.
+Invent THREE genuinely different story premises. Each must be built around a relatable, concrete goal and a highly specific comic problem that can be understood instantly without explanation. Avoid generic mishaps, random absurdity, stale internet jokes, school embarrassment, aliens, magic and familiar AI-story templates.
 
-QUALITY REQUIREMENTS:
-- First sentence starts inside the funniest, strangest or most urgent moment. No greeting, biography, "one day", "have you ever", channel intro or generic setup.
-- Establish the protagonist's goal and central comic problem within the first two sentences.
-- Use a fresh, specific premise. Avoid generic laziness, random aliens, unexplained magic, school embarrassment, recycled viral-story setups and obvious AI clichés.
-- Every escalation must be caused by the protagonist's previous action or a clear consequence. No unrelated gags.
-- Use concrete physical actions, visible objects and simple locations that can be illustrated in 2D stickman scenes.
-- Give the protagonist agency and distinct reactions. Supporting characters must have a clear function.
-- Build toward one strongest final joke. The last sentence is the punchline; no moral, lesson, summary, subscribe request or generic outro.
-- Natural conversational English, punchy spoken rhythm, varied sentence lengths and openings. Avoid filler and repetitive phrasing.
-- No screenplay directions, scene labels, camera directions, image prompts or dialogue formatting.
-- Safe, non-graphic, non-sexual comedy. No dangerous stunts or harmful instructions.
+For each concept provide:
+- a short working title;
+- an opening image/action that would make someone stop scrolling in the first second;
+- the protagonist's simple goal;
+- the unusual obstacle and why it matters;
+- a four-step causal chain: each new complication must happen BECAUSE of the protagonist's previous choice;
+- the exact final punchline idea, including the earlier detail it pays off;
+- why the premise is fresh and visually funny.
 
-LENGTH: 180–205 spoken words. Count narration only. Aim for 188–198 words so the finished narration naturally fits a 50–90 second Short. Prioritize a strong final laugh over clever-sounding but weak puns.
+COMEDY DESIGN: Prefer comic irony, overconfidence, escalating commitment, mistaken assumptions, status reversals, precise callbacks and visual contradictions. The protagonist must cause or worsen the situation through understandable decisions. Escalation must become more surprising and more specific, not merely louder or more chaotic. The ending must reframe an earlier detail in a way that makes the whole story funnier.
+
+Rank the concepts strongest first. Do not write the full story. Return valid JSON only: {"concepts":[{"title":"","hook":"","goal":"","obstacle":"","beats":["","","",""],"payoff":"","freshness":""}]}. No extra text.""" 
+
+STORY_SYSTEM="""You are the lead comedy writer for CHISPA-PIFIA. Your job is to turn a strong approved concept into a genuinely funny, highly watchable 50–90 second story—not to produce generic AI story filler.
+
+NON-NEGOTIABLE COMEDY ARCHITECTURE:
+1. OPEN ON THE PAYOFF-BAIT: The first line must show an immediately intriguing, funny visual crisis already happening. The viewer should instantly wonder how this happened.
+2. CLARITY: Within the first two sentences, make the protagonist's concrete goal and the central obstacle unmistakable. No exposition dump.
+3. CHARACTER: Give the protagonist a recognizable comic flaw (overconfidence, literal thinking, penny-pinching, people-pleasing, stubbornness, etc.). Their decisions—not random coincidence—drive the plot.
+4. ESCALATION: Build at least THREE clearly different, increasingly costly complications. Each must be a direct consequence of the protagonist's previous attempt to solve the problem. Every beat should change the situation. No repeating the same gag with a different prop.
+5. PAYOFF: Plant a small, memorable object/detail early. The final sentence must flip or repay that detail with a precise, surprising, logically earned joke. It must be funny even when heard without visuals. A pun, random twist, character simply falling, or last-minute new character is not a punchline.
+6. ECONOMY: Every sentence must hook, clarify, escalate, reveal character, or pay off. Delete any sentence that does none of those jobs.
+
+WRITE FROM THE SELECTED CONCEPT:
+- Preserve its strongest hook, causal chain and payoff. You may improve any weak beat, but do not abandon a strong premise without reason.
+- Make the opening sentence a vivid action, not a title explanation. No "one day", "have you ever", greeting, biography, channel intro or slow setup.
+- Use specific everyday objects, clear physical choices, expressive reactions and simple locations that can be illustrated cleanly in 2D.
+- Use dialogue sparingly and naturally; no dialogue labels or screenplay formatting.
+- Give supporting characters a distinct purpose; do not add them just to fill space.
+- Use varied sentence lengths and spoken rhythm. Sound like a sharp human comedy writer, not a template.
+- Avoid clichés, generic filler, repeated sentence openings, obvious rhymes, forced puns and moral lessons.
+- Safe, non-graphic, non-sexual comedy only. No dangerous stunts, unsafe imitation or physically implausible actions.
+
+Before returning, silently test: Is the first sentence scroll-stopping? Can a listener explain the goal after two sentences? Are there at least three causal escalations? Does each escalation make the predicament more specific? Is the final line the funniest line and does it pay off an earlier planted detail? If any answer is no, rewrite before responding.
+
+LENGTH: 180–205 spoken words; target 190–200. Narration only. Fit a natural 50–90 second voiceover without padding.
 
 OUTPUT: Return exactly one valid JSON object, no markdown, with ONLY:
 {"title":"short curiosity-building title","narration":"complete spoken story","protagonist":"short character name or role","supporting_characters":["zero to two names or roles"],"setting":"main location in a few words"}
-Do not create scenes, beats, excerpts, visual prompts, outlines, metadata or extra keys. Python creates those."""
+No scenes, beat lists, outlines, image prompts, metadata or extra keys."""
 
 REVIEW_SYSTEM="""You are a strict commissioning editor deciding whether a finished comedy Short is publishable. Score hook, originality, first-listen clarity, protagonist agency, causal escalation, visual filmability, rhythm and especially the final punchline. The last sentence must be a genuinely funny, specific payoff set up by an earlier detail; a pun alone, weak callback, surprising event, or abrupt ending is NOT a strong punchline. Weak ending means overall score cannot exceed 6. Fewer than three distinct causal escalations means score cannot exceed 6. Dangerous stunts cannot pass. 8 is the minimum publishable score; 7 is borderline and MUST be rejected. Be conservative. Return JSON only: {"score":1,"hook_score":1,"escalation_score":1,"punchline_score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
 REWRITE_SYSTEM="""Rewrite the supplied Chispa-Pifia narration as a publishable comedy Short. Fix every editor criticism; replace the premise if its core idea or ending is weak. Build one clear goal, an immediate visual hook, at least three distinct cause-and-effect escalations, and a final laugh-out-loud punchline paying off a concrete earlier detail. The final sentence must land as a joke, not merely describe the last event; do not rely on a lazy pun. Keep actions safe and physically plausible. Use natural spoken English, concrete filmable actions, varied rhythm, and 180–205 narration words. Do not pad. Return exactly title,narration,protagonist,supporting_characters,setting as JSON. No commentary."""
@@ -205,10 +227,25 @@ def main():
     story=None; review=None; last=None
     for attempt in range(1,6):
         try:
-            raw=call(client,MODEL,STORY_SYSTEM,user,7000,0.82 if attempt==1 else 0.68)
+            # Plan several distinct premises first; write only after selecting a strong comic engine.
+            concept_pack=call(client,MODEL,PREMISE_SYSTEM,
+                json.dumps({"channel":"Chispa-Pifia","recent_titles":titles[-12:] if 'titles' in locals() else [],
+                            "creative_brief":user},ensure_ascii=False),4200,0.9)
+            concepts=concept_pack.get("concepts")
+            if not isinstance(concepts,list) or len(concepts)<3:
+                raise ValueError("Premise room must return three distinct concepts")
+            selected=concepts[0]
+            if not isinstance(selected,dict) or len(norm(selected.get("hook")))<12 or len(norm(selected.get("payoff")))<12:
+                raise ValueError("Top premise lacks a concrete hook or payoff")
+            print(f"[V2 STORY] candidate {attempt}/5 selected premise: {norm(selected.get('title'))}")
+            raw=call(client,MODEL,STORY_SYSTEM,
+                json.dumps({"creative_brief":user,"selected_concept":selected,
+                            "instruction":"Write the complete narration from this premise. Strengthen weak beats and make the final punchline land."},ensure_ascii=False),
+                7000,0.78 if attempt==1 else 0.72)
             candidate=validate_story(raw)
             candidate,editorial=review_story(client,candidate)
             story,review=candidate,editorial
+            review["selected_premise"]=norm(selected.get("title"))
             break
         except Exception as e:
             last=e
