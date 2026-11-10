@@ -1,0 +1,104 @@
+name: Relic Loop Self-Healing Agent
+run-name: "Repair analysis for production run ${{ github.event.workflow_run.run_number }}"
+
+on:
+  workflow_run:
+    workflows: ["Chispa-Pifia V2 Production"]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: relic-loop-repair-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  diagnose-and-propose:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact failed commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install repair-agent client
+        run: python -m pip install --disable-pip-version-check 'groq>=0.31,<1'
+
+      - name: Test repair-agent safety guards
+        run: python .github/scripts/relic_loop_self_heal.py --self-test
+
+      - name: Diagnose failure and validate proposed patch
+        id: repair
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TARGET_RUN_ID: ${{ github.event.workflow_run.id }}
+          REPAIR_MODEL: openai/gpt-oss-120b
+        run: python .github/scripts/relic_loop_self_heal.py
+
+      - name: Create isolated repair branch, validate independently, and deploy
+        if: steps.repair.outputs.patch_ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          SOURCE_RUN: ${{ github.event.workflow_run.run_number }}
+          CHANGED_FILES: ${{ steps.repair.outputs.changed_files }}
+        run: |
+          set -euo pipefail
+          BRANCH="auto-repair/run-${SOURCE_RUN}-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          IFS=',' read -r -a FILES <<< "$CHANGED_FILES"
+          git add -- "${FILES[@]}"
+          git commit -m "Validated Relic Loop repair for run ${SOURCE_RUN}"
+          git push origin "$BRANCH"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PR_URL="$(gh pr create --repo "$GH_REPOSITORY" --base main --head "$BRANCH" \
+            --title "Automated Relic Loop repair for production run ${SOURCE_RUN}" \
+            --body "## Automated failure diagnosis\n\nTriggered by production run [${SOURCE_RUN}](${{ github.event.workflow_run.html_url }}).\n\nThe patch passed initial safety, syntax and applicable self-tests. A separate pull-request validation workflow must pass before this repair is merged into main. No test video is published.")"
+          echo "Created repair PR: $PR_URL"
+          # Explicit dispatch works with GITHUB_TOKEN and avoids relying on PR-event side effects.
+          gh workflow run relic_loop_repair_validation.yml --repo "$GH_REPOSITORY" --ref "$BRANCH" -f base_ref=main
+          VALIDATION_RUN=""
+          for attempt in $(seq 1 60); do
+            VALIDATION_RUN="$(gh run list --repo "$GH_REPOSITORY" --workflow relic_loop_repair_validation.yml --branch "$BRANCH" --limit 10 --json databaseId,headSha,status,conclusion \
+              | jq -r --arg sha "$HEAD_SHA" '[.[] | select(.headSha == $sha)] | .[0].databaseId // empty')"
+            if [ -n "$VALIDATION_RUN" ]; then break; fi
+            sleep 10
+          done
+          if [ -z "$VALIDATION_RUN" ]; then
+            echo "::error::Independent repair validation did not start; refusing to merge."
+            exit 1
+          fi
+          gh run watch "$VALIDATION_RUN" --repo "$GH_REPOSITORY" --exit-status
+          CONCLUSION="$(gh run view "$VALIDATION_RUN" --repo "$GH_REPOSITORY" --json conclusion --jq .conclusion)"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::Independent repair validation failed; refusing to merge."
+            exit 1
+          fi
+          gh pr merge "$PR_URL" --repo "$GH_REPOSITORY" --squash --delete-branch --match-head-commit "$HEAD_SHA"
+          echo "Validated repair merged into main: $PR_URL"
+
+      - name: Preserve diagnosis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-repair-report-${{ github.event.workflow_run.run_number }}
+          path: |
+            repair_report.json
+            repair_summary.md
+            validated_repair.diff
+          if-no-files-found: ignore
+          retention-days: 30

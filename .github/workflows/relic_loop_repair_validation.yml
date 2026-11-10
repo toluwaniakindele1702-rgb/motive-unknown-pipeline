@@ -1,0 +1,61 @@
+name: Relic Loop Repair Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "*.py"
+      - ".github/scripts/relic_loop_self_heal.py"
+      - ".github/workflows/relic_loop_repair_validation.yml"
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base branch used for the repair diff"
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relic-loop-repair-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-repair:
+    if: (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'auto-repair/') || github.head_ref == 'feature/relic-loop-self-healing-agent')) || (github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'auto-repair/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout proposed repair
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install repair-agent test dependency
+        run: python -m pip install --disable-pip-version-check 'groq>=0.31,<1'
+
+      - name: Validate patch guard
+        run: python .github/scripts/relic_loop_self_heal.py --self-test
+
+      - name: Compile changed Python files
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || inputs.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+          mapfile -t FILES < <(git diff --name-only "origin/$BASE_REF...HEAD" -- '*.py')
+          if [ "${#FILES[@]}" -gt 0 ]; then
+            python -m py_compile "${FILES[@]}"
+          fi
+
+      - name: Run story engine deterministic self-test when changed
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || inputs.base_ref || 'main' }}
+        run: |
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -Fxq 'chispa_pifia_v2.py'; then
+            python chispa_pifia_v2.py --self-test
+          fi
