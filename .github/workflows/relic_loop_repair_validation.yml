@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   validate-repair:
-    if: startsWith(github.head_ref, 'auto-repair/')
+    if: startsWith(github.head_ref, 'auto-repair/') || github.head_ref == 'feature/relic-loop-self-healing-agent'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
