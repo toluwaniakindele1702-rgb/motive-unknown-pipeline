@@ -6,3 +6,6 @@ Public upload run requested 2026-11-10
 
 
 Maintenance AI bootstrap merged 2026-11-10; fresh production run requested. Public upload explicitly authorized.
+
+
+Validation run A after canonical dependency install fix (2026-11-11).
