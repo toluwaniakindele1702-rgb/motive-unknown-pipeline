@@ -33,8 +33,9 @@ jobs:
       - name: Run Maintenance AI safety and patch-validation tests
         run: python .github/scripts/relic_loop_self_heal.py --self-test
       - name: Verify publishing and permission isolation
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
           workflow = Path(".github/workflows/relic_loop_self_heal.yml").read_text()
           validation = Path(".github/workflows/relic_loop_repair_validation.yml").read_text()
@@ -47,3 +48,4 @@ jobs:
           assert "permissions:" in validation and "contents: read" in validation
           assert "youtube" not in validation.lower()
           print("Maintenance AI workflow isolation checks passed.")
+          PY
