@@ -15,3 +15,5 @@ Validation run B after canonical dependency install fix (2026-11-11).
 Extra public production video 1 of 4 — scheduled 2026-11-12 06:30 WAT
 
 Extra public production video 2 of 4 — scheduled 2026-11-12 11:30 WAT
+
+Extra public production video 3 of 4 — scheduled 2026-11-12 17:30 WAT
