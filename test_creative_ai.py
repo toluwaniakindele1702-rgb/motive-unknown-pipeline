@@ -35,6 +35,16 @@ class CreativeAITests(unittest.TestCase):
         self.assertEqual(word_count(story["narration"]), 190)
         self.assertEqual(story["supporting_characters"], ["A neighbour", "Extra"])
 
+    def test_accepts_updated_215_word_ceiling(self):
+        narration = " ".join(f"word{i}" for i in range(215))
+        story = validate_story({"title": "At the limit", "narration": narration})
+        self.assertEqual(word_count(story["narration"]), 215)
+
+    def test_rejects_above_updated_word_ceiling(self):
+        narration = " ".join(f"word{i}" for i in range(216))
+        with self.assertRaises(ValueError):
+            validate_story({"title": "Over the limit", "narration": narration})
+
     def test_rejects_invalid_length(self):
         with self.assertRaises(ValueError):
             validate_story({"title": "Too short", "narration": "Only a few words."})
