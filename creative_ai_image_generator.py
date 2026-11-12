@@ -79,6 +79,7 @@ def build_image_prompt(brief: ImageGenerationBrief, refinement: int = 0) -> str:
     )
     return f"""Create ONE finished story frame for Chispa-Pifia, scene {brief.scene_number}.
 CANONICAL CHARACTER LOCK: {brief.protagonist_identity.strip()}. This is a fixed model sheet.
+WARDROBE LOCK (MANDATORY): Reproduce the exact clothing stated in the canonical character identity in every frame. Never omit the clothing, replace it with a bare white body, change its colour, or redesign it. Keep the same garments, footwear and accessories across scenes.
 Never alter head shape, face, eye spacing, body proportions, outline weight, clothing or identity.
 VISUAL STYLE LOCK: {brief.visual_style.strip()}. Character, props and environment must all be
 illustrated in the same coherent 2D cartoon language. No realistic/photo background and no 3D.
