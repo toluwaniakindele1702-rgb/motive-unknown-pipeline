@@ -16,7 +16,7 @@ from typing import Any, Mapping, Sequence
 class CreativeBrief:
     topic: str = ""
     duration_seconds: tuple[int, int] = (50, 90)
-    target_words: tuple[int, int] = (180, 205)
+    target_words: tuple[int, int] = (180, 215)
     protagonist: str = "one expressive 2D stickman"
     visual_style: str = (
         "consistent expressive 2D stickman cartoon; pale round head, simple "
@@ -182,7 +182,7 @@ def generate_story(
             {"role": "user", "content": build_user_prompt(brief, feedback, recent_story_summaries)},
         ],
         temperature=0.85,
-        max_completion_tokens=1800,
+        max_completion_tokens=3000,
     )
     content = response.choices[0].message.content or ""
     return validate_story(parse_json_object(content), brief)
