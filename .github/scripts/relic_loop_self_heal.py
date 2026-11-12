@@ -65,8 +65,8 @@ def python_sources(paths: list[str]) -> list[str]:
 def self_test():
     good = "diff --git a/chispa_pifia_v2.py b/chispa_pifia_v2.py\n--- a/chispa_pifia_v2.py\n+++ b/chispa_pifia_v2.py\n@@ -1 +1 @@\n-a\n+b\n"
     assert validate_patch_paths(good) == ["chispa_pifia_v2.py"]
-    manifest = "diff --git a/requirements-dev.txt b/requirements-dev.txt\\n--- a/requirements-dev.txt\\n+++ b/requirements-dev.txt\\n@@ -1 +1 @@\\n-old\\n+new\\n"
-    workflow = "diff --git a/.github/workflows/chispa_pifia_v2.yml b/.github/workflows/chispa_pifia_v2.yml\\n--- a/.github/workflows/chispa_pifia_v2.yml\\n+++ b/.github/workflows/chispa_pifia_v2.yml\\n@@ -1 +1 @@\\n-old\\n+new\\n"
+    manifest = "diff --git a/requirements-dev.txt b/requirements-dev.txt\n--- a/requirements-dev.txt\n+++ b/requirements-dev.txt\n@@ -1 +1 @@\n-old\n+new\n"
+    workflow = "diff --git a/.github/workflows/chispa_pifia_v2.yml b/.github/workflows/chispa_pifia_v2.yml\n--- a/.github/workflows/chispa_pifia_v2.yml\n+++ b/.github/workflows/chispa_pifia_v2.yml\n@@ -1 +1 @@\n-old\n+new\n"
     assert validate_patch_paths(manifest) == ["requirements-dev.txt"]
     assert validate_patch_paths(workflow) == [".github/workflows/chispa_pifia_v2.yml"]
     assert python_sources(["chispa_pifia_v2.py", "requirements-dev.txt", ".github/workflows/chispa_pifia_v2.yml"]) == ["chispa_pifia_v2.py"]
