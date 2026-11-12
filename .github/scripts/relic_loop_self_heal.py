@@ -57,9 +57,19 @@ def validate_patch_paths(patch: str) -> list[str]:
         raise ValueError("Unexpected or malformed diff file headers")
     return old_paths
 
+def python_sources(paths: list[str]) -> list[str]:
+    """Return only Python sources; manifests and workflow YAML are validated separately."""
+    return [name for name in paths if name.endswith(".py")]
+
+
 def self_test():
     good = "diff --git a/chispa_pifia_v2.py b/chispa_pifia_v2.py\n--- a/chispa_pifia_v2.py\n+++ b/chispa_pifia_v2.py\n@@ -1 +1 @@\n-a\n+b\n"
     assert validate_patch_paths(good) == ["chispa_pifia_v2.py"]
+    manifest = "diff --git a/requirements-dev.txt b/requirements-dev.txt\n--- a/requirements-dev.txt\n+++ b/requirements-dev.txt\n@@ -1 +1 @@\n-old\n+new\n"
+    workflow = "diff --git a/.github/workflows/chispa_pifia_v2.yml b/.github/workflows/chispa_pifia_v2.yml\n--- a/.github/workflows/chispa_pifia_v2.yml\n+++ b/.github/workflows/chispa_pifia_v2.yml\n@@ -1 +1 @@\n-old\n+new\n"
+    assert validate_patch_paths(manifest) == ["requirements-dev.txt"]
+    assert validate_patch_paths(workflow) == [".github/workflows/chispa_pifia_v2.yml"]
+    assert python_sources(["chispa_pifia_v2.py", "requirements-dev.txt", ".github/workflows/chispa_pifia_v2.yml"]) == ["chispa_pifia_v2.py"]
     bad = [
         good.replace("+++ b/chispa_pifia_v2.py", "+++ b/.github/workflows/evil.yml"),
         good + "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n",
@@ -238,7 +248,10 @@ Produce a diagnosis and, only if clearly justified, a minimal patch. Do not inve
         raise RuntimeError(f"Applied diff changed unexpected paths: {actual}")
     subprocess.run(["git", "diff", "--check"], check=True)
     changed = sorted(files)
-    subprocess.run([sys.executable, "-m", "py_compile", *changed], check=True)
+    # Manifests and workflow YAML are not Python; compiling them broke valid repairs.
+    python_files = python_sources(changed)
+    if python_files:
+        subprocess.run([sys.executable, "-m", "py_compile", *python_files], check=True)
     if "chispa_pifia_v2.py" in changed:
         subprocess.run([sys.executable, "chispa_pifia_v2.py", "--self-test"], check=True, timeout=180)
     diff = subprocess.check_output(["git", "diff", "--", *changed], text=True)
