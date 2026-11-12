@@ -11,3 +11,5 @@ Maintenance AI bootstrap merged 2026-11-10; fresh production run requested. Publ
 Validation run A after canonical dependency install fix (2026-11-11).
 
 Validation run B after canonical dependency install fix (2026-11-11).
+
+Extra public production video 1 of 4 — scheduled 2026-11-12 06:30 WAT
