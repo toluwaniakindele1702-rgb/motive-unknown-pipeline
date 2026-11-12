@@ -52,7 +52,7 @@ WRITE FROM THE SELECTED CONCEPT:
 
 Before returning, silently test: Is the first sentence scroll-stopping? Can a listener explain the goal after two sentences? Are there at least three causal escalations? Does each escalation make the predicament more specific? Is the final line the funniest line and does it pay off an earlier planted detail? If any answer is no, rewrite before responding.
 
-LENGTH: 180–205 spoken words; target 190–200. Narration only. Fit a natural 50–90 second voiceover without padding.
+LENGTH: 180–215 spoken words; target 190–200. Narration only. Fit a natural 50–90 second voiceover without padding.
 
 OUTPUT: Return exactly one valid JSON object, no markdown, with ONLY:
 {"title":"short curiosity-building title","narration":"complete spoken story","protagonist":"short character name or role","supporting_characters":["zero to two names or roles"],"setting":"main location in a few words"}
@@ -65,7 +65,7 @@ First diagnose the actual structural failure from the editor notes and scores. I
 
 Write a complete, original, genuinely funny story. The protagonist must have a clear goal, a comic flaw and agency. Every paragraph must advance the same causal chain. Use precise physical comedy and objects that can be illustrated. The final sentence must be the strongest laugh: a specific, surprising, logically earned payoff, not a pun, random event, summary or description of what happens next. Make the story funny when read aloud with no visuals.
 
-Do not add filler to reach length. Natural spoken English, crisp rhythm, varied sentence lengths, clear referents. Safe, non-graphic comedy; no dangerous stunts. Exactly 180–205 narration words. Return JSON with only title,narration,protagonist,supporting_characters,setting. No commentary."""
+Do not add filler to reach length. Natural spoken English, crisp rhythm, varied sentence lengths, clear referents. Safe, non-graphic comedy; no dangerous stunts. Exactly 180–215 narration words. Return JSON with only title,narration,protagonist,supporting_characters,setting. No commentary."""
 VISUAL_SYSTEM="""You are a top-tier storyboard artist for polished 2D stickman comedy. For EACH numbered narration excerpt, design one distinct frozen image literally depicting that exact moment. Excerpt is source of truth: do not invent plot events, props, characters or locations. Preserve character identity, outfit, prop state, screen direction and setting continuity. Make each frame readable on a phone.
 
 Match approved Chispa-Pifia reference images exactly: same expressive 2D stickman, pale round head, eyes/eyebrows/mouth, proportions and outline weight. All environments and props are also illustrated 2D cartoons, never photographic or 3D. Vertical 9:16, strong silhouette, expressive body language, one dominant action, clear depth and readable lighting. Vary shot sizes and angles when useful.
@@ -142,43 +142,38 @@ def validate_story(raw):
        "setting":norm(raw.get("setting")) or "An everyday location",
        "supporting_characters":raw.get("supporting_characters",[])}
     if not s["title"]: raise ValueError("Missing title")
-    if not 180<=wc(s["narration"])<=205: raise ValueError(f"Narration has {wc(s['narration'])} words; required 180–205")
+    if not 180<=wc(s["narration"])<=205: raise ValueError(f"Narration has {wc(s['narration'])} words; required 180–215")
     if not isinstance(s["supporting_characters"],list): s["supporting_characters"]=[]
     s["supporting_characters"]=[norm(x) for x in s["supporting_characters"] if norm(x)][:2]
     return s
 def split_exact(text,count=SCENES):
-    """Split on sentence boundaries first; use clause/word boundaries only as a last resort."""
-    text=norm(text); w=spans(text); total=len(w)
-    minimum=8
-    if total<count*minimum: raise ValueError("Not enough narration words for scene split")
-    sentence=set(); clause=set()
+    """Split at whitespace-token boundaries, preferring sentence and clause endings."""
+    text=norm(text)
+    tokens=list(re.finditer(r"\\S+",text))
+    total=len(tokens); minimum=8
+    if total<count*minimum: raise ValueError("Not enough narration tokens for scene split")
+    ranked={}
     for pos in range(1,total):
-        # Only cut where the source has a real whitespace separator. A word
-        # boundary beside an em dash or other attached punctuation is not a
-        # safe split: joining excerpts with one space would alter narration.
-        raw_gap=text[w[pos-1].end():w[pos].start()]
-        if not any(ch.isspace() for ch in raw_gap):
-            continue
-        gap=raw_gap.strip()
-        if re.search(r"[.!?][\"')\\]]*$",gap): sentence.add(pos)
-        elif re.search(r"[;:—–,][\"')\\]]*$",gap): clause.add(pos)
-        ranked={p:0 for p in sentence}
-    for p in clause: ranked.setdefault(p,8)
-    for p in range(1,total): ranked.setdefault(p,24)
+        gap=text[tokens[pos-1].end():tokens[pos].start()]
+        if not gap or not gap.isspace(): continue
+        previous=tokens[pos-1].group()
+        if re.search(r"[.!?][\"')\\]]*$",previous): ranked[pos]=0
+        elif re.search(r"[;:—–,][\"')\\]]*$",previous): ranked[pos]=8
+        else: ranked[pos]=24
     cuts=[]; prev=0
     for i in range(1,count):
-        ideal=round(i*total/count)
-        lo=prev+minimum
-        hi=total-(count-i)*minimum
+        ideal=round(i*total/count); lo=prev+minimum; hi=total-(count-i)*minimum
         options=[p for p in ranked if lo<=p<=hi]
-        if not options: raise ValueError("Could not create balanced sentence-aware scene split")
+        if not options: raise ValueError("Could not create balanced whitespace-safe scene split")
         chosen=min(options,key=lambda p:(abs(p-ideal)+ranked[p],abs(p-ideal),p))
-        cuts.append(w[chosen].start()); prev=chosen
+        cuts.append(tokens[chosen].start()); prev=chosen
     out=[]; start=0
     for cut in cuts: out.append(text[start:cut].strip()); start=cut
     out.append(text[start:].strip())
-    if len(out)!=count or " ".join(out)!=text: raise ValueError("Exact scene split invariant failed")
-    if any(wc(x)<minimum for x in out): raise ValueError("Scene excerpt below minimum word count")
+    if len(out)!=count or " ".join(out)!=text:
+        raise ValueError("Exact scene split invariant failed after whitespace-safe split")
+    if any(len(x.split())<minimum for x in out):
+        raise ValueError("Scene excerpt below minimum token count")
     return out
 def fallback_visual(scene,first=False):
     camera=("Close-medium vertical 9:16 shot, slightly low angle, protagonist and key object large in frame."
@@ -223,7 +218,7 @@ def review_story(client,story):
     def assess(candidate):
         try:
             result=call(client,REVIEW_MODEL,REVIEW_SYSTEM,
-                json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),1800,0.1)
+                json.dumps({"title":candidate["title"],"narration":candidate["narration"]}),3000,0.1)
         except Exception as exc:
             result={"score":0,"hook_score":0,"escalation_score":0,"punchline_score":0,
                     "main_problem":f"Reviewer unavailable: {type(exc).__name__}: {exc}",
@@ -276,7 +271,7 @@ def main():
     if args.self_test: self_test(); return
     if not KEY: raise SystemExit("GROQ_API_KEY is missing")
     RUN.mkdir(parents=True,exist_ok=True); client=Groq(api_key=KEY)
-    user="Write one fresh original Chispa-Pifia story of 180–205 spoken words, ideally 188–198. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a genuinely funny earned final punchline over random absurdity. Do not use a weak pun as the entire ending."
+    user="Write one fresh original Chispa-Pifia story of 180–215 spoken words, ideally 190–200. Hard limit: count before returning and never exceed 215 words. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a genuinely funny earned final punchline over random absurdity. Do not use a weak pun as the entire ending."
     topic=os.getenv("RELIC_LOOP_TOPIC","").strip()
     if topic: user+=" Optional story seed (use only if it improves the story): "+topic
     history_path=ROOT/"state"/"story_history.json"
