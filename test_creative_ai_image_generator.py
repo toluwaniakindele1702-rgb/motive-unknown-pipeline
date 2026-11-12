@@ -37,6 +37,7 @@ class CreativeAIImageTests(unittest.TestCase):
     def test_prompt_locks_identity_and_exact_beat(self):
         prompt = build_image_prompt(self.brief)
         self.assertIn("CANONICAL CHARACTER LOCK", prompt)
+        self.assertIn("WARDROBE LOCK (MANDATORY)", prompt)
         self.assertIn(self.brief.narration_beat, prompt)
         self.assertIn("CONTINUITY STATE", prompt)
         self.assertIn("ZERO TEXT", prompt)
