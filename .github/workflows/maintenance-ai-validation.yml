@@ -1,0 +1,49 @@
+name: Maintenance AI Isolated Validation
+
+on:
+  push:
+    branches: [fix/maintenance-ai-hardening]
+    paths:
+      - ".github/scripts/relic_loop_self_heal.py"
+      - ".github/workflows/relic_loop_self_heal.yml"
+      - ".github/workflows/maintenance-ai-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/relic_loop_self_heal.py"
+      - ".github/workflows/relic_loop_self_heal.yml"
+      - ".github/workflows/maintenance-ai-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  maintenance-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install the agent's runtime dependency
+        run: python -m pip install --disable-pip-version-check "groq>=0.31,<1"
+      - name: Compile Maintenance AI
+        run: python -m py_compile .github/scripts/relic_loop_self_heal.py
+      - name: Run Maintenance AI safety and patch-validation tests
+        run: python .github/scripts/relic_loop_self_heal.py --self-test
+      - name: Verify publishing and permission isolation
+        shell: python
+        run: |
+          from pathlib import Path
+          workflow = Path(".github/workflows/relic_loop_self_heal.yml").read_text()
+          validation = Path(".github/workflows/relic_loop_repair_validation.yml").read_text()
+          assert "workflow_run:" in workflow
+          assert "permissions:" in workflow
+          assert "actions: write" in workflow
+          assert "contents: write" in workflow
+          assert "pull-requests: write" in workflow
+          assert "No test video is published." in workflow or "No test video is published" in workflow
+          assert "permissions:" in validation and "contents: read" in validation
+          assert "youtube" not in validation.lower()
+          print("Maintenance AI workflow isolation checks passed.")
