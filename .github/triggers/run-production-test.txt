@@ -19,3 +19,6 @@ Extra public production video 2 of 4 — scheduled 2026-11-12 11:30 WAT
 Extra public production video 3 of 4 — scheduled 2026-11-12 17:30 WAT
 
 Extra public production video 4 of 4 — scheduled 2026-11-12 17:30 WAT
+
+
+Public production run requested 2026-11-14 after fixing whitespace tokenization in split_exact and restoring four daily schedule slots. Public upload explicitly authorized.
