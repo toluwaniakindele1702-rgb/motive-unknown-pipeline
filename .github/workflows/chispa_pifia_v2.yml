@@ -7,8 +7,8 @@ on:
     paths:
       - ".github/triggers/run-production-test.txt"
   schedule:
-    # Nigeria time (WAT, UTC+1): 09:00, 15:00 and 21:00 every day.
-    - cron: "0 8,14,20 * * *"
+    # Nigeria time (WAT, UTC+1): 03:00, 09:00, 15:00 and 21:00 every day.
+    - cron: "0 2,8,14,20 * * *"
   workflow_dispatch:
     inputs:
       topic:
