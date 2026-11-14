@@ -119,14 +119,14 @@ def plain_text_story(raw):
     if len(lines)>1 and len(lines[0].split())<=10 and not re.search(r"[.!?]$",lines[0]):
         text=norm(" ".join(lines[1:]))
     words=spans(text)
-    if len(words)>205:
+    if len(words)>215:
         # Trim only at a sentence boundary; never cut a sentence in half.
         eligible=[m.end() for m in re.finditer(r"[.!?][\"') ]?(?=\s|$)",text)
-                 if wc(text[:m.end()])<=205]
+                 if wc(text[:m.end()])<=215]
         if eligible:
             text=text[:eligible[-1]].strip()
         else:
-            text=" ".join(text.split()[:205])
+            text=" ".join(text.split()[:215])
     title=norm(" ".join(text.split()[:7])).strip(" .,!?:;—-") or "A Stickman Misadventure"
     match=re.search(r"\bStickman\s+([A-Z][a-z]+)\b",text)
     protagonist=match.group(1) if match else "The stickman"
@@ -142,14 +142,14 @@ def validate_story(raw):
        "setting":norm(raw.get("setting")) or "An everyday location",
        "supporting_characters":raw.get("supporting_characters",[])}
     if not s["title"]: raise ValueError("Missing title")
-    if not 180<=wc(s["narration"])<=205: raise ValueError(f"Narration has {wc(s['narration'])} words; required 180–215")
+    if not 180<=wc(s["narration"])<=215: raise ValueError(f"Narration has {wc(s['narration'])} words; required 180–215")
     if not isinstance(s["supporting_characters"],list): s["supporting_characters"]=[]
     s["supporting_characters"]=[norm(x) for x in s["supporting_characters"] if norm(x)][:2]
     return s
 def split_exact(text,count=SCENES):
     """Split at whitespace-token boundaries, preferring sentence and clause endings."""
     text=norm(text)
-    tokens=list(re.finditer(r"\\S+",text))
+    tokens=list(re.finditer(r"\S+",text))
     total=len(tokens); minimum=8
     if total<count*minimum: raise ValueError("Not enough narration tokens for scene split")
     ranked={}
