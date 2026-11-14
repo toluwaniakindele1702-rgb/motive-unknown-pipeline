@@ -157,8 +157,9 @@ def split_exact(text,count=SCENES):
         gap=text[tokens[pos-1].end():tokens[pos].start()]
         if not gap or not gap.isspace(): continue
         previous=tokens[pos-1].group()
-        if re.search(r"[.!?][\"')\\]]*$",previous): ranked[pos]=0
-        elif re.search(r"[;:—–,][\"')\\]]*$",previous): ranked[pos]=8
+        terminal=previous.rstrip("\"')]}") 
+        if terminal.endswith((".", "!", "?")): ranked[pos]=0
+        elif terminal.endswith((";", ":", "—", "–", ",")): ranked[pos]=8
         else: ranked[pos]=24
     cuts=[]; prev=0
     for i in range(1,count):
