@@ -9,10 +9,11 @@ class RelicLoopVideoTests(unittest.TestCase):
         beats = split_story_into_scenes(narration, 10)
         self.assertEqual(len(beats), 10)
         self.assertEqual(" ".join(beats), narration)
-    def test_scene_split_has_reasonable_fallback_for_fewer_sentences(self):
+    def test_short_sentence_count_still_produces_ten_visual_beats(self):
         narration = " ".join(f"Sentence {i} is here." for i in range(1, 8))
         beats = split_story_into_scenes(narration, 10)
-        self.assertEqual(len(beats), 7)
+        self.assertEqual(len(beats), 10)
+        self.assertEqual(" ".join(beats), narration)
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
         with patch("relic_loop_video._run", return_value=fake):
