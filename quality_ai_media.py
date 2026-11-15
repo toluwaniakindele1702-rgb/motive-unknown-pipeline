@@ -138,10 +138,10 @@ def inspect_media_files(*, image_paths=(), audio_path=None, video_path=None, acc
         if video_path:
             temp = tempfile.TemporaryDirectory(prefix="quality-ai-frames-")
             frames.extend(extract_video_frames(video_path, temp.name))
-        visual = inspect_images(frames, account_id=account_id, api_token=api_token, model=model,
-                                 scene_descriptions=scene_descriptions, session=session) if frames else {}
         if frames and (not account_id or not api_token):
             raise RuntimeError("Cloudflare vision requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (or CLOUDFLARE_AUTH_TOKEN).")
+        visual = inspect_images(frames, account_id=account_id, api_token=api_token, model=model,
+                                 scene_descriptions=scene_descriptions, session=session) if frames else {}
         if audio_path is None and video_path:
             ffmpeg = shutil.which("ffmpeg")
             if not ffmpeg: raise RuntimeError("ffmpeg is required for audio extraction")
