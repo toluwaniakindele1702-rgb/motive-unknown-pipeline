@@ -23,6 +23,9 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertIn("Milo drops his lunchbox", safe)
         self.assertIn("a school hallway", safe)
         self.assertIn("family-friendly", safe)
+        generic = _safe_moderation_retry_prompt(prompt, generic=True)
+        self.assertIn("everyday situation", generic)
+        self.assertNotIn("Milo drops his lunchbox", generic)
 
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
