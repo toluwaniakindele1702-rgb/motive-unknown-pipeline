@@ -89,8 +89,8 @@ def _safe_moderation_retry_prompt(prompt: str) -> str:
         f"Show this lighthearted everyday comic moment: {beat}. "
         f"Location: {setting}. "
         "Use a clear expressive pose, readable face, clean bold outlines, coherent illustrated "
-        "background and simple cinematic lighting. Keep the scene non-graphic and non-threatening. "
-        "No weapons, injuries, blood, frightening imagery, text, captions, logos or watermarks. "
+        "background and simple cinematic lighting. Keep the scene lighthearted and suitable "
+        "for a broad audience. No text, captions, logos or watermarks. "
         "One frame only; preserve the same outfit and proportions."
     )
 
