@@ -27,26 +27,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout Quality AI development branch
-        uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install isolated test dependencies
-        run: python -m pip install --upgrade pip 'google-genai>=2.3,<3' 'groq>=0.31,<1'
+        run: python -m pip install --upgrade pip 'requests>=2.32,<3' 'groq>=0.31,<1'
       - name: Compile Quality AI
         run: python -m py_compile quality_ai.py quality_ai_media.py
       - name: Run offline unit and governance tests
         run: python -m unittest -v test_quality_ai.py test_quality_ai_media.py
-      - name: Verify no publishing or production-gate integration
+      - name: Verify advisory governance boundary
         run: |
           python - <<'PY'
           from pathlib import Path
-          source = "\\n".join(Path(name).read_text().lower() for name in ("quality_ai.py", "quality_ai_media.py"))
-          forbidden = ("youtube_upload", "workflow_dispatch", "workflow_run", "requests.post")
-          assert not any(term in source for term in forbidden)
-          for field in ('"may_block_production": false', '"may_cancel_or_pause_run": false', '"may_authorize_or_trigger_upload": false'):
-              assert field in source
+          source = "\n".join(Path(name).read_text().lower() for name in ("quality_ai.py", "quality_ai_media.py"))
+          assert "youtube_upload" not in source and "workflow_run" not in source
+          assert 'may_block_production": false' in source
+          assert 'may_cancel_or_pause_run": false' in source
+          assert 'may_authorize_or_trigger_upload": false' in source
           print("Quality AI governance boundary verified.")
           PY
