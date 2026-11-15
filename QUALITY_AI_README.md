@@ -1,72 +1,40 @@
 # Relic Loop Quality AI
 
-Standalone advisory reviewer for completed short-form videos. This component is
-being developed independently and is **not connected to either production
-pipeline**.
+Standalone advisory reviewer for completed short-form videos. This component is developed independently and is not connected to either production pipeline.
 
-## Scope
+## Capabilities
 
-- Reviews supplied narration/transcript, scene descriptions, image inspection
-  reports, audio observations, duration, and technical metadata.
-- Performs deterministic checks for verifiable metadata.
-- Optionally calls an injected OpenAI-compatible chat-completions client for
-  qualitative review (story hook, coherence, pacing, payoff, originality and
-  supplied visual/audio observations).
-- Clearly marks missing evidence as `not_assessed`; it never guesses about
-  images or audio it has not been shown.
-- Emits structured, actionable feedback using the exact fields expected by
-  Creative AI's existing `QualityFeedback.from_mapping()` adapter.
-- Can run deterministically without credentials or network access.
-
-## Governance boundary
-
-Quality scores and recommendations are advisory. The output explicitly sets
-`may_block_production=false`, `may_cancel_or_pause_run=false`, and
-`may_authorize_or_trigger_upload=false`. Quality AI has no publishing
-credentials, workflow-write permissions, or production-trigger code. A low
-score never prevents a review result from being returned.
+- Deterministic checks for narration length and runtime.
+- Optional Groq text evaluation of supplied story and scene evidence.
+- Direct inspection of actual PNG, JPEG and WebP image files through Gemini multimodal.
+- Local extraction of up to eight video frames with ffmpeg, followed by direct visual inspection for character, wardrobe, prop, location and composition continuity.
+- Direct audio inspection through Gemini multimodal for intelligibility, noise, clipping, volume consistency, pacing, pauses, pronunciation and completeness.
+- Automatic extraction of mono 16 kHz audio from a supplied video when no separate audio file is supplied.
+- Structured evidence and advisory feedback matching Creative AI's feedback contract.
+- Explicit uncertainty reporting; no fabricated assessment when media is unavailable.
 
 ## Local validation
 
 ```bash
-python -m unittest -v test_quality_ai.py
-python -m py_compile quality_ai.py
+python -m py_compile quality_ai.py quality_ai_media.py
+python -m unittest -v test_quality_ai.py test_quality_ai_media.py
 ```
 
-## Optional language-model evaluation
+## Provider configuration
 
-The CLI can use the existing Groq client when both environment variables are configured:
+Text evaluation optionally uses `GROQ_API_KEY` and `QUALITY_AI_MODEL`.
+Direct media inspection uses `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and optional `QUALITY_AI_MULTIMODAL_MODEL` (default `gemini-2.5-flash`). Without a Gemini key, the media adapter is unavailable and must not be treated as having inspected media. API keys are read only from environment variables and never included in reports.
 
-- `GROQ_API_KEY`
-- `QUALITY_AI_MODEL` (an enabled model available to the connected Groq account)
+Video processing requires ffmpeg. Up to eight frames are extracted locally; if video audio is required, it is extracted locally to a temporary mono 16 kHz MP3. Media files sent to Gemini are limited to 18 MiB each. Temporary video artifacts are cleaned up after review. The provider receives the actual selected frames/audio for analysis.
 
-If no API key is present, the CLI runs deterministic checks offline. If a key is present but the model is missing, it stops with a clear configuration error. The API key is never written into the report. The client can also be injected directly with `review_submission(payload, client, model)`.
+## Media review usage
 
-## Input contract
+Use `build_gemini_client()` then call `review_media_submission(payload, client=client, model=model, video_path=..., image_paths=..., audio_path=...)`. It returns a `review` object plus the raw `media_evidence` used to create it. The same function can inspect standalone images and audio. This is a pipeline-neutral adapter: the future pipeline can call it without changing the review contract.
 
-Pass a JSON object with any available fields:
+## Governance boundary
 
-- `title`, `narration` or `transcript`
-- `duration_seconds`
-- `scenes` (scene descriptions/storyboard evidence)
-- `image_descriptions` (descriptions from a trusted vision review)
-- `image_inspections` (technical image-check dictionaries)
-- `audio_observations`, `technical_observations`, `human_review_notes`
+All scores and recommendations are advisory. Quality AI cannot approve, reject, cancel, pause, block, or authorize production or publishing. It has no YouTube credentials, GitHub write permissions, workflow triggers, or deployment logic. A low score never prevents a review result from being returned.
 
-Raw image/video/audio bytes and credentials are intentionally not accepted by
-this first-stage interface. A future vision/audio adapter can be added behind
-the same evidence contract.
+## Remaining separate-pipeline work
 
-## Output contract
-
-Top-level scores, per-dimension score/status/evidence/recommendations, evidence
-coverage, confidence, uncertainties, and a `creative_ai_feedback` object.
-That feedback object is compatible with Creative AI's existing advisory
-feedback parser.
-
-## Deferred integration stage
-
-Not included here: pipeline triggers, storage/retention, automated hand-off,
-AI-to-AI message transport, video-frame extraction, image/audio model adapters,
-and end-to-end production orchestration. Those belong to the separate pipeline
-integration stage and must be implemented there, not in this component.
+The Quality AI review engine and media adapters are built independently. Still deferred to the separate pipeline: secure media hand-off and retention policy, scheduled review orchestration, AI-to-AI message transport, integration tests against the actual Creative AI outputs, and end-to-end orchestration. Do not connect this component to the existing production pipeline.
