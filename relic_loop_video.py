@@ -200,7 +200,7 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
                                 "duration_seconds": actual_duration, "scenes": beats}
     try:
         account, token, vision_model = cloudflare_config()
-        media = inspect_media_files(image_paths=images, audio_path=str(audio_path),
+        media = inspect_media_files(image_paths=[], audio_path=None,
                                     video_path=str(video_path), account_id=account,
                                     api_token=token, model=vision_model, scene_descriptions=beats)
         evidence.update(media)
@@ -251,7 +251,11 @@ if __name__ == "__main__":
             key = os.getenv("GROQ_API_KEY", "").strip()
             if key:
                 from groq import Groq
-                repair = propose_repair(failure["error"], {}, Groq(api_key=key))
+                source_names = ("creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
+                                "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py")
+                source_files = {name: (ROOT / name).read_text(encoding="utf-8")
+                                for name in source_names if (ROOT / name).is_file()}
+                repair = propose_repair(failure["error"], source_files, Groq(api_key=key))
                 repair.pop("patch", None)
                 failure["maintenance_ai"] = repair
         except Exception as diag:
