@@ -1,3 +1,5 @@
 Run the independent Relic Loop video producer once. This trigger creates a GitHub artifact only; it does not authenticate to or upload to YouTube.
 
 Retry after model configuration correction.
+
+Retry after voice import and storyboard fixes.
