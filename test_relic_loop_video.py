@@ -1,7 +1,8 @@
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from relic_loop_video import split_story_into_scenes, _duration, _safe_moderation_retry_prompt
+from relic_loop_video import split_story_into_scenes, _duration, _safe_moderation_retry_prompt, _generate_valid_story
+from creative_ai import QualityFeedback
 
 class RelicLoopVideoTests(unittest.TestCase):
     def test_scene_split_preserves_all_words_and_order(self):
@@ -26,6 +27,17 @@ class RelicLoopVideoTests(unittest.TestCase):
         generic = _safe_moderation_retry_prompt(prompt, generic=True)
         self.assertIn("everyday situation", generic)
         self.assertNotIn("Milo drops his lunchbox", generic)
+
+    def test_overlength_story_is_retried_without_loosening_word_limit(self):
+        valid = {"title": "A Story", "narration": " ".join(["word"] * 190),
+                 "protagonist": "Milo", "supporting_characters": [], "setting": "A shop"}
+        with patch("relic_loop_video.generate_story",
+                   side_effect=[ValueError("Story has 221 words; expected 180-215"), valid]) as generate:
+            result = _generate_valid_story(object(), "test-model", "topic", QualityFeedback())
+        self.assertEqual(result, valid)
+        self.assertEqual(generate.call_count, 2)
+        self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 215))
+        self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 205))
 
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
