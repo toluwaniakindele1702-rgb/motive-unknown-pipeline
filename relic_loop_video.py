@@ -75,6 +75,25 @@ def _cloudflare_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = N
         raise RuntimeError("Cloudflare returned an empty or undersized image")
     return blob
 
+def _safe_moderation_retry_prompt(prompt: str) -> str:
+    """Reframe a flagged beat as a neutral, family-friendly cartoon prompt."""
+    def field(label: str, fallback: str) -> str:
+        match = re.search(rf"^{re.escape(label)}:\\s*(.+)$", prompt, re.M)
+        return match.group(1).strip()[:900] if match else fallback
+    character = field("CANONICAL CHARACTER LOCK", "one consistent expressive stickman in a charcoal hoodie and dark trousers")
+    beat = field("EXACT NARRATION MOMENT", "the protagonist reacts to an amusing everyday misunderstanding")
+    setting = field("SETTING", "a simple everyday location")
+    return (
+        "Create one harmless, family-friendly 2D cartoon illustration in vertical 9:16. "
+        f"Keep this exact character design consistent: {character}. "
+        f"Show this lighthearted everyday comic moment: {beat}. "
+        f"Location: {setting}. "
+        "Use a clear expressive pose, readable face, clean bold outlines, coherent illustrated "
+        "background and simple cinematic lighting. Keep the scene non-graphic and non-threatening. "
+        "No weapons, injuries, blood, frightening imagery, text, captions, logos or watermarks. "
+        "One frame only; preserve the same outfit and proportions."
+    )
+
 def image_provider(prompt: str, refs=None) -> bytes:
     """Prefer Raphael only when a saved session exists; otherwise use Cloudflare."""
     raphael_enabled = os.getenv("RELIC_LOOP_USE_RAPHAEL", "1").lower() not in {"0", "false", "no"}
@@ -92,7 +111,14 @@ def image_provider(prompt: str, refs=None) -> bytes:
             print(f"[IMAGE PROVIDER] Raphael unavailable; falling back to Cloudflare: {type(exc).__name__}: {exc}")
     else:
         print("[IMAGE PROVIDER] Raphael session not configured; using Cloudflare fallback")
-    blob = _cloudflare_image(prompt, refs)
+    try:
+        blob = _cloudflare_image(prompt, refs)
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if "3030" not in message and "flagged" not in message:
+            raise
+        print("[IMAGE PROVIDER] Cloudflare flagged this prompt/reference combination; retrying a neutral reformulation without reference images")
+        blob = _cloudflare_image(_safe_moderation_retry_prompt(prompt), None)
     if not inspect_image(blob).valid:
         raise RuntimeError("Cloudflare image failed technical inspection")
     print("[IMAGE PROVIDER] Cloudflare generated an accepted image")
