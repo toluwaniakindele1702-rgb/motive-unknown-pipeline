@@ -55,7 +55,7 @@ jobs:
           assert "workflow_dispatch" in workflow
           assert "schedule:" not in workflow
           assert "branches: [feature/relic-loop-new-pipeline]" in workflow
-          assert "youtube" not in runner and "upload" not in runner
+          assert "youtube" not in runner and "googleapiclient" not in runner
           assert '"published": false' in runner
           assert '"production_touched": false' in runner
           assert '"deployment": "not_performed"' in runner
