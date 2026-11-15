@@ -1,0 +1,52 @@
+name: Relic Loop isolated AI pipeline validation
+
+on:
+  pull_request:
+    paths:
+      - "relic_loop_pipeline.py"
+      - "test_relic_loop_pipeline.py"
+      - "creative_ai.py"
+      - "quality_ai.py"
+      - "quality_ai_media.py"
+      - "maintenance_ai.py"
+      - ".github/workflows/relic-loop-isolated-pipeline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-isolated-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install isolated dependencies
+        run: python -m pip install --upgrade pip 'requests>=2.32,<3' 'Pillow>=10,<13' 'groq>=0.31,<1'
+      - name: Compile all AI components and orchestrator
+        run: >-
+          python -m py_compile creative_ai.py creative_ai_image_generator.py
+          quality_ai.py quality_ai_media.py maintenance_ai.py relic_loop_pipeline.py
+      - name: Run offline AI and orchestration tests
+        run: >-
+          python -m unittest -v test_creative_ai.py
+          test_creative_ai_image_generator.py test_quality_ai.py
+          test_quality_ai_media.py test_maintenance_ai.py
+          test_relic_loop_pipeline.py
+      - name: Enforce production isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/relic-loop-isolated-pipeline.yml").read_text().lower()
+          runner = Path("relic_loop_pipeline.py").read_text().lower()
+          assert "workflow_dispatch" in workflow
+          assert "schedule:" not in workflow and "push:" not in workflow
+          assert "youtube" not in runner and "upload" not in runner
+          assert '"published": false' in runner
+          assert '"production_touched": false' in runner
+          assert '"deployment": "not_performed"' in runner
+          print("Isolated pipeline boundary verified.")
+          PY
