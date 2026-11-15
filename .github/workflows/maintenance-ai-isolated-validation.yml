@@ -1,0 +1,41 @@
+name: Maintenance AI isolated validation
+on:
+  push:
+    branches: [feature/relic-loop-maintenance-ai]
+    paths:
+      - "maintenance_ai.py"
+      - "test_maintenance_ai.py"
+      - ".github/workflows/maintenance-ai-isolated-validation.yml"
+  pull_request:
+    paths:
+      - "maintenance_ai.py"
+      - "test_maintenance_ai.py"
+      - ".github/workflows/maintenance-ai-isolated-validation.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install test dependency
+        run: python -m pip install --upgrade pip
+      - name: Compile Maintenance AI
+        run: python -m py_compile maintenance_ai.py test_maintenance_ai.py
+      - name: Run offline sandbox and governance tests
+        run: python -m unittest -v test_maintenance_ai.py
+      - name: Confirm no production or deployment integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("maintenance_ai.py").read_text().lower()
+          assert "production_touched\": false" in source
+          assert '"deployment": "not_performed"' in source
+          assert "workflow_dispatch" not in source and "youtube" not in source
+          print("Maintenance AI is isolated: no production trigger, upload or deployment.")
+          PY
