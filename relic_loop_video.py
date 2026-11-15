@@ -75,13 +75,15 @@ def _cloudflare_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = N
         raise RuntimeError("Cloudflare returned an empty or undersized image")
     return blob
 
-def _safe_moderation_retry_prompt(prompt: str) -> str:
+def _safe_moderation_retry_prompt(prompt: str, generic: bool = False) -> str:
     """Reframe a flagged beat as a neutral, family-friendly cartoon prompt."""
     def field(label: str, fallback: str) -> str:
         match = re.search(rf"^{re.escape(label)}:\\s*(.+)$", prompt, re.M)
         return match.group(1).strip()[:900] if match else fallback
     character = field("CANONICAL CHARACTER LOCK", "one consistent expressive stickman in a charcoal hoodie and dark trousers")
-    beat = field("EXACT NARRATION MOMENT", "the protagonist reacts to an amusing everyday misunderstanding")
+    beat = ("the protagonist reacts with a surprised, playful expression to an everyday situation"
+            if generic else field("EXACT NARRATION MOMENT",
+                                  "the protagonist reacts to an amusing everyday misunderstanding"))
     setting = field("SETTING", "a simple everyday location")
     return (
         "Create one harmless, family-friendly 2D cartoon illustration in vertical 9:16. "
@@ -118,7 +120,14 @@ def image_provider(prompt: str, refs=None) -> bytes:
         if "3030" not in message and "flagged" not in message:
             raise
         print("[IMAGE PROVIDER] Cloudflare flagged this prompt/reference combination; retrying a neutral reformulation without reference images")
-        blob = _cloudflare_image(_safe_moderation_retry_prompt(prompt), None)
+        try:
+            blob = _cloudflare_image(_safe_moderation_retry_prompt(prompt), None)
+        except RuntimeError as retry_error:
+            retry_message = str(retry_error).lower()
+            if "3030" not in retry_message and "flagged" not in retry_message:
+                raise
+            print("[IMAGE PROVIDER] Beat-specific retry was also flagged; using a generic safe reaction frame for this beat")
+            blob = _cloudflare_image(_safe_moderation_retry_prompt(prompt, generic=True), None)
     if not inspect_image(blob).valid:
         raise RuntimeError("Cloudflare image failed technical inspection")
     print("[IMAGE PROVIDER] Cloudflare generated an accepted image")
