@@ -78,7 +78,7 @@ def _cloudflare_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = N
 def _safe_moderation_retry_prompt(prompt: str, generic: bool = False) -> str:
     """Reframe a flagged beat as a neutral, family-friendly cartoon prompt."""
     def field(label: str, fallback: str) -> str:
-        match = re.search(rf"^{re.escape(label)}:\\s*(.+)$", prompt, re.M)
+        match = re.search(rf"^{re.escape(label)}:\s*(.+)$", prompt, re.M)
         return match.group(1).strip()[:900] if match else fallback
     character = field("CANONICAL CHARACTER LOCK", "one consistent expressive stickman in a charcoal hoodie and dark trousers")
     beat = ("the protagonist reacts with a surprised, playful expression to an everyday situation"
