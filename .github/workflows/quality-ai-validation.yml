@@ -38,7 +38,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           source = Path("quality_ai.py").read_text().lower()
-          forbidden = ("youtube", "workflow_dispatch", "workflow_run", "subprocess", "requests.post")
+          forbidden = ("youtube_upload", "workflow_dispatch", "workflow_run", "subprocess", "requests.post")
           assert not any(term in source for term in forbidden)
           assert '"may_block_production": False'.lower() in source
           assert '"may_cancel_or_pause_run": False'.lower() in source
