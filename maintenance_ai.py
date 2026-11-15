@@ -52,16 +52,22 @@ def validate_patch_in_sandbox(repository_root: str | Path, patch: str) -> dict:
     root = Path(repository_root).resolve()
     with tempfile.TemporaryDirectory(prefix="maintenance-ai-sandbox-") as tmp:
         sandbox = Path(tmp)
-        for name in paths:
+        # Copy the complete allowlisted AI workspace so changed tests can import
+        # their dependencies, while leaving the original checkout untouched.
+        copied = []
+        for name in sorted(ALLOWED):
             source = root / name
-            if not source.is_file(): raise FileNotFoundError(f"Patch target does not exist: {name}")
-            target = sandbox / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+            if source.is_file():
+                target = sandbox / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+                copied.append(name)
+        missing = [name for name in paths if name not in copied]
+        if missing: raise FileNotFoundError(f"Patch target does not exist: {missing}")
         subprocess.run(["git", "init", "-q", str(sandbox)], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(sandbox), "config", "user.name", "Maintenance AI Test"], check=True)
         subprocess.run(["git", "-C", str(sandbox), "config", "user.email", "maintenance-ai-test@example.invalid"], check=True)
-        subprocess.run(["git", "-C", str(sandbox), "add", "--", *paths], check=True)
+        subprocess.run(["git", "-C", str(sandbox), "add", "--all"], check=True)
         subprocess.run(["git", "-C", str(sandbox), "commit", "-qm", "sandbox baseline"], check=True)
         patch_path = sandbox / "candidate.patch"
         patch_path.write_text(patch, encoding="utf-8")
