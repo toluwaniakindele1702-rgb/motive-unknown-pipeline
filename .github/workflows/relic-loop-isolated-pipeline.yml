@@ -10,6 +10,8 @@ on:
       - "quality_ai.py"
       - "quality_ai_media.py"
       - "maintenance_ai.py"
+      - "relic_loop_video.py"
+      - "test_relic_loop_video.py"
       - ".github/workflows/relic-loop-isolated-pipeline.yml"
   pull_request:
     paths:
@@ -39,13 +41,13 @@ jobs:
       - name: Compile all AI components and orchestrator
         run: >-
           python -m py_compile creative_ai.py creative_ai_image_generator.py
-          quality_ai.py quality_ai_media.py maintenance_ai.py relic_loop_pipeline.py
+          quality_ai.py quality_ai_media.py maintenance_ai.py relic_loop_pipeline.py relic_loop_video.py
       - name: Run offline AI and orchestration tests
         run: >-
           python -m unittest -v test_creative_ai.py
           test_creative_ai_image_generator.py test_quality_ai.py
           test_quality_ai_media.py test_maintenance_ai.py
-          test_relic_loop_pipeline.py
+          test_relic_loop_pipeline.py test_relic_loop_video.py
       - name: Enforce production isolation
         run: |
           python - <<'PY'
