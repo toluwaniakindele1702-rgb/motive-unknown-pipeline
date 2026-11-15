@@ -204,7 +204,9 @@ def build_evaluator_prompt(payload: Mapping[str, Any], deterministic_observation
         key: payload.get(key)
         for key in (
             "title", "narration", "transcript", "duration_seconds", "scenes",
-            "image_descriptions", "image_inspections", "audio_observations",
+            "image_descriptions", "image_inspections", "visual_observations",
+            "continuity_issues", "clarity_issues", "audio_observations",
+            "audio_clarity_issues", "audio_pacing_issues", "audio_technical_issues",
             "technical_observations", "human_review_notes",
         )
         if payload.get(key) is not None
