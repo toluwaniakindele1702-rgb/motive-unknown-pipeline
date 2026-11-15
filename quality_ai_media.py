@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 MAX_MEDIA_BYTES = 18 * 1024 * 1024
+MAX_REQUEST_BYTES = 18 * 1024 * 1024
 MAX_IMAGES = 8
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/aac", "audio/ogg", "audio/flac"}
@@ -105,8 +106,12 @@ def inspect_images(paths: Sequence[str | Path], client: Any, model: str) -> dict
         raise ValueError(f"At most {MAX_IMAGES} images can be reviewed per request")
     from google.genai import types
     parts = []
+    total_bytes = 0
     for index, path in enumerate(paths, start=1):
         data, mime = _read_media(path, IMAGE_TYPES)
+        total_bytes += len(data)
+        if total_bytes > MAX_REQUEST_BYTES:
+            raise ValueError(f"Combined image payload exceeds {MAX_REQUEST_BYTES} bytes")
         parts.extend([types.Part.from_text(text=f"Frame {index}:"), types.Part.from_bytes(data=data, mime_type=mime)])
     return _generate(client, model, parts, VISION_PROMPT)
 
@@ -144,6 +149,8 @@ def extract_video_frames(video_path: str | Path, output_dir: str | Path,
     sample_rate = max_frames / duration
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
+    for stale_frame in target.glob("quality-frame-*.jpg"):
+        stale_frame.unlink()
     pattern = target / "quality-frame-%02d.jpg"
     command = [
         ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(source),
