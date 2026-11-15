@@ -127,14 +127,27 @@ def extract_video_frames(video_path: str | Path, output_dir: str | Path,
     if not source.is_file():
         raise FileNotFoundError(f"Video file not found: {source}")
     ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RuntimeError("ffmpeg is required for video-frame extraction")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        raise RuntimeError("ffmpeg and ffprobe are required for video inspection")
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(source)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    try:
+        duration = float((probe.stdout or "").strip())
+    except ValueError:
+        duration = 0.0
+    if probe.returncode != 0 or duration <= 0:
+        raise RuntimeError("Could not determine video duration for even frame sampling")
+    sample_rate = max_frames / duration
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     pattern = target / "quality-frame-%02d.jpg"
     command = [
         ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(source),
-        "-vf", f"fps=1/5,scale=960:-2", "-frames:v", str(max_frames),
+        "-vf", f"fps={sample_rate:.8f},scale=960:-2", "-frames:v", str(max_frames),
         "-q:v", "3", "-y", str(pattern),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, timeout=90, check=False)
