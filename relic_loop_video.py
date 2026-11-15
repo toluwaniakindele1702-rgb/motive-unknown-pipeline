@@ -158,7 +158,7 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     from groq import Groq
     client = Groq(api_key=groq_key)
     feedback = QualityFeedback.from_mapping(previous_feedback)
-    story = generate_story(client, os.getenv("CREATIVE_AI_MODEL", "openai/gpt-oss-120b"),
+    story = generate_story(client, (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b"),
                            CreativeBrief(topic=topic, duration_seconds=(50, 90), target_words=(180, 215)),
                            feedback, recent_story_summaries or [])
     report["story"] = story
