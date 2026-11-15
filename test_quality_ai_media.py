@@ -48,7 +48,7 @@ class QualityAIMediaTests(unittest.TestCase):
             video = Path(directory) / "sample.mp4"
             video.write_bytes(b"not-a-real-video")
             with patch("quality_ai_media.shutil.which", return_value=None):
-                with self.assertRaisesRegex(RuntimeError, "ffmpeg is required"):
+                with self.assertRaisesRegex(RuntimeError, "ffmpeg and ffprobe are required"):
                     extract_video_frames(video, Path(directory) / "frames")
 
     def test_missing_video_is_reported(self):
