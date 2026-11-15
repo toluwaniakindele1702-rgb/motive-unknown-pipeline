@@ -53,7 +53,8 @@ jobs:
           workflow = Path(".github/workflows/relic-loop-isolated-pipeline.yml").read_text().lower()
           runner = Path("relic_loop_pipeline.py").read_text().lower()
           assert "workflow_dispatch" in workflow
-          assert "schedule:" not in workflow and "push:" not in workflow
+          assert "schedule:" not in workflow
+          assert "branches: [feature/relic-loop-new-pipeline]" in workflow
           assert "youtube" not in runner and "upload" not in runner
           assert '"published": false' in runner
           assert '"production_touched": false' in runner
