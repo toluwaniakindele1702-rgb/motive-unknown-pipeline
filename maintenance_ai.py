@@ -10,7 +10,7 @@ from typing import Mapping
 
 ALLOWED = {
     "creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
-    "quality_ai_media.py", "maintenance_ai.py", "test_creative_ai.py",
+    "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py", "test_relic_loop_video.py", "test_creative_ai.py",
     "test_creative_ai_image_generator.py", "test_quality_ai.py",
     "test_quality_ai_media.py", "test_maintenance_ai.py",
 }
