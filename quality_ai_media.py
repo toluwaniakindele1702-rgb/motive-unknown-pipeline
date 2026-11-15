@@ -158,10 +158,23 @@ def inspect_media_files(*, image_paths: Sequence[str | Path] = (),
             temp_context = tempfile.TemporaryDirectory(prefix="quality-ai-frames-")
             frame_paths.extend(extract_video_frames(video_path, temp_context.name))
         image_result = inspect_images(frame_paths, client, model) if frame_paths else {}
+        extracted_audio = None
+        if audio_path is None and video_path is not None:
+            ffmpeg = shutil.which("ffmpeg")
+            if not ffmpeg:
+                raise RuntimeError("ffmpeg is required for audio extraction from video")
+            extracted_audio = Path(temp_context.name) / "quality-audio.mp3"
+            command = [
+                ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(video_path),
+                "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", "-y", str(extracted_audio),
+            ]
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=90, check=False)
+            if completed.returncode != 0 or not extracted_audio.is_file() or extracted_audio.stat().st_size == 0:
+                raise RuntimeError("ffmpeg audio extraction failed: " + (completed.stderr or "")[-1000:])
+            audio_path = extracted_audio
         audio_result = inspect_audio(audio_path, client, model) if audio_path else {}
         return {
             "image_descriptions": image_result.get("image_descriptions", []),
-            "image_inspections": [{"valid": True, "source": "multimodal_model"} for _ in frame_paths],
             "visual_observations": image_result.get("observations", []),
             "continuity_issues": image_result.get("continuity_issues", []),
             "clarity_issues": image_result.get("clarity_issues", []),
@@ -177,3 +190,22 @@ def inspect_media_files(*, image_paths: Sequence[str | Path] = (),
     finally:
         if temp_context is not None:
             temp_context.cleanup()
+
+
+
+def review_media_submission(payload: Mapping[str, Any], *, client: Any, model: str,
+                            image_paths: Sequence[str | Path] = (),
+                            audio_path: str | Path | None = None,
+                            video_path: str | Path | None = None,
+                            text_client: Any = None,
+                            text_model: str | None = None) -> dict[str, Any]:
+    """End-to-end local media review adapter; still advisory and pipeline-agnostic."""
+    from quality_ai import review_submission
+    evidence = inspect_media_files(
+        image_paths=image_paths, audio_path=audio_path, video_path=video_path,
+        client=client, model=model,
+    )
+    enriched = dict(payload)
+    enriched.update(evidence)
+    review = review_submission(enriched, client=text_client, model=text_model)
+    return {"review": review, "media_evidence": evidence}
