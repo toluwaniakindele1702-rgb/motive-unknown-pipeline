@@ -61,7 +61,7 @@ class QualityAIMediaTests(unittest.TestCase):
             image = Path(directory) / "frame.txt"
             image.write_bytes(b"not an image")
             from quality_ai_media import inspect_images
-            with self.assertRaisesRegex(ValueError, "Unsupported media MIME"):
+            with self.assertRaisesRegex(ValueError, "Unsupported media type"):
                 inspect_images([image], FakeClient([]), "test")
 
     def test_media_review_bridge_preserves_advisory_governance(self):
