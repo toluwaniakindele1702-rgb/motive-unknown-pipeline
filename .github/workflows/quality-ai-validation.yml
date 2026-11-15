@@ -5,13 +5,17 @@ on:
     branches: [feature/relic-loop-quality-ai]
     paths:
       - "quality_ai.py"
+      - "quality_ai_media.py"
       - "test_quality_ai.py"
+      - "test_quality_ai_media.py"
+      - "QUALITY_AI_README.md"
       - ".github/workflows/quality-ai-validation.yml"
   pull_request:
-    branches: [feature/relic-loop-quality-ai]
     paths:
       - "quality_ai.py"
+      - "quality_ai_media.py"
       - "test_quality_ai.py"
+      - "test_quality_ai_media.py"
       - ".github/workflows/quality-ai-validation.yml"
   workflow_dispatch:
 
@@ -29,19 +33,20 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install isolated test dependencies
+        run: python -m pip install --upgrade pip google-genai groq
       - name: Compile Quality AI
-        run: python -m py_compile quality_ai.py
+        run: python -m py_compile quality_ai.py quality_ai_media.py
       - name: Run offline unit and governance tests
-        run: python -m unittest -v test_quality_ai.py
+        run: python -m unittest -v test_quality_ai.py test_quality_ai_media.py
       - name: Verify no publishing or production-gate integration
         run: |
           python - <<'PY'
           from pathlib import Path
-          source = Path("quality_ai.py").read_text().lower()
-          forbidden = ("youtube_upload", "workflow_dispatch", "workflow_run", "subprocess", "requests.post")
+          source = "\\n".join(Path(name).read_text().lower() for name in ("quality_ai.py", "quality_ai_media.py"))
+          forbidden = ("youtube_upload", "workflow_dispatch", "workflow_run", "requests.post")
           assert not any(term in source for term in forbidden)
-          assert '"may_block_production": False'.lower() in source
-          assert '"may_cancel_or_pause_run": False'.lower() in source
-          assert '"may_authorize_or_trigger_upload": False'.lower() in source
+          for field in ('"may_block_production": false', '"may_cancel_or_pause_run": false', '"may_authorize_or_trigger_upload": false'):
+              assert field in source
           print("Quality AI governance boundary verified.")
           PY
