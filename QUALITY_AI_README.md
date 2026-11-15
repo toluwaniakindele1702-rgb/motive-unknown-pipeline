@@ -33,6 +33,15 @@ python -m unittest -v test_quality_ai.py
 python -m py_compile quality_ai.py
 ```
 
+## Optional language-model evaluation
+
+The CLI can use the existing Groq client when both environment variables are configured:
+
+- `GROQ_API_KEY`
+- `QUALITY_AI_MODEL` (an enabled model available to the connected Groq account)
+
+If no API key is present, the CLI runs deterministic checks offline. If a key is present but the model is missing, it stops with a clear configuration error. The API key is never written into the report. The client can also be injected directly with `review_submission(payload, client, model)`.
+
 ## Input contract
 
 Pass a JSON object with any available fields:
