@@ -3,3 +3,5 @@ Run the independent Relic Loop video producer once. This trigger creates a GitHu
 Retry after model configuration correction.
 
 Retry after voice import and storyboard fixes.
+
+Retry after safe moderation fallback.
