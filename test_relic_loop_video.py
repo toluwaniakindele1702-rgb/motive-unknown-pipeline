@@ -1,0 +1,22 @@
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from relic_loop_video import split_story_into_scenes, _duration
+
+class RelicLoopVideoTests(unittest.TestCase):
+    def test_scene_split_preserves_all_words_and_order(self):
+        narration = " ".join(f"Sentence number {i} ends here." for i in range(1, 21))
+        beats = split_story_into_scenes(narration, 10)
+        self.assertEqual(len(beats), 10)
+        self.assertEqual(" ".join(beats), narration)
+    def test_scene_split_has_reasonable_fallback_for_fewer_sentences(self):
+        narration = " ".join(f"Sentence {i} is here." for i in range(1, 8))
+        beats = split_story_into_scenes(narration, 10)
+        self.assertEqual(len(beats), 7)
+    def test_duration_rejects_zero(self):
+        fake = type("P", (), {"stdout":"0"})()
+        with patch("relic_loop_video._run", return_value=fake):
+            with self.assertRaises(ValueError):
+                _duration(Path("unused"))
+if __name__ == "__main__":
+    unittest.main()
