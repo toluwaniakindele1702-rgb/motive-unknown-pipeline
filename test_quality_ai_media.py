@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from quality_ai_media import (
     MAX_IMAGES, _parse_json, build_gemini_client, extract_video_frames,
-    inspect_media_files,
+    inspect_media_files, review_media_submission,
 )
 
 
@@ -56,12 +56,28 @@ class QualityAIMediaTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 extract_video_frames(Path(directory) / "missing.mp4", directory)
 
-    def test_media_review_requires_provider_client(self):
+    def test_media_review_rejects_unsupported_files(self):
         with tempfile.TemporaryDirectory() as directory:
-            image = Path(directory) / "frame.png"
-            image.write_bytes(b"fake")
-            with self.assertRaises(Exception):
-                inspect_media_files(image_paths=[image], client=FakeClient([]), model="test")
+            image = Path(directory) / "frame.txt"
+            image.write_bytes(b"not an image")
+            from quality_ai_media import inspect_images
+            with self.assertRaisesRegex(ValueError, "Unsupported media MIME"):
+                inspect_images([image], FakeClient([]), "test")
+
+    def test_media_review_bridge_preserves_advisory_governance(self):
+        evidence = {
+            "image_descriptions": ["A stick figure stands beside a door."],
+            "visual_observations": ["The character remains visually consistent."],
+            "audio_observations": ["Speech is intelligible."],
+            "media_files_reviewed": {"images_or_frames": 1, "audio": True},
+        }
+        with patch("quality_ai_media.inspect_media_files", return_value=evidence):
+            result = review_media_submission(
+                {"narration": "word " * 190}, client=FakeClient([]), model="vision-test",
+            )
+        self.assertEqual(result["media_evidence"], evidence)
+        self.assertTrue(result["review"]["governance"]["advisory_only"])
+        self.assertFalse(result["review"]["governance"]["may_block_production"])
 
 
 if __name__ == "__main__":
