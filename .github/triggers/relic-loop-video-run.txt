@@ -5,3 +5,5 @@ Retry after model configuration correction.
 Retry after voice import and storyboard fixes.
 
 Retry after safe moderation fallback.
+
+Retry after strict story-length retry handling.
