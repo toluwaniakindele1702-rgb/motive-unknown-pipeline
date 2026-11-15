@@ -16,8 +16,8 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertEqual(len(beats), 10)
         self.assertEqual(" ".join(beats), narration)
     def test_moderation_retry_keeps_character_beat_and_setting(self):
-        prompt = ("CANONICAL CHARACTER LOCK: Milo in a red hoodie\\n"
-                  "EXACT NARRATION MOMENT: Milo drops his lunchbox\\n"
+        prompt = ("CANONICAL CHARACTER LOCK: Milo in a red hoodie\n"
+                  "EXACT NARRATION MOMENT: Milo drops his lunchbox\n"
                   "SETTING: a school hallway")
         safe = _safe_moderation_retry_prompt(prompt)
         self.assertIn("Milo in a red hoodie", safe)
