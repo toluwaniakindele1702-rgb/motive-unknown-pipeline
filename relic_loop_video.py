@@ -157,6 +157,14 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
         raise RuntimeError("GROQ_API_KEY is missing; cannot generate the story")
     from groq import Groq
     client = Groq(api_key=groq_key)
+    if previous_feedback is None:
+        feedback_path = OUT_ROOT / "latest_quality_feedback.json"
+        if feedback_path.is_file():
+            try:
+                previous_feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
+                print("[QUALITY FEEDBACK] Loaded advisory feedback from the previous run")
+            except (OSError, json.JSONDecodeError):
+                previous_feedback = None
     feedback = QualityFeedback.from_mapping(previous_feedback)
     story = generate_story(client, (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b"),
                            CreativeBrief(topic=topic, duration_seconds=(50, 90), target_words=(180, 215)),
