@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from quality_ai_media import (
     MAX_IMAGES, _parse_json, build_gemini_client, extract_video_frames,
-    inspect_media_files, review_media_submission,
+    inspect_media_files, review_media_submission, inspect_images, inspect_audio,
 )
 
 
@@ -50,6 +50,43 @@ class QualityAIMediaTests(unittest.TestCase):
             with patch("quality_ai_media.shutil.which", return_value=None):
                 with self.assertRaisesRegex(RuntimeError, "ffmpeg and ffprobe are required"):
                     extract_video_frames(video, Path(directory) / "frames")
+
+    def test_image_adapter_builds_multimodal_parts_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "frame.png"
+            image.write_bytes(b"mock-png-data")
+            expected = {"image_descriptions": ["A red stick figure."], "observations": []}
+            with patch("quality_ai_media._generate", return_value=expected) as generate:
+                result = inspect_images([image], FakeClient([]), "test-model")
+            self.assertEqual(result, expected)
+            self.assertEqual(len(generate.call_args.args[2]), 2)
+
+    def test_audio_adapter_builds_multimodal_part_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "voice.wav"
+            audio.write_bytes(b"mock-wave-data")
+            expected = {"audio_observations": ["Speech is clear."]}
+            with patch("quality_ai_media._generate", return_value=expected) as generate:
+                result = inspect_audio(audio, FakeClient([]), "test-model")
+            self.assertEqual(result, expected)
+            self.assertEqual(len(generate.call_args.args[2]), 1)
+
+    def test_video_frame_extraction_samples_full_duration(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "sample.mp4"
+            video.write_bytes(b"video")
+            output = Path(directory) / "frames"
+            def fake_run(command, **kwargs):
+                if "ffprobe" in command[0]:
+                    return SimpleNamespace(returncode=0, stdout="60.0", stderr="")
+                Path(command[-1].replace("%02d", "01")).write_bytes(b"frame")
+                self.assertIn("fps=0.13333333", command[command.index("-vf") + 1])
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            with patch("quality_ai_media.shutil.which", side_effect=["/usr/bin/ffmpeg", "/usr/bin/ffprobe"]), patch("quality_ai_media.subprocess.run", side_effect=fake_run):
+                frames = extract_video_frames(video, output, max_frames=8)
+            self.assertEqual(len(frames), 1)
+            self.assertTrue(frames[0].is_file())
 
     def test_missing_video_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:
