@@ -35,7 +35,7 @@ jobs:
           from pathlib import Path
           source = Path("maintenance_ai.py").read_text().lower()
           assert "production_touched\": false" in source
-          assert "deployed\": \"not_performed\"" in source
+          assert '"deployment": "not_performed"' in source
           assert "workflow_dispatch" not in source and "youtube" not in source
           print("Maintenance AI is isolated: no production trigger, upload or deployment.")
           PY
