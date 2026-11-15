@@ -1,7 +1,7 @@
 import unittest
 from quality_ai import (
     DIMENSIONS, ReviewConfig, build_evaluator_prompt, review_submission,
-    _normalise_evaluation,
+    _normalise_evaluation, build_client_from_env,
 )
 
 
@@ -63,6 +63,16 @@ class QualityAITests(unittest.TestCase):
         )
         self.assertIn("Story", prompt)
         self.assertNotIn("do-not-send", prompt)
+
+
+    def test_cli_defaults_to_offline_without_secret(self):
+        client, model = build_client_from_env({})
+        self.assertIsNone(client)
+        self.assertIsNone(model)
+
+    def test_config_requires_model_when_api_key_is_present(self):
+        with self.assertRaisesRegex(ValueError, "QUALITY_AI_MODEL"):
+            build_client_from_env({"GROQ_API_KEY": "test-only-secret"})
 
     def test_all_dimensions_are_explicit(self):
         result = review_submission({})
