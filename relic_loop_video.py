@@ -100,7 +100,16 @@ def image_provider(prompt: str, refs=None) -> bytes:
     return blob
 
 async def _synthesize_voice(text: str, target: Path) -> None:
-    import edge_tts
+    # The legacy repository has a root-level edge_tts.py file; temporarily remove
+    # the checkout root from import resolution so the installed edge-tts package wins.
+    import sys
+    original_path = list(sys.path)
+    sys.path[:] = [entry for entry in sys.path
+                   if Path(entry or ".").resolve() != ROOT]
+    try:
+        import edge_tts
+    finally:
+        sys.path[:] = original_path
     voice = os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-GuyNeural")
     rate = os.getenv("RELIC_LOOP_TTS_RATE", "+0%")
     communicate = edge_tts.Communicate(text, voice, rate=rate)
@@ -261,7 +270,7 @@ if __name__ == "__main__":
                 from groq import Groq
                 source_names = ("creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
                                 "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py")
-                source_files = {name: (ROOT / name).read_text(encoding="utf-8")
+                source_files = {name: (ROOT / name).read_text(encoding="utf-8")[:3500]
                                 for name in source_names if (ROOT / name).is_file()}
                 repair = propose_repair(failure["error"], source_files, Groq(api_key=key))
                 repair.pop("patch", None)
