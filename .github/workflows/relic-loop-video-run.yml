@@ -53,7 +53,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
           QUALITY_AI_MODEL: ${{ vars.QUALITY_AI_MODEL || 'openai/gpt-oss-120b' }}
-          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL }}
+          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL || 'openai/gpt-oss-120b' }}
           RELIC_LOOP_USE_RAPHAEL: "1"
           RELIC_LOOP_OUTPUT_DIR: "relic_loop_output"
         run: |
