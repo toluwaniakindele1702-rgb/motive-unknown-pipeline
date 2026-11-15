@@ -182,6 +182,22 @@ def _assemble(images: list[Path], beats: list[str], narration_audio: Path, outpu
         raise RuntimeError("FFmpeg did not produce a usable MP4")
     return _duration(output)
 
+def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedback,
+                         recent_story_summaries: list[str] | None = None) -> dict:
+    """Retry out-of-range drafts with progressively tighter word-count instructions."""
+    last_error = None
+    for target_words in ((180, 215), (180, 205), (180, 195)):
+        brief = CreativeBrief(topic=topic, duration_seconds=(50, 90), target_words=target_words)
+        try:
+            return generate_story(client, model, brief, feedback, recent_story_summaries or [])
+        except ValueError as exc:
+            if "words; expected" not in str(exc):
+                raise
+            last_error = exc
+            print(f"[CREATIVE AI] Draft outside {target_words[0]}-{target_words[1]} words; requesting a tighter rewrite")
+    raise ValueError(f"Creative AI could not produce a story within 180-215 words after three attempts: {last_error}")
+
+
 def produce_video(topic: str = "", previous_feedback: dict | None = None,
                   recent_story_summaries: list[str] | None = None) -> dict:
     """Generate a complete local MP4, review it, and save an auditable run package."""
@@ -209,9 +225,10 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
             except (OSError, json.JSONDecodeError):
                 previous_feedback = None
     feedback = QualityFeedback.from_mapping(previous_feedback)
-    story = generate_story(client, (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b"),
-                           CreativeBrief(topic=topic, duration_seconds=(50, 90), target_words=(180, 215)),
-                           feedback, recent_story_summaries or [])
+    story = _generate_valid_story(
+        client, (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b"),
+        topic, feedback, recent_story_summaries,
+    )
     report["story"] = story
     report["stages"].append({"name": "creative_ai", "status": "completed"})
     beats = split_story_into_scenes(story["narration"], count=10)
