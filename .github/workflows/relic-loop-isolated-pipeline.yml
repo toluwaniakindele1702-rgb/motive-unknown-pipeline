@@ -1,6 +1,16 @@
 name: Relic Loop isolated AI pipeline validation
 
 on:
+  push:
+    branches: [feature/relic-loop-new-pipeline]
+    paths:
+      - "relic_loop_pipeline.py"
+      - "test_relic_loop_pipeline.py"
+      - "creative_ai.py"
+      - "quality_ai.py"
+      - "quality_ai_media.py"
+      - "maintenance_ai.py"
+      - ".github/workflows/relic-loop-isolated-pipeline.yml"
   pull_request:
     paths:
       - "relic_loop_pipeline.py"
