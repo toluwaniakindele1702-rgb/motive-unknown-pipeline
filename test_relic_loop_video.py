@@ -10,7 +10,7 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertEqual(len(beats), 10)
         self.assertEqual(" ".join(beats), narration)
     def test_short_sentence_count_still_produces_ten_visual_beats(self):
-        narration = " ".join(f"Sentence {i} is here." for i in range(1, 8))
+        narration = " ".join(f"Sentence {i} has enough extra words to become a longer narration beat." for i in range(1, 8))
         beats = split_story_into_scenes(narration, 10)
         self.assertEqual(len(beats), 10)
         self.assertEqual(" ".join(beats), narration)
