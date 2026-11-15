@@ -36,18 +36,11 @@ def split_story_into_scenes(narration: str, count: int = 10) -> list[str]:
     sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", narration.strip()) if x.strip()]
     if len(sentences) < 5:
         raise ValueError("Narration has too few complete sentences for a visual storyboard")
-    count = max(MIN_SCENES, min(MAX_SCENES, count, len(sentences)))
-    groups: list[list[str]] = [[] for _ in range(count)]
-    # Greedy word balancing while preserving sentence order.
-    totals = [0] * count
-    for sentence in sentences:
-        target = min(range(count), key=lambda i: (totals[i], i))
-        groups[target].append(sentence)
-        totals[target] += len(sentence.split())
-    # Empty groups can occur with short sentence counts; merge down and enforce >=5.
+    count = max(5, min(MAX_SCENES, count, len(sentences)))
+    # Contiguous, balanced groups preserve exact narration order across the video.
+    groups = [sentences[(i * len(sentences)) // count:((i + 1) * len(sentences)) // count]
+              for i in range(count)]
     beats = [" ".join(group) for group in groups if group]
-    while len(beats) < MIN_SCENES and len(sentences) > len(beats):
-        break
     if len(beats) < 5:
         raise ValueError("Could not form enough meaningful visual beats")
     return beats
