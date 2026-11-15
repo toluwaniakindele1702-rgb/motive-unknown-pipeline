@@ -16,7 +16,7 @@ class RelicLoopVideoTests(unittest.TestCase):
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
         with patch("relic_loop_video._run", return_value=fake):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _duration(Path("unused"))
 if __name__ == "__main__":
     unittest.main()
