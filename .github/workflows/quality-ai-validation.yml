@@ -1,0 +1,47 @@
+name: Quality AI isolated validation
+
+on:
+  push:
+    branches: [feature/relic-loop-quality-ai]
+    paths:
+      - "quality_ai.py"
+      - "test_quality_ai.py"
+      - ".github/workflows/quality-ai-validation.yml"
+  pull_request:
+    branches: [feature/relic-loop-quality-ai]
+    paths:
+      - "quality_ai.py"
+      - "test_quality_ai.py"
+      - ".github/workflows/quality-ai-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality-ai-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Quality AI development branch
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Compile Quality AI
+        run: python -m py_compile quality_ai.py
+      - name: Run offline unit and governance tests
+        run: python -m unittest -v test_quality_ai.py
+      - name: Verify no publishing or production-gate integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("quality_ai.py").read_text().lower()
+          forbidden = ("youtube", "workflow_dispatch", "workflow_run", "subprocess", "requests.post")
+          assert not any(term in source for term in forbidden)
+          assert '"may_block_production": False'.lower() in source
+          assert '"may_cancel_or_pause_run": False'.lower() in source
+          assert '"may_authorize_or_trigger_upload": False'.lower() in source
+          print("Quality AI governance boundary verified.")
+          PY
