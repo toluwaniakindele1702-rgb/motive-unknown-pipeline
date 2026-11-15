@@ -8,6 +8,7 @@ It has no YouTube, GitHub-write, pipeline-trigger, or deployment integration.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, asdict
 from typing import Any, Mapping, Sequence
@@ -297,6 +298,23 @@ def review_submission(
     }
 
 
+def build_client_from_env(environ: Mapping[str, str] | None = None) -> tuple[Any, str | None]:
+    """Create an optional Groq/OpenAI-compatible evaluator from environment config.
+
+    No key is required for deterministic mode. Secrets are read locally by the
+    runner and are never included in review payloads or output.
+    """
+    env = environ if environ is not None else os.environ
+    api_key = env.get("GROQ_API_KEY", "").strip()
+    model = env.get("QUALITY_AI_MODEL", "").strip()
+    if not api_key:
+        return None, None
+    if not model:
+        raise ValueError("QUALITY_AI_MODEL must be set when GROQ_API_KEY is configured")
+    from groq import Groq
+    return Groq(api_key=api_key), model
+
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Run standalone advisory Quality AI review")
@@ -305,7 +323,8 @@ def main() -> int:
     args = parser.parse_args()
     with open(args.input, encoding="utf-8") as handle:
         payload = json.load(handle)
-    result = review_submission(payload)
+    client, model = build_client_from_env()
+    result = review_submission(payload, client=client, model=model)
     rendered = json.dumps(result, indent=2, ensure_ascii=False)
     if args.output == "-":
         print(rendered)
