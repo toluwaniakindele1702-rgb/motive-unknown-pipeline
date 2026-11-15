@@ -1,0 +1,69 @@
+name: Relic Loop independent video production
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Optional story topic (leave blank for a fresh premise)"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [feature/relic-loop-new-pipeline]
+    paths:
+      - ".github/triggers/relic-loop-video-run.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  produce-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/relic-loop-new-pipeline
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install system media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install independent pipeline dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'groq>=0.31,<1' 'requests>=2.32,<3' 'Pillow>=11,<13' 'edge-tts>=7,<8' 'playwright>=1.50,<2'
+          python -m playwright install chromium --with-deps
+      - name: Check required credentials (without printing values)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$GROQ_API_KEY" || { echo "::error::GROQ_API_KEY repository secret is missing"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID repository secret is missing"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN repository secret is missing"; exit 1; }
+      - name: Produce video (no YouTube authentication or upload)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
+          QUALITY_AI_MODEL: ${{ vars.QUALITY_AI_MODEL }}
+          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL }}
+          RELIC_LOOP_USE_RAPHAEL: "1"
+          RELIC_LOOP_OUTPUT_DIR: "relic_loop_output"
+        run: |
+          python relic_loop_video.py --topic "${{ inputs.topic }}"
+      - name: Upload generated video and run report as downloadable artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-video-${{ github.run_number }}
+          path: |
+            relic_loop_output/**
+          if-no-files-found: warn
+          retention-days: 14
