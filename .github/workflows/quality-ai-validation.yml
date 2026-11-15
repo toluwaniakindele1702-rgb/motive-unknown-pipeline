@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install isolated test dependencies
-        run: python -m pip install --upgrade pip google-genai groq
+        run: python -m pip install --upgrade pip 'google-genai>=2.3,<3' 'groq>=0.31,<1'
       - name: Compile Quality AI
         run: python -m py_compile quality_ai.py quality_ai_media.py
       - name: Run offline unit and governance tests
