@@ -1,65 +1,48 @@
 # Relic Loop — Independent Video Pipeline
 
-Relic Loop is a separate video-production system for Creative AI, Quality AI and
-Maintenance AI. It does not import, modify, or invoke the existing
+Relic Loop is a separate production pipeline for Creative AI, Story Quality AI,
+visual generation, Quality AI and Maintenance AI. It does not invoke the legacy
 Chispa-Pifia V2 production workflow.
 
-## End-to-end production stages
+## Story and production flow
 
-1. **Creative AI** generates an original 180–215-word story, targeting 50–90
-   seconds, and splits it into contiguous visual beats.
-3. **Image generation** creates a consistent 2D frame for each beat. Raphael is
-   attempted when a valid Playwright session is configured; Cloudflare FLUX.2
-   is the fallback. Accepted frames are normalized to 576×1024 portrait PNGs.
-   The prior accepted frame is supplied as a continuity reference.
-4. **Voice generation** uses Edge TTS to create the narration audio.
-5. **Video assembly** uses FFmpeg to create a 30-fps, 576×1024 H.264/AAC MP4.
-6. **Quality AI** reviews the completed video, sampled frames and audio where
-   Cloudflare vision credentials are available; deterministic and local audio
-   checks remain available if media vision is unavailable. Its feedback is
-   advisory, never a production gate, and is persisted for the next run.
-7. **Maintenance AI** is called on technical failure to diagnose the problem
-   and propose a narrowly scoped repair. It does not apply or deploy patches.
+1. **Creative AI** writes an original 180–215-word narration targeting 50–90 seconds.
+   It starts with an immediate curiosity hook, establishes a clear character goal,
+   uses at least three connected escalations, plants a detail and pays it off.
+2. **Story Quality AI** reviews hook, clarity, escalation, originality, character
+   voice, pacing, payoff and rewatchability. It coaches up to two rewrites.
+   Review is advisory; a final story is still produced if review fails or scores
+   remain low.
+3. **Visual generation** makes ten consistent 2D frames. Raphael is attempted
+   with a valid session; Cloudflare is fallback. Images are portrait 576x1024.
+4. **Voice** uses Edge TTS; **assembly** uses FFmpeg for 30fps H.264/AAC.
+5. **Quality AI** reviews the completed video, frames and audio when evidence is
+   available; feedback remains advisory and is persisted for future stories.
+6. **Maintenance AI** diagnoses technical failures and proposes scoped repairs;
+   it does not deploy or auto-apply patches.
 
-## Run locally
+## Workflow and credentials
 
-Install FFmpeg, then install Python packages:
+The workflow supports manual runs and daily scheduled runs after merge. It uploads
+the MP4 and report as an artifact, then attempts a **public YouTube upload**.
+YouTube OAuth secrets required: `YOUTUBE_TOKEN_JSON` and
+`YOUTUBE_CLIENT_SECRET_JSON`. Production secrets required:
+`GROQ_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`.
+Raphael session is optional.
+
+The old `chispa_pifia_v2.yml` workflow is disabled only after the public upload
+succeeds. If production or upload fails, the old workflow stays active. The
+deactivation action requires the workflow token's Actions write permission.
+
+## Local run
+
+Install FFmpeg and dependencies:
 ```bash
-python -m pip install 'groq>=0.31,<1' 'requests>=2.32,<3' 'Pillow>=11,<13' 'edge-tts>=7,<8' 'playwright>=1.50,<2'
-python -m playwright install chromium
+python -m pip install 'groq>=0.31,<1' 'requests>=2.32,<3' 'Pillow>=11,<13' 'edge-tts>=7,<8'
 ```
-
-Set `GROQ_API_KEY`, `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN`, then run:
+Set production secrets locally and run:
 ```bash
 python relic_loop_video.py --topic "A stubborn vending machine"
 ```
-
-Optional Raphael session: set `RAPHAEL_STORAGE_STATE_JSON` to a valid
-Playwright storage-state JSON value. Do not commit or paste this sensitive
-session data into source control or chat. If no valid session is configured,
-the producer uses Cloudflare directly.
-
-Output is written under `relic_loop_output/<run-id>/` and includes the MP4,
-narration audio, individual scene images and `run_report.json`. The latest
-Quality AI feedback is stored in `relic_loop_output/latest_quality_feedback.json`
-and reused by the next run.
-
-## GitHub Actions
-
-The independent workflow `.github/workflows/relic-loop-video-run.yml` supports
-manual dispatch and a one-shot feature-branch trigger. It uploads the MP4 and
-report as a GitHub Actions artifact. Required repository secrets are
-`GROQ_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`.
-`RAPHAEL_STORAGE_STATE_JSON` is optional.
-
-## Isolation controls
-
-- Public YouTube upload is an explicit final workflow stage; OAuth secrets are required.
-- No calls to the legacy production pipeline or its renderers.
-- The workflow runs only on the isolated feature branch and has read-only
-  repository permissions.
-- Publishing is public-only after successful production; failed/missing OAuth does not publish.
-- Quality AI cannot block, cancel or pause production.
-- Maintenance AI proposals are not automatically applied or deployed.
-- Validation is offline and never publishes videos.
+Output is written under `relic_loop_output/<run-id>/`. Do not put OAuth or
+browser-session JSON in source control or chat.
