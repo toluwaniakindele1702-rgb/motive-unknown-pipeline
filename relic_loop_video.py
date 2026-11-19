@@ -15,6 +15,7 @@ from io import BytesIO
 from creative_ai import CreativeBrief, QualityFeedback, generate_story, create_visual_brief, generate_scene_image
 from creative_ai_image_generator import inspect_image
 from quality_ai import build_client_from_env, review_submission
+from story_quality_gate import run_story_gate
 from maintenance_ai import propose_repair
 from quality_ai_media import inspect_audio, inspect_media_files, cloudflare_config
 
@@ -225,12 +226,24 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
             except (OSError, json.JSONDecodeError):
                 previous_feedback = None
     feedback = QualityFeedback.from_mapping(previous_feedback)
-    story = _generate_valid_story(
-        client, (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b"),
-        topic, feedback, recent_story_summaries,
+    creative_model = (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b")
+    quality_model = (os.getenv("QUALITY_AI_MODEL", "").strip() or creative_model)
+    def draft_story(coaching):
+        return _generate_valid_story(client, creative_model, topic,
+            QualityFeedback.from_mapping(coaching), recent_story_summaries)
+    story, story_reviews, coached_feedback = run_story_gate(
+        client, quality_model, draft_story, feedback, max_rewrites=2
     )
     report["story"] = story
+    report["story_quality_reviews"] = story_reviews
+    report["story_quality_summary"] = {
+        "attempts": len(story_reviews),
+        "last_overall_score": next((r.get("overall_score") for r in reversed(story_reviews) if r.get("overall_score") is not None), None),
+        "rewrite_attempts": max(0, len(story_reviews)-1),
+        "advisory_only": True, "production_blocked": False,
+    }
     report["stages"].append({"name": "creative_ai", "status": "completed"})
+    report["stages"].append({"name": "story_quality_coaching", "status": "completed", "attempts": len(story_reviews), "advisory_only": True})
     beats = split_story_into_scenes(story["narration"], count=10)
     canonical = ("one consistent expressive 2D stickman with a large pale round head, bold oval eyes, black eyebrows, simple mouth, charcoal hoodie, dark cargo trousers and black-and-white high-top sneakers; same exact model and outfit in every frame")
     images: list[Path] = []
