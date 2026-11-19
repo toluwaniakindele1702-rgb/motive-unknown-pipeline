@@ -49,8 +49,8 @@ def review_story(client:Any, model:str, story:dict)->dict:
     if isinstance(issues,str): issues=[issues]
     issues=[str(x).strip() for x in issues if str(x).strip()][:8] if isinstance(issues,list) else []
     brief=str(data.get("rewrite_brief","")).strip()
-    critical=[normalized[k] for k in ("opening_hook","escalation","originality","pacing","payoff") if normalized[k] is not None]
-    verdict="revise" if any(x<7 for x in critical) or data.get("verdict")=="revise" else "ready"
+    critical=[normalized[k] for k in ("opening_hook","escalation","originality","pacing","payoff")]
+    verdict="revise" if any(x is None or x<7 for x in critical) or data.get("verdict")=="revise" else "ready"
     return {"scores":normalized,"overall_score":round(overall,1) if overall is not None else None,"issues":issues,"rewrite_brief":brief,"verdict":verdict}
 
 def coach_feedback(review:dict)->dict:
