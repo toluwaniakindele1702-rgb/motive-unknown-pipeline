@@ -162,8 +162,7 @@ Quality AI feedback from previous completed videos (advisory, not a pass/fail ga
 Avoid repeating these recent premises:
 {recent_text}
 
-Make the premise distinct from the recent examples. The first sentence must begin
-inside an intriguing visual problem. Finish on the strongest earned punchline."""
+Make the premise distinct from the recent examples. Begin with a curiosity gap or surprising action in the first sentence. Avoid a slow setup. Use connected escalation and an earned payoff; write scenes, not a synopsis."""
 
 
 def generate_story(
