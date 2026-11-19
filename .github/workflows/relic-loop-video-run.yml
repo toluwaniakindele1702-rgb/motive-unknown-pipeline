@@ -93,7 +93,7 @@ jobs:
           python -m pip install "google-api-python-client>=2.130,<3" "google-auth>=2.30,<3"
           RELIC_LOOP_VIDEO_PATH="$VIDEO" RELIC_LOOP_REPORT_PATH="$REPORT" python relic_loop_youtube_publish.py
       - name: Deactivate legacy production workflow after public upload succeeds
-        if: success() && steps.publish.outcome == 'success'
+        if: success() && steps.publish.outcome == 'success' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow disable chispa_pifia_v2.yml --repo "$GITHUB_REPOSITORY"
