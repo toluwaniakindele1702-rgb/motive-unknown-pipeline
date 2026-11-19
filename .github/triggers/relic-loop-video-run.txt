@@ -1,1 +1,1 @@
-Run the upgraded Relic Loop story quality and video pipeline.
+Retry upgraded pipeline after bounded setup timeout.
