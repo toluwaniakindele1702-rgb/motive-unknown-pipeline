@@ -20,7 +20,7 @@ if not creds.valid:
 service=build("youtube","v3",credentials=creds,cache_discovery=False)
 channels=service.channels().list(part="id",mine=True).execute().get("items",[])
 if not channels: raise SystemExit("OAuth cannot access a YouTube channel")
-report=json.loads(os.environ.get("STORY_JSON","{}"))
+report_path=Path(os.environ.get("RELIC_LOOP_REPORT_PATH","run_report.json"))\nreport=json.loads(report_path.read_text(encoding="utf-8")) if report_path.is_file() else {}
 title=str(report.get("story",{}).get("title","Relic Loop Short"))[:95]
 description="An original short story from Relic Loop. #shorts #animation #comedy"
 body={"snippet":{"title":title,"description":description,"categoryId":"23"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}
