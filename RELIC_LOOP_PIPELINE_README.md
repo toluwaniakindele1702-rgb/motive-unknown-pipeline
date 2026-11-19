@@ -8,17 +8,17 @@ Chispa-Pifia V2 production workflow.
 
 1. **Creative AI** generates an original 180–215-word story, targeting 50–90
    seconds, and splits it into contiguous visual beats.
-2. **Image generation** creates a consistent 2D frame for each beat. Raphael is
+3. **Image generation** creates a consistent 2D frame for each beat. Raphael is
    attempted when a valid Playwright session is configured; Cloudflare FLUX.2
    is the fallback. Accepted frames are normalized to 576×1024 portrait PNGs.
    The prior accepted frame is supplied as a continuity reference.
-3. **Voice generation** uses Edge TTS to create the narration audio.
-4. **Video assembly** uses FFmpeg to create a 30-fps, 576×1024 H.264/AAC MP4.
-5. **Quality AI** reviews the completed video, sampled frames and audio where
+4. **Voice generation** uses Edge TTS to create the narration audio.
+5. **Video assembly** uses FFmpeg to create a 30-fps, 576×1024 H.264/AAC MP4.
+6. **Quality AI** reviews the completed video, sampled frames and audio where
    Cloudflare vision credentials are available; deterministic and local audio
    checks remain available if media vision is unavailable. Its feedback is
    advisory, never a production gate, and is persisted for the next run.
-6. **Maintenance AI** is called on technical failure to diagnose the problem
+7. **Maintenance AI** is called on technical failure to diagnose the problem
    and propose a narrowly scoped repair. It does not apply or deploy patches.
 
 ## Run locally
@@ -55,11 +55,11 @@ report as a GitHub Actions artifact. Required repository secrets are
 
 ## Isolation controls
 
-- No YouTube OAuth credentials, API client, upload, publishing or scheduling.
+- Public YouTube upload is an explicit final workflow stage; OAuth secrets are required.
 - No calls to the legacy production pipeline or its renderers.
 - The workflow runs only on the isolated feature branch and has read-only
   repository permissions.
-- No generated video is published; users can add YouTube authentication later.
+- Publishing is public-only after successful production; failed/missing OAuth does not publish.
 - Quality AI cannot block, cancel or pause production.
 - Maintenance AI proposals are not automatically applied or deployed.
 - Validation is offline and never publishes videos.
