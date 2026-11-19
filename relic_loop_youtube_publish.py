@@ -11,7 +11,6 @@ VIDEO=Path(os.environ.get("RELIC_LOOP_VIDEO_PATH","")).resolve()
 TOKEN=os.getenv("YOUTUBE_TOKEN_JSON","")
 CLIENT=os.getenv("YOUTUBE_CLIENT_SECRET_JSON","")
 if not TOKEN or not CLIENT: raise SystemExit("Missing YOUTUBE_TOKEN_JSON or YOUTUBE_CLIENT_SECRET_JSON secrets")
-if not VIDEO.is_file(): raise SystemExit("MP4 path missing")
 token=json.loads(TOKEN); client_info=json.loads(CLIENT)
 client_section=client_info.get("installed") or client_info.get("web") or client_info
 if isinstance(client_section,dict):
@@ -27,6 +26,7 @@ if not channels: raise SystemExit("OAuth cannot access a YouTube channel")
 if "--check-auth" in sys.argv:
     print("YOUTUBE_AUTH_PREFLIGHT=success")
     raise SystemExit(0)
+if not VIDEO.is_file(): raise SystemExit("MP4 path missing")
 report_path=Path(os.environ.get("RELIC_LOOP_REPORT_PATH","run_report.json"))
 report=json.loads(report_path.read_text(encoding="utf-8")) if report_path.is_file() else {}
 title=str(report.get("story",{}).get("title","Relic Loop Short"))[:95]
