@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Publish a Relic Loop Short publicly; fail closed on missing/invalid OAuth."""
+import json, os, sys
+from pathlib import Path
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+ROOT=Path(__file__).resolve().parent
+VIDEO=Path(os.environ.get("RELIC_LOOP_VIDEO_PATH","")).resolve()
+TOKEN=os.getenv("YOUTUBE_TOKEN_JSON","")
+CLIENT=os.getenv("YOUTUBE_CLIENT_SECRET_JSON","")
+if not TOKEN or not CLIENT: raise SystemExit("Missing YOUTUBE_TOKEN_JSON or YOUTUBE_CLIENT_SECRET_JSON secrets")
+if not VIDEO.is_file(): raise SystemExit("MP4 path missing")
+token=json.loads(TOKEN); client_info=json.loads(CLIENT)
+creds=Credentials.from_authorized_user_info(token,scopes=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube.readonly"])
+if not creds.valid:
+    if creds.expired and creds.refresh_token: creds.refresh(Request())
+    else: raise SystemExit("YouTube OAuth invalid and not refreshable")
+service=build("youtube","v3",credentials=creds,cache_discovery=False)
+channels=service.channels().list(part="id",mine=True).execute().get("items",[])
+if not channels: raise SystemExit("OAuth cannot access a YouTube channel")
+report=json.loads(os.environ.get("STORY_JSON","{}"))
+title=str(report.get("story",{}).get("title","Relic Loop Short"))[:95]
+description="An original short story from Relic Loop. #shorts #animation #comedy"
+body={"snippet":{"title":title,"description":description,"categoryId":"23"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}
+request=service.videos().insert(part="snippet,status",body=body,media_body=MediaFileUpload(str(VIDEO),mimetype="video/mp4",chunksize=8*1024*1024,resumable=True))
+response=None
+while response is None:
+    status,response=request.next_chunk()
+vid=response.get("id")
+if not vid: raise SystemExit("YouTube upload response had no video ID")
+result={"ok":True,"video_id":vid,"url":"https://www.youtube.com/watch?v="+vid,"privacy_status":"public","title":title}
+Path("youtube_public_upload.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
+print("PUBLIC_UPLOAD_URL="+result["url"])
