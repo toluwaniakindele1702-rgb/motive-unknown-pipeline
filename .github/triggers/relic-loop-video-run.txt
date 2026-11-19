@@ -1,1 +1,1 @@
-Retry upgraded pipeline after bounded setup timeout.
+Run Relic Loop with the upgraded story hook, escalation, rewrite coaching, and public YouTube publishing. Manual test request.
