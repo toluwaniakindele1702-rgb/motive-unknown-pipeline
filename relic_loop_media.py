@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import wave
 from pathlib import Path
 from typing import Sequence
@@ -202,14 +203,28 @@ def build_sound_effect_track(
 
 
 def self_test() -> None:
-    """Offline smoke checks for motion presets and generated audio."""
+    """Render a tiny moving clip and WAV offline to catch broken media wiring."""
     for index in range(5):
-        name, zoom, x, y = _motion_expression(index, 150)
+        name, zoom, x, y = _motion_expression(index, 30)
         assert name and zoom and x and y
     cue = _synthesize_effect("chime")
     assert len(cue) > 1000 and max(cue) > 0
+    with tempfile.TemporaryDirectory(prefix="relic-loop-media-test-") as folder:
+        root = Path(folder)
+        still = root / "test.png"
+        _run([
+            shutil.which("ffmpeg") or "ffmpeg", "-nostdin", "-hide_banner",
+            "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+            "color=c=0x456789:s=288x512", "-frames:v", "1", str(still),
+        ])
+        rendered = root / "motion.mp4"
+        report = render_motion_video([still], [0.6], rendered, width=144, height=256, fps=15)
+        assert rendered.is_file() and report[0]["motion"] == "gentle_push_in"
+        wav_path = root / "sfx.wav"
+        cues = build_sound_effect_track(["A mysterious letter appeared.", "The secret was revealed."],
+                                        [0.6, 0.6], wav_path)
+        assert wav_path.is_file() and wav_path.stat().st_size > 1000 and cues
     print("Relic Loop local motion/audio self-test passed")
-
 
 if __name__ == "__main__":
     self_test()
