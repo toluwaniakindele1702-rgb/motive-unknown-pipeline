@@ -16,7 +16,7 @@ from creative_ai import CreativeBrief, QualityFeedback, generate_story, create_v
 from creative_ai_image_generator import inspect_image
 from quality_ai import build_client_from_env, review_submission
 from story_quality_gate import run_story_gate
-from maintenance_ai import propose_repair
+from maintenance_ai import propose_repair, validate_patch_in_sandbox as maintenance_ai_validate
 from relic_loop_media import (render_motion_video, build_sound_effect_track, build_background_music_track, write_word_level_captions)
 from quality_ai_media import inspect_audio, inspect_media_files, cloudflare_config
 
@@ -409,8 +409,20 @@ if __name__ == "__main__":
                 source_files = {name: (ROOT / name).read_text(encoding="utf-8")[:3500]
                                 for name in source_names if (ROOT / name).is_file()}
                 repair = propose_repair(failure["error"], source_files, Groq(api_key=key))
-                repair.pop("patch", None)
+                patch = repair.get("patch", "")
+                if (repair.get("repairable") and repair.get("category") == "code_bug"
+                        and repair.get("confidence", 0) >= 0.8 and patch.strip()):
+                    try:
+                        repair["validation"] = maintenance_ai_validate(ROOT, patch)
+                    except Exception as validation_error:
+                        repair["validation"] = {"valid": False,
+                            "reason": f"{type(validation_error).__name__}: {str(validation_error)[:500]}"}
+                else:
+                    repair["validation"] = {"valid": False, "reason": "No high-confidence code repair proposed"}
+                repair["patch"] = patch
                 failure["maintenance_ai"] = repair
+                (OUT_ROOT / "maintenance_ai_report.json").write_text(
+                    json.dumps(repair, indent=2, ensure_ascii=False), encoding="utf-8")
         except Exception as diag:
             failure["maintenance_ai"] = {"diagnostic_error": str(diag)[:500], "deployment": "not_performed"}
         print(json.dumps(failure, indent=2))
