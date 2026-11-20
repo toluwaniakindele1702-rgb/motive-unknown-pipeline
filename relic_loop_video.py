@@ -17,7 +17,7 @@ from creative_ai_image_generator import inspect_image
 from quality_ai import build_client_from_env, review_submission
 from story_quality_gate import run_story_gate
 from maintenance_ai import propose_repair
-from relic_loop_media import render_motion_video, build_sound_effect_track
+from relic_loop_media import (render_motion_video, build_sound_effect_track, build_background_music_track, write_scene_captions)
 from quality_ai_media import inspect_audio, inspect_media_files, cloudflare_config
 
 ROOT = Path(__file__).resolve().parent
@@ -194,7 +194,7 @@ def _duration(path: Path) -> float:
     return value
 
 def _assemble(images: list[Path], beats: list[str], narration_audio: Path, output: Path):
-    """Render moving scene clips, synthesize story-aware SFX, then mix the audio."""
+    """Render moving scenes, synchronized captions, original music and story-aware SFX."""
     duration = _duration(narration_audio)
     counts = [max(1, len(x.split())) for x in beats]
     total = sum(counts)
@@ -203,22 +203,33 @@ def _assemble(images: list[Path], beats: list[str], narration_audio: Path, outpu
     motion_report = render_motion_video(images, durations, motion_video, WIDTH, HEIGHT, fps=30)
     sfx_path = output.parent / "story_sound_effects.wav"
     sfx_report = build_sound_effect_track(beats, durations, sfx_path)
-
+    music_path = output.parent / "background_music.wav"
+    joined = " ".join(beats).lower()
+    mood = ("mysterious" if any(x in joined for x in ("secret", "mystery", "shadow", "strange"))
+            else "emotional" if any(x in joined for x in ("lonely", "missed", "heart", "sad"))
+            else "warm" if any(x in joined for x in ("family", "friend", "thank", "kind"))
+            else "playful")
+    music_report = build_background_music_track(durations, music_path, mood=mood)
+    captions_path = output.parent / "captions.srt"
+    caption_report = write_scene_captions(beats, durations, captions_path)
+    subtitle_path = str(captions_path.resolve()).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
     _run([
         "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-        "-i", str(motion_video), "-i", str(narration_audio), "-i", str(sfx_path),
+        "-i", str(motion_video), "-i", str(narration_audio), "-i", str(sfx_path), "-i", str(music_path),
         "-filter_complex",
         "[1:a]aresample=48000,volume=1.0[narration];"
-        "[2:a]aresample=48000,volume=0.40[sfx];"
-        "[narration][sfx]amix=inputs=2:duration=first:dropout_transition=0,"
-        "alimiter=limit=0.95[audio]",
-        "-map", "0:v:0", "-map", "[audio]",
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+        "[2:a]aresample=48000,volume=0.34[sfx];"
+        "[3:a]aresample=48000,volume=0.22[music];"
+        "[narration][sfx][music]amix=inputs=3:duration=first:dropout_transition=0,"
+        "alimiter=limit=0.92[audio]",
+        "-vf", f"subtitles='{subtitle_path}':force_style='FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=95'",
+        "-map", "0:v:0", "-map", "[audio]", "-c:v", "libx264", "-preset", "veryfast",
+        "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
         "-t", f"{duration:.3f}", "-movflags", "+faststart", str(output),
-    ], timeout=300)
+    ], timeout=360)
     if not output.is_file() or output.stat().st_size < 100_000:
-        raise RuntimeError("FFmpeg did not produce a usable MP4 with narration and sound effects")
-    return _duration(output), motion_report, sfx_report
+        raise RuntimeError("FFmpeg did not produce a usable captioned MP4 with narration, music and sound effects")
+    return _duration(output), motion_report, sfx_report, music_report, caption_report
 
 def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedback,
                          recent_story_summaries: list[str] | None = None) -> dict:
@@ -314,9 +325,9 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     voice_used = asyncio.run(_synthesize_voice(story["narration"], audio_path))
     report["stages"].append({"name": "voice_generation", "status": "completed", "voice": voice_used, "rate": os.getenv("RELIC_LOOP_TTS_RATE", "+2%")})
     video_path = run_dir / "relic_loop_video.mp4"
-    actual_duration, motion_report, sfx_report = _assemble(images, beats, audio_path, video_path)
+    actual_duration, motion_report, sfx_report, music_report, caption_report = _assemble(images, beats, audio_path, video_path)
     report["camera_motion"] = motion_report
-    report["sound_effects"] = sfx_report
+    report["sound_effects"] = sfx_report\n    report["background_music"] = music_report\n    report["captions"] = caption_report
     report["video"] = {"path": str(video_path), "duration_seconds": round(actual_duration, 2),
                        "width": WIDTH, "height": HEIGHT, "fps": 30, "codec": "h264+aac"}
     report["stages"].append({"name": "video_assembly", "status": "completed"})
