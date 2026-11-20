@@ -40,4 +40,22 @@ vid=response.get("id")
 if not vid: raise SystemExit("YouTube upload response had no video ID")
 result={"ok":True,"video_id":vid,"url":"https://www.youtube.com/watch?v="+vid,"privacy_status":"public","title":title}
 Path("youtube_public_upload.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
+# Optional sidecar subtitle upload; never invalidate a successful public upload.
+caption_path = Path(os.environ.get("RELIC_LOOP_CAPTIONS_PATH", ""))
+if caption_path.is_file():
+    try:
+        caption_request = service.captions().insert(
+            part="snippet",
+            body={"snippet": {"videoId": vid, "language": "en", "name": "English word-by-word captions",
+                              "isDraft": False}},
+            media_body=MediaFileUpload(str(caption_path), mimetype="application/octet-stream", resumable=True))
+        caption_response = caption_request.execute()
+        result["captions"] = {"uploaded": True, "caption_id": caption_response.get("id"),
+                              "format": "SRT", "word_level": True}
+    except Exception as caption_error:
+        result["captions"] = {"uploaded": False,
+                              "reason": f"{type(caption_error).__name__}: {str(caption_error)[:400]}",
+                              "sidecar_available": True}
+    Path("youtube_public_upload.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
 print("PUBLIC_UPLOAD_URL="+result["url"])
+print("CAPTION_UPLOAD="+json.dumps(result.get("captions", {"uploaded": False, "reason": "No SRT path supplied"})))
