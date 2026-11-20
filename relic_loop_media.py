@@ -10,6 +10,7 @@ import array
 import math
 import random
 import re
+import textwrap
 import shutil
 import subprocess
 import sys
@@ -232,3 +233,81 @@ def self_test() -> None:
 
 if __name__ == "__main__":
     self_test()
+
+
+def build_background_music_track(
+    durations: Sequence[float],
+    output_path: Path,
+    mood: str = "playful",
+    sample_rate: int = 48000,
+) -> dict:
+    """Create a gentle, original instrumental bed; no stock track or external API."""
+    if not durations or any(float(x) <= 0 for x in durations):
+        raise ValueError("Background music requires positive scene durations")
+    total = sum(float(x) for x in durations)
+    count = max(1, int(math.ceil(total * sample_rate)))
+    # Soft triad progression; playful stories use a brighter major palette.
+    progressions = {
+        "playful": [(261.63, 329.63, 392.00), (293.66, 369.99, 440.00),
+                    (329.63, 392.00, 493.88), (261.63, 329.63, 392.00)],
+        "mysterious": [(220.00, 261.63, 329.63), (196.00, 233.08, 293.66),
+                       (220.00, 261.63, 311.13), (196.00, 233.08, 293.66)],
+        "warm": [(261.63, 329.63, 392.00), (349.23, 440.00, 523.25),
+                 (293.66, 369.99, 440.00), (261.63, 329.63, 392.00)],
+        "emotional": [(220.00, 261.63, 329.63), (174.61, 220.00, 261.63),
+                      (196.00, 246.94, 293.66), (220.00, 261.63, 329.63)],
+    }
+    chords = progressions.get(mood, progressions["playful"])
+    samples = array.array("h")
+    fade_in = max(1, int(sample_rate * 0.8))
+    fade_out = max(1, int(sample_rate * 1.8))
+    for i in range(count):
+        t = i / sample_rate
+        chord_index = min(3, int(t / max(0.01, total / 4)))
+        chord = chords[chord_index]
+        # Very soft layered sine pads, with slow modulation to avoid a static beep.
+        pad = sum(math.sin(2 * math.pi * f * t) for f in chord) / 3
+        shimmer = math.sin(2 * math.pi * (chord[1] * 2) * t) * 0.08
+        envelope = min(1.0, i / fade_in, (count - i) / fade_out)
+        value = (pad * 0.72 + shimmer) * envelope * 0.035
+        samples.append(max(-32767, min(32767, int(value * 32767))))
+    pcm = array.array("h", samples)
+    if sys.byteorder != "little":
+        pcm.byteswap()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(output_path), "wb") as wav:
+        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(sample_rate)
+        wav.writeframes(pcm.tobytes())
+    return {"mood": mood, "duration_seconds": round(total, 2),
+            "source": "locally_synthesized_original_music", "target_level": "very_low_under_narration"}
+
+
+def write_scene_captions(beats: Sequence[str], durations: Sequence[float], output_path: Path) -> dict:
+    """Write readable, sentence-aware SRT captions synchronized to scene timing."""
+    if not beats or len(beats) != len(durations):
+        raise ValueError("Captions require matching non-empty beat and duration lists")
+    def stamp(seconds: float) -> str:
+        ms = max(0, round(seconds * 1000))
+        hours, ms = divmod(ms, 3_600_000)
+        minutes, ms = divmod(ms, 60_000)
+        secs, ms = divmod(ms, 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
+    entries, cursor = [], 0.0
+    for idx, (beat, seconds) in enumerate(zip(beats, durations), 1):
+        clean = re.sub(r"\\s+", " ", str(beat)).strip()
+        if not clean:
+            cursor += float(seconds); continue
+        # Keep each caption concise and split long narration beats into readable cards.
+        words = clean.split()
+        chunks = [" ".join(words[i:i + 9]) for i in range(0, len(words), 9)]
+        span = float(seconds) / max(1, len(chunks))
+        for chunk in chunks:
+            start, end = cursor, cursor + span
+            entries.append(f"{len(entries)+1}\\n{stamp(start)} --> {stamp(end)}\\n{chunk}\\n")
+            cursor = end
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\\n".join(entries), encoding="utf-8")
+    return {"caption_cues": len(entries), "format": "srt",
+            "max_words_per_caption": 9, "synchronized_to_scene_timing": True}
