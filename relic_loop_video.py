@@ -278,9 +278,11 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     report["story"] = story
     report["story_quality_reviews"] = story_reviews
     report["story_quality_summary"] = {
-        "attempts": len(story_reviews),
+        "candidate_count": sum(1 for r in story_reviews if "candidate" in r),
+        "review_count": len(story_reviews),
         "last_overall_score": next((r.get("overall_score") for r in reversed(story_reviews) if r.get("overall_score") is not None), None),
-        "rewrite_attempts": max(0, len(story_reviews)-1),
+        "rewrite_attempts": sum(1 for r in story_reviews if "rewrite_attempt" in r),
+        "selected_hook_style": story.get("hook_style"),
         "advisory_only": True, "production_blocked": False,
     }
     report["stages"].append({"name": "creative_ai", "status": "completed"})
