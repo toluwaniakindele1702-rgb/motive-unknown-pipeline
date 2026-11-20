@@ -378,7 +378,7 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     report["status"] = "completed"
     report["elapsed_seconds"] = round(time.time() - started, 1)
     report["artifacts"] = {"video": str(video_path), "audio": str(audio_path),
-                           "images": [str(x) for x in images]}
+                           "captions": str(captions_path), "images": [str(x) for x in images]}
     (run_dir / "run_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(json.dumps({"status": report["status"], "title": story["title"],
                       "duration_seconds": actual_duration, "video": str(video_path),
