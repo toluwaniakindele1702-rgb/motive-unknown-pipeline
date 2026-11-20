@@ -279,6 +279,7 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     report["story_quality_reviews"] = story_reviews
     report["story_quality_summary"] = {
         "candidate_count": sum(1 for r in story_reviews if "candidate" in r),
+        "attempts": len(story_reviews),
         "review_count": len(story_reviews),
         "last_overall_score": next((r.get("overall_score") for r in reversed(story_reviews) if r.get("overall_score") is not None), None),
         "rewrite_attempts": sum(1 for r in story_reviews if "rewrite_attempt" in r),
