@@ -345,9 +345,16 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
         report["stages"].append({"name": "quality_media_inspection", "status": "completed"})
     except Exception as exc:
         try:
-            evidence.update(inspect_audio(str(audio_path)))
+            # Even if cloud vision is unavailable, inspect the actual final mix,
+            # not merely the narration source track.
+            with tempfile.TemporaryDirectory(prefix="relic-loop-final-audio-") as temp_dir:
+                final_audio = Path(temp_dir) / "final_mix.wav"
+                _run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                      "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000",
+                      str(final_audio)], timeout=90)
+                evidence.update(inspect_audio(str(final_audio)))
         except Exception as audio_exc:
-            evidence["technical_observations"] = [f"Audio diagnostics unavailable: {audio_exc}"]
+            evidence["technical_observations"] = [f"Final-mix audio diagnostics unavailable: {audio_exc}"]
         evidence["media_review_unavailable"] = f"{type(exc).__name__}: {exc}"
         report["stages"].append({"name": "quality_media_inspection", "status": "partial",
                                  "reason": str(exc)[:500]})
