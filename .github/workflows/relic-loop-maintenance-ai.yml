@@ -1,0 +1,62 @@
+name: Relic Loop Maintenance AI diagnostics
+
+on:
+  workflow_run:
+    workflows: ["Relic Loop independent video production"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  diagnose-failed-production:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'feature/relic-loop-new-pipeline'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact failed pipeline revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Maintenance AI dependency
+        run: python -m pip install --disable-pip-version-check 'groq>=0.31,<1'
+      - name: Collect failed-step logs and source context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          gh run view "$FAILED_RUN_ID" --repo "$GH_REPOSITORY" --log-failed > maintenance_failure_logs.txt || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          names = ["creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
+                   "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py",
+                   "relic_loop_media.py", "story_quality_gate.py", "relic_loop_youtube_publish.py"]
+          sources = {name: Path(name).read_text(encoding="utf-8")[:50000]
+                     for name in names if Path(name).is_file()}
+          payload = {"failure_context": Path("maintenance_failure_logs.txt").read_text(
+                         encoding="utf-8", errors="replace")[-30000:],
+                     "source_files": sources}
+          Path("maintenance_input.json").write_text(json.dumps(payload), encoding="utf-8")
+          PY
+      - name: Diagnose and sandbox-validate a proposed repair
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL || 'openai/gpt-oss-120b' }}
+        run: python maintenance_ai.py --input maintenance_input.json --output maintenance_ai_report.json
+      - name: Preserve Maintenance AI diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maintenance-ai-failure-${{ github.event.workflow_run.run_number }}
+          path: |
+            maintenance_ai_report.json
+            maintenance_failure_logs.txt
+          if-no-files-found: ignore
+          retention-days: 30
