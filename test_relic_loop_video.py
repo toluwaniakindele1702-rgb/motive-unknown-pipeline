@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 from relic_loop_video import split_story_into_scenes, _duration, _safe_moderation_retry_prompt, _generate_valid_story
 from creative_ai import QualityFeedback
+from relic_loop_media import write_word_level_captions
 
 class RelicLoopVideoTests(unittest.TestCase):
     def test_scene_split_preserves_all_words_and_order(self):
@@ -40,6 +41,22 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 215))
         self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 205))
+
+
+    def test_word_level_captions_are_sidecar_and_not_burned_in(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "captions.srt"
+            result = write_word_level_captions([
+                {"start": 0.0, "end": 0.2, "text": "Hello"},
+                {"start": 0.2, "end": 0.45, "text": "there!"}
+            ], target, audio_duration=1.0)
+            content = target.read_text(encoding="utf-8")
+            self.assertEqual(result["words_per_caption"], 1)
+            self.assertFalse(result["burned_into_video"])
+            self.assertIn("00:00:00,000 --> 00:00:00,200", content)
+            self.assertIn("Hello", content)
+            self.assertIn("there!", content)
 
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
