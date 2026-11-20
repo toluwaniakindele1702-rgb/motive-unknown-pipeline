@@ -209,7 +209,7 @@ def _assemble(images: list[Path], beats: list[str], narration_audio: Path, outpu
         "-i", str(motion_video), "-i", str(narration_audio), "-i", str(sfx_path),
         "-filter_complex",
         "[1:a]aresample=48000,volume=1.0[narration];"
-        "[2:a]aresample=48000,volume=0.24[sfx];"
+        "[2:a]aresample=48000,volume=0.40[sfx];"
         "[narration][sfx]amix=inputs=2:duration=first:dropout_transition=0,"
         "alimiter=limit=0.95[audio]",
         "-map", "0:v:0", "-map", "[audio]",
