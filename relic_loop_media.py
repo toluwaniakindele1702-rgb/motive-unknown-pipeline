@@ -209,6 +209,9 @@ def build_sound_effect_track(
 
 def self_test() -> None:
     """Render a tiny moving clip and WAV offline to catch broken media wiring."""
+    filters = _run([shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-filters"], timeout=30).stdout
+    if "subtitles" not in filters:
+        raise RuntimeError("FFmpeg was built without the subtitles/libass filter required for burned-in captions")
     for index in range(5):
         name, zoom, x, y = _motion_expression(index, 30)
         assert name and zoom and x and y
@@ -278,7 +281,7 @@ def build_background_music_track(
         pad = sum(math.sin(2 * math.pi * f * t) for f in chord) / 3
         shimmer = math.sin(2 * math.pi * (chord[1] * 2) * t) * 0.08
         envelope = min(1.0, i / fade_in, (count - i) / fade_out)
-        value = (pad * 0.72 + shimmer) * envelope * 0.035
+        value = (pad * 0.72 + shimmer) * envelope * 0.12
         samples.append(max(-32767, min(32767, int(value * 32767))))
     pcm = array.array("h", samples)
     if sys.byteorder != "little":
