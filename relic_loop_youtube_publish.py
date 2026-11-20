@@ -16,7 +16,7 @@ client_section=client_info.get("installed") or client_info.get("web") or client_
 if isinstance(client_section,dict):
     token.setdefault("client_id",client_section.get("client_id"))
     token.setdefault("client_secret",client_section.get("client_secret"))
-creds=Credentials.from_authorized_user_info(token,scopes=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube.readonly"])
+creds=Credentials.from_authorized_user_info(token,scopes=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube.readonly","https://www.googleapis.com/auth/youtube.force-ssl"])
 if not creds.valid:
     if creds.expired and creds.refresh_token: creds.refresh(Request())
     else: raise SystemExit("YouTube OAuth invalid and not refreshable")
