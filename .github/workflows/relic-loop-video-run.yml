@@ -103,6 +103,7 @@ jobs:
       - name: Run Maintenance AI after a failed production step
         if: failure()
         env:
+          GH_TOKEN: ${{ github.token }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL || 'openai/gpt-oss-120b' }}
         run: |
@@ -110,22 +111,22 @@ jobs:
             echo "Maintenance AI already diagnosed the Python production failure."
             exit 0
           fi
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > maintenance_failure_logs.txt || true
           python - <<'PY'
           import json
           from pathlib import Path
           report = Path("relic_loop_output/failure_report.json")
-          context = report.read_text(encoding="utf-8") if report.is_file() else (
-              "A preceding production workflow step failed before the video producer completed. "
-              "Inspect the workflow run logs and supplied source context; do not assume the failure is a code defect.")
+          report_text = report.read_text(encoding="utf-8") if report.is_file() else "A production workflow step failed."
+          logs = Path("maintenance_failure_logs.txt").read_text(encoding="utf-8", errors="replace")
           names = ["creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
                    "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py",
-                   "relic_loop_media.py", "story_quality_gate.py", "relic_loop_youtube_publish.py"]
+                   "test_relic_loop_video.py", "test_maintenance_ai.py"]
           sources = {name: Path(name).read_text(encoding="utf-8")[:50000]
                      for name in names if Path(name).is_file()}
-          Path("maintenance_input.json").write_text(json.dumps(
-              {"failure_context": context, "source_files": sources}), encoding="utf-8")
-          PY
-          python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
+          payload = {"failure_context": report_text + "\n\nFAILED WORKFLOW LOGS:\n" + logs[-30000:],
+                     "source_files": sources}
+          Path("maintenance_input.json").write_text(json.dumps(payload), encoding="utf-8")
+          PY          python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
       - name: Publish finished Short publicly
         id: publish
         if: success()
