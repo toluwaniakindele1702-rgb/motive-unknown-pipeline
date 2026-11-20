@@ -12,6 +12,7 @@ TOKEN=os.getenv("YOUTUBE_TOKEN_JSON","")
 CLIENT=os.getenv("YOUTUBE_CLIENT_SECRET_JSON","")
 UPLOAD=Path("youtube_public_upload.json")
 OUT=Path("relic_loop_output/analytics_latest.json")
+HISTORY=Path("relic_loop_output/analytics_history.json")
 ANALYTICS_SCOPE="https://www.googleapis.com/auth/yt-analytics.readonly"
 
 def main():
@@ -57,6 +58,12 @@ def main():
             "note":"Viewed-versus-swiped-away is not exposed by this standard Analytics query; use the Shorts-specific Studio metric where available."}
     OUT.parent.mkdir(parents=True,exist_ok=True)
     OUT.write_text(json.dumps(result,indent=2),encoding="utf-8")
+    history=[]
+    if HISTORY.is_file():
+        try: history=json.loads(HISTORY.read_text(encoding="utf-8"))
+        except (OSError,json.JSONDecodeError): history=[]
+    history.append(result)
+    HISTORY.write_text(json.dumps(history[-100:],indent=2),encoding="utf-8")
     print(json.dumps({"status":result["status"],"video_id":video_id,"days":len(result["rows"])}))
     return 0
 
