@@ -7,15 +7,19 @@ Chispa-Pifia V2 production workflow.
 ## Story and production flow
 
 1. **Creative AI** writes an original 180–215-word narration targeting 50–90 seconds.
-   It starts with an immediate curiosity hook, establishes a clear character goal,
-   uses at least three connected escalations, plants a detail and pays it off.
-2. **Story Quality AI** reviews hook, clarity, escalation, originality, character
-   voice, pacing, payoff and rewatchability. It coaches up to two rewrites.
-   Review is advisory; a final story is still produced if review fails or scores
-   remain low.
+   It rotates through curiosity-gap, in-medias-res, mystery, emotional-contradiction
+   and unexpected-reversal hooks; plants an early question/detail; adds a genuine
+   mid-story rehook; and delivers an earned payoff.
+2. **Story Quality AI** scores open loops, rehooks, voiceover naturalness, clarity,
+   escalation, originality, pacing, payoff and rewatchability. It reviews two
+   candidates, selects the stronger one, then coaches up to two rewrites. Review
+   remains advisory; production is not blocked by low scores or review outages.
 3. **Visual generation** makes ten consistent 2D frames. Raphael is attempted
    with a valid session; Cloudflare is fallback. Images are portrait 576x1024.
-4. **Voice** uses Edge TTS; **assembly** uses FFmpeg for 30fps H.264/AAC.
+4. **Voice** uses Edge TTS (Andrew Neural by default, Guy Neural fallback).
+   **Assembly** uses local FFmpeg for 30fps H.264/AAC, with five alternating
+   camera-movement presets and subtle synthesized story-aware sound cues. The
+   camera motion does not depend on a third-party camera website or browser UI.
 5. **Quality AI** reviews the completed video, frames and audio when evidence is
    available; feedback remains advisory and is persisted for future stories.
 6. **Maintenance AI** diagnoses technical failures and proposes scoped repairs;
