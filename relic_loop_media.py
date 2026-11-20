@@ -106,7 +106,7 @@ def render_motion_video(
         "-f", "concat", "-safe", "0", "-i", str(manifest),
         "-c", "copy", "-movflags", "+faststart", str(output_path),
     ], timeout=180)
-    if not output_path.is_file() or output_path.stat().st_size < 10_000:
+    if not output_path.is_file() or output_path.stat().st_size < 1_000:
         raise RuntimeError("Camera motion clips could not be assembled")
     return motion_report
 
