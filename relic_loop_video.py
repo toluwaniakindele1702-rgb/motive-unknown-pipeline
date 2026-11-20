@@ -26,6 +26,7 @@ IMAGE_MODEL = os.getenv("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-2-
 WIDTH, HEIGHT = 576, 1024
 MAX_SCENES = 12
 MIN_SCENES = 10
+HOOK_STYLES = ("curiosity gap", "in-medias-res action", "mystery reveal", "emotional contradiction", "unexpected reversal")
 
 def _run(cmd: list[str], timeout: int = 240) -> subprocess.CompletedProcess:
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -223,10 +224,14 @@ def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedb
                          recent_story_summaries: list[str] | None = None) -> dict:
     """Retry out-of-range drafts with progressively tighter word-count instructions."""
     last_error = None
+    hook_style = HOOK_STYLES[(int(time.strftime("%j")) + len(topic or "")) % len(HOOK_STYLES)]
     for target_words in ((180, 215), (180, 205), (180, 195)):
-        brief = CreativeBrief(topic=topic, duration_seconds=(50, 90), target_words=target_words)
+        brief = CreativeBrief(topic=topic, hook_style=hook_style,
+                              duration_seconds=(50, 90), target_words=target_words)
         try:
-            return generate_story(client, model, brief, feedback, recent_story_summaries or [])
+            story = generate_story(client, model, brief, feedback, recent_story_summaries or [])
+            story["hook_style"] = hook_style
+            return story
         except ValueError as exc:
             if "words; expected" not in str(exc):
                 raise
