@@ -6,19 +6,21 @@ from typing import Any
 
 STORY_REVIEW_PROMPT = """You are Story Quality AI, an editor for high-retention 50–90 second animated comedy Shorts.
 Judge ONLY the supplied script. Be strict and specific, not encouraging by default.
-Score 1–10: opening_hook (first 1-2 sentences create immediate curiosity), clarity,
-escalation (each beat makes the situation more consequential/funnier), originality,
-character_voice, pacing (no filler), payoff (earned and surprising, planted detail pays off),
-rewatchability.
+Score 1–10: opening_hook (first sentence is an immediate, concrete reason to keep watching),
+open_loop (a clear story question is planted early), clarity,
+escalation (each beat makes the situation more consequential/funnier),
+mid_story_rehook (a meaningful new complication or reveal renews curiosity near the middle),
+originality, character_voice, voiceover_naturalness (sounds conversational when read aloud),
+pacing (no filler), payoff (earned and surprising, planted detail pays off), rewatchability.
 A strong script starts in the middle of an unusual situation; uses concrete details and dialogue;
 shows rather than explains; has a clear character want; escalates through 3+ connected turns;
-and ends with a concise payoff/callback. Avoid vague mysteries, fake stakes, random twists,
+includes a genuine mid-story rehook and ends with a concise payoff/callback. Avoid vague mysteries, fake stakes, random twists,
 moralizing, generic AI phrases, over-explaining and predictable "it was all a dream" endings.
 Return JSON only: {"scores":{...},"overall_score":number,"issues":["..."],"rewrite_brief":"...","verdict":"revise|ready"}.
 If any key dimension (hook, escalation, payoff, pacing, originality) is below 7, verdict revise.
 The rewrite brief should list concrete fixes, preserve the premise if promising, and never add filler.
 Do not decide production/upload. Review is advisory; production must proceed after bounded rewrite attempts."""
-DIMENSIONS=("opening_hook","clarity","escalation","originality","character_voice","pacing","payoff","rewatchability")
+DIMENSIONS=("opening_hook","open_loop","clarity","escalation","mid_story_rehook","originality","character_voice","voiceover_naturalness","pacing","payoff","rewatchability")
 
 def _parse(raw: str)->dict:
     raw=(raw or "").strip()
@@ -49,7 +51,7 @@ def review_story(client:Any, model:str, story:dict)->dict:
     if isinstance(issues,str): issues=[issues]
     issues=[str(x).strip() for x in issues if str(x).strip()][:8] if isinstance(issues,list) else []
     brief=str(data.get("rewrite_brief","")).strip()
-    critical=[normalized[k] for k in ("opening_hook","escalation","originality","pacing","payoff")]
+    critical=[normalized[k] for k in ("opening_hook","open_loop","escalation","mid_story_rehook","originality","voiceover_naturalness","pacing","payoff")]
     verdict="revise" if any(x is None or x<7 for x in critical) or data.get("verdict")=="revise" else "ready"
     return {"scores":normalized,"overall_score":round(overall,1) if overall is not None else None,"issues":issues,"rewrite_brief":brief,"verdict":verdict}
 
