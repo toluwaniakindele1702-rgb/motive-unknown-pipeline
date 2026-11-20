@@ -57,6 +57,7 @@ jobs:
           python relic_loop_media.py
           python creative_ai.py --self-test
           python story_quality_gate.py
+          python -m unittest -v test_story_quality_gate.py test_relic_loop_video.py
       - name: Check required credentials (without printing values)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
