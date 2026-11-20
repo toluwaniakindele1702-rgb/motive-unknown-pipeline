@@ -63,3 +63,8 @@ browser-session JSON in source control or chat.
 - **Offline CI:** `.github/workflows/relic-loop-quality-ci.yml` compiles the pipeline and runs local media/story smoke tests on feature-branch changes without generating or publishing a video.
 
 A real end-to-end production video still needs human review for voice performance, caption readability, music/SFX balance, image consistency and whether the story is genuinely entertaining. Metrics such as viewed-vs-swiped-away and audience retention require YouTube Analytics API authorization; do not infer them from ordinary public view counts or claim the feedback loop is active until that integration is implemented and verified.
+
+
+## Publishing analytics feedback loop
+
+After a successful public upload, the publishing workflow invokes `relic_loop_analytics.py`. When the stored YouTube OAuth grant includes `yt-analytics.readonly`, it queries daily video-level views, watch time, average view duration, average view percentage, likes, comments and subscribers gained, then persists up to 100 run records in the Actions cache. If that scope is absent, the collector records a clear reauthorization requirement and leaves the successful upload untouched. Shorts' viewed-versus-swiped-away metric is not returned by this standard query and must still be reviewed in YouTube Studio.
