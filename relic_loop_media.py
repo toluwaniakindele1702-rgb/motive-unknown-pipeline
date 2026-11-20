@@ -229,6 +229,15 @@ def self_test() -> None:
         cues = build_sound_effect_track(["A mysterious letter appeared.", "The secret was revealed."],
                                         [0.6, 0.6], wav_path)
         assert wav_path.is_file() and wav_path.stat().st_size > 1000 and cues
+        music_path = root / "music.wav"
+        music = build_background_music_track([0.6, 0.6], music_path, mood="mysterious")
+        assert music_path.is_file() and music_path.stat().st_size > 1000
+        captions_path = root / "captions.srt"
+        captions = write_scene_captions(
+            ["A mysterious letter appeared.", "The secret was finally revealed."],
+            [0.6, 0.6], captions_path)
+        assert captions_path.is_file() and captions["caption_cues"] == 2
+        assert "-->" in captions_path.read_text(encoding="utf-8")
     print("Relic Loop local motion/audio self-test passed")
 
 if __name__ == "__main__":
