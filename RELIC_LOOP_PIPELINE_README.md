@@ -68,3 +68,15 @@ A real end-to-end production video still needs human review for voice performanc
 ## Publishing analytics feedback loop
 
 After a successful public upload, the publishing workflow invokes `relic_loop_analytics.py`. When the stored YouTube OAuth grant includes `yt-analytics.readonly`, it queries daily video-level views, watch time, average view duration, average view percentage, likes, comments and subscribers gained, then persists up to 100 run records in the Actions cache. If that scope is absent, the collector records a clear reauthorization requirement and leaves the successful upload untouched. Shorts' viewed-versus-swiped-away metric is not returned by this standard query and must still be reviewed in YouTube Studio.
+
+
+## Word-level captions (not burned into the MP4)
+
+The final MP4 contains no subtitle overlay. During Edge TTS streaming, the pipeline captures speech word-boundary events and writes a separate `captions.srt` file with one word per timed cue. The publisher attempts to attach that SRT as an English YouTube caption track after the video upload. Caption-track authorization/API failures are recorded but do not invalidate the public video upload; the SRT remains in the downloadable run artifact for manual upload if needed.
+
+## Quality feedback and Maintenance AI
+
+- Quality AI's review is written to `latest_quality_feedback.json`. The production workflow now saves this file to the GitHub Actions cache after each run and restores it before the next run, so Creative AI receives the previous video's strengths, weaknesses, continuity and pacing notes.
+- Analytics collection is explicitly non-blocking. Missing OAuth scope, API errors or absent analytics permissions must not fail a video run.
+- Maintenance AI is a separate reliability tool, not the creative evaluator. It runs when production fails, distinguishes code defects from provider/configuration failures, proposes a minimal patch and validates high-confidence code changes in a disposable sandbox. It does not silently rewrite or deploy production code; the report is preserved as an artifact for review.
+- A low creative score does not itself trigger a code repair. Its creative recommendations are carried into the next story-generation prompt. A real output still needs human review; the feedback loop is iterative guidance, not autonomous proof of entertainment quality.
