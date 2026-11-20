@@ -17,6 +17,7 @@ from creative_ai_image_generator import inspect_image
 from quality_ai import build_client_from_env, review_submission
 from story_quality_gate import run_story_gate
 from maintenance_ai import propose_repair
+from relic_loop_media import render_motion_video, build_sound_effect_track
 from quality_ai_media import inspect_audio, inspect_media_files, cloudflare_config
 
 ROOT = Path(__file__).resolve().parent
@@ -33,16 +34,32 @@ def _run(cmd: list[str], timeout: int = 240) -> subprocess.CompletedProcess:
     return result
 
 def split_story_into_scenes(narration: str, count: int = 10) -> list[str]:
-    """Split narration into 10-12 contiguous visual beats without losing/reordering words."""
-    words = narration.split()
-    if len(words) < 50:
-        raise ValueError("Narration has too few words for a visual storyboard")
-    count = max(5, min(MAX_SCENES, count, len(words)))
-    groups = [words[(i * len(words)) // count:((i + 1) * len(words)) // count]
-              for i in range(count)]
+    """Split narration at sentence boundaries into balanced visual story beats."""
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", narration.strip()) if x.strip()]
+    if len(sentences) < 5:
+        raise ValueError("Narration needs at least five complete sentences for visual storyboarding")
+    target_count = max(5, min(MAX_SCENES, count, len(sentences)))
+    groups: list[list[str]] = []
+    current: list[str] = []
+    current_words = 0
+    remaining_words = sum(len(x.split()) for x in sentences)
+    remaining_groups = target_count
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        target_words = max(1, remaining_words / max(1, remaining_groups))
+        if current and len(groups) < target_count - 1 and current_words >= target_words:
+            groups.append(current)
+            remaining_groups -= 1
+            current = []
+            current_words = 0
+            remaining_words -= sum(len(x.split()) for x in groups[-1])
+        current.append(sentence)
+        current_words += sentence_words
+    if current:
+        groups.append(current)
     beats = [" ".join(group) for group in groups if group]
     if len(beats) < 5:
-        raise ValueError("Could not form enough meaningful visual beats")
+        raise ValueError("Could not form enough meaningful sentence-level visual beats")
     return beats
 
 def _cloudflare_image(prompt: str, refs: list[tuple[str, bytes, str]] | None = None) -> bytes:
@@ -134,9 +151,9 @@ def image_provider(prompt: str, refs=None) -> bytes:
     print("[IMAGE PROVIDER] Cloudflare generated an accepted image")
     return blob
 
-async def _synthesize_voice(text: str, target: Path) -> None:
-    # The legacy repository has a root-level edge_tts.py file; temporarily remove
-    # the checkout root from import resolution so the installed edge-tts package wins.
+async def _synthesize_voice(text: str, target: Path) -> str:
+    # Keep the installed edge-tts package ahead of the repository's legacy
+    # edge_tts.py module, which would otherwise shadow the package.
     import sys
     original_path = list(sys.path)
     sys.path[:] = [entry for entry in sys.path
@@ -145,12 +162,28 @@ async def _synthesize_voice(text: str, target: Path) -> None:
         import edge_tts
     finally:
         sys.path[:] = original_path
-    voice = os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-GuyNeural")
-    rate = os.getenv("RELIC_LOOP_TTS_RATE", "+0%")
-    communicate = edge_tts.Communicate(text, voice, rate=rate)
-    await communicate.save(str(target))
-    if not target.is_file() or target.stat().st_size < 5000:
-        raise RuntimeError("Edge TTS did not produce a usable narration track")
+
+    preferred_voice = os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-AndrewNeural").strip()
+    rate = os.getenv("RELIC_LOOP_TTS_RATE", "+2%")
+    pitch = os.getenv("RELIC_LOOP_TTS_PITCH", "+0Hz")
+    voices = [preferred_voice]
+    if preferred_voice != "en-US-GuyNeural":
+        voices.append("en-US-GuyNeural")
+    last_error = None
+    for voice in voices:
+        try:
+            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+            await communicate.save(str(target))
+            if not target.is_file() or target.stat().st_size < 5000:
+                raise RuntimeError("Edge TTS did not produce a usable narration track")
+            print(f"[VOICE] narration generated with {voice} at {rate}")
+            return voice
+        except Exception as exc:
+            last_error = exc
+            if target.exists():
+                target.unlink()
+            print(f"[VOICE] {voice} unavailable; trying the fallback voice: {type(exc).__name__}")
+    raise RuntimeError(f"All configured Edge TTS voices failed: {last_error}")
 
 def _duration(path: Path) -> float:
     raw = _run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -159,29 +192,32 @@ def _duration(path: Path) -> float:
     if value <= 0: raise RuntimeError("Media duration is invalid")
     return value
 
-def _assemble(images: list[Path], beats: list[str], narration_audio: Path, output: Path) -> float:
+def _assemble(images: list[Path], beats: list[str], narration_audio: Path, output: Path):
+    """Render moving scene clips, synthesize story-aware SFX, then mix the audio."""
     duration = _duration(narration_audio)
     counts = [max(1, len(x.split())) for x in beats]
     total = sum(counts)
     durations = [duration * n / total for n in counts]
-    concat = output.parent / "images.concat.txt"
-    lines = []
-    for image, seconds in zip(images, durations):
-        escaped = str(image.resolve()).replace("'", "'\\''")
-        lines += [f"file '{escaped}'", f"duration {seconds:.6f}"]
-    last = str(images[-1].resolve()).replace("'", "'\\''")
-    lines.append(f"file '{last}'")
-    concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    _run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-          "-f", "concat", "-safe", "0", "-i", str(concat), "-i", str(narration_audio),
-          "-map", "0:v:0", "-map", "1:a:0", "-vf",
-          f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},setsar=1,fps=30,format=yuv420p",
-          "-c:v", "libx264", "-preset", "medium", "-crf", "21",
-          "-c:a", "aac", "-b:a", "160k", "-t", f"{duration:.3f}",
-          "-movflags", "+faststart", str(output)], timeout=300)
+    motion_video = output.parent / "motion_video.mp4"
+    motion_report = render_motion_video(images, durations, motion_video, WIDTH, HEIGHT, fps=30)
+    sfx_path = output.parent / "story_sound_effects.wav"
+    sfx_report = build_sound_effect_track(beats, durations, sfx_path)
+
+    _run([
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(motion_video), "-i", str(narration_audio), "-i", str(sfx_path),
+        "-filter_complex",
+        "[1:a]aresample=48000,volume=1.0[narration];"
+        "[2:a]aresample=48000,volume=0.24[sfx];"
+        "[narration][sfx]amix=inputs=2:duration=first:dropout_transition=0,"
+        "alimiter=limit=0.95[audio]",
+        "-map", "0:v:0", "-map", "[audio]",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
+        "-t", f"{duration:.3f}", "-movflags", "+faststart", str(output),
+    ], timeout=300)
     if not output.is_file() or output.stat().st_size < 100_000:
-        raise RuntimeError("FFmpeg did not produce a usable MP4")
-    return _duration(output)
+        raise RuntimeError("FFmpeg did not produce a usable MP4 with narration and sound effects")
+    return _duration(output), motion_report, sfx_report
 
 def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedback,
                          recent_story_summaries: list[str] | None = None) -> dict:
@@ -267,10 +303,12 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     report["stages"].append({"name": "image_generation", "status": "completed", "count": len(images)})
 
     audio_path = run_dir / "narration.mp3"
-    asyncio.run(_synthesize_voice(story["narration"], audio_path))
-    report["stages"].append({"name": "voice_generation", "status": "completed", "voice": os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-GuyNeural")})
+    voice_used = asyncio.run(_synthesize_voice(story["narration"], audio_path))
+    report["stages"].append({"name": "voice_generation", "status": "completed", "voice": voice_used, "rate": os.getenv("RELIC_LOOP_TTS_RATE", "+2%")})
     video_path = run_dir / "relic_loop_video.mp4"
-    actual_duration = _assemble(images, beats, audio_path, video_path)
+    actual_duration, motion_report, sfx_report = _assemble(images, beats, audio_path, video_path)
+    report["camera_motion"] = motion_report
+    report["sound_effects"] = sfx_report
     report["video"] = {"path": str(video_path), "duration_seconds": round(actual_duration, 2),
                        "width": WIDTH, "height": HEIGHT, "fps": 30, "codec": "h264+aac"}
     report["stages"].append({"name": "video_assembly", "status": "completed"})
