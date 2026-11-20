@@ -66,10 +66,13 @@ def render_motion_video(
     manifest = clip_dir / "clips.concat.txt"
     concat_lines: list[str] = []
     motion_report: list[dict] = []
+    frame_counts = [max(2, round(max(0.25, float(seconds)) * fps)) for seconds in durations]
+    target_frames = max(2, round(sum(max(0.25, float(seconds)) for seconds in durations) * fps))
+    frame_counts[-1] = max(2, frame_counts[-1] + target_frames - sum(frame_counts))
 
     for index, (image, seconds) in enumerate(zip(images, durations)):
         seconds = max(0.25, float(seconds))
-        frames = max(2, round(seconds * fps))
+        frames = frame_counts[index]
         name, zoom, x_expr, y_expr = _motion_expression(index, frames)
         clip = clip_dir / f"scene_{index + 1:02d}.mp4"
         # Supersampling before zoompan reduces integer-pixel stepping. The
@@ -154,8 +157,6 @@ def build_sound_effect_track(
     total_seconds = sum(max(0.0, float(x)) for x in durations)
     total_samples = max(1, int(math.ceil(total_seconds * sample_rate)))
     mix = array.array("h", [0]) * total_samples
-    if sys.byteorder != "little":
-        mix.byteswap()
 
     cues: list[tuple[float, str, int]] = []
     elapsed = 0.0
@@ -194,11 +195,14 @@ def build_sound_effect_track(
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    pcm = array.array("h", mix)
+    if sys.byteorder != "little":
+        pcm.byteswap()
     with wave.open(str(output_path), "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(sample_rate)
-        wav.writeframes(mix.tobytes())
+        wav.writeframes(pcm.tobytes())
     return cue_report
 
 
