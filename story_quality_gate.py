@@ -17,7 +17,7 @@ shows rather than explains; has a clear character want; escalates through 3+ con
 includes a genuine mid-story rehook and ends with a concise payoff/callback. Avoid vague mysteries, fake stakes, random twists,
 moralizing, generic AI phrases, over-explaining and predictable "it was all a dream" endings.
 Return JSON only: {"scores":{...},"overall_score":number,"issues":["..."],"rewrite_brief":"...","verdict":"revise|ready"}.
-If any key dimension (hook, escalation, payoff, pacing, originality) is below 7, verdict revise.
+If any key dimension (opening hook, open loop, escalation, mid-story rehook, voiceover naturalness, payoff, pacing or originality) is below 7, verdict revise.
 The rewrite brief should list concrete fixes, preserve the premise if promising, and never add filler.
 Do not decide production/upload. Review is advisory; production must proceed after bounded rewrite attempts."""
 DIMENSIONS=("opening_hook","open_loop","clarity","escalation","mid_story_rehook","originality","character_voice","voiceover_naturalness","pacing","payoff","rewatchability")
@@ -61,19 +61,50 @@ def coach_feedback(review:dict)->dict:
     return {"overall_score":review.get("overall_score"),"strengths":[],"improvements":review.get("issues",[])+low,
       "continuity_notes":[],"pacing_notes":[review.get("rewrite_brief","")],"story_notes":["Story Quality AI notes: "+review.get("rewrite_brief","")]}
 
-def run_story_gate(client:Any, model:str, generate, feedback, max_rewrites:int=2)->tuple[dict,list[dict],dict]:
-    """Bounded coaching loop; returns a story even when review API fails."""
-    story=generate(feedback)
+def run_story_gate(client:Any, model:str, generate, feedback, max_rewrites:int=2,
+                   candidate_count:int=2)->tuple[dict,list[dict],dict]:
+    """Generate and score multiple candidates, select the strongest, then coach/rewrite."""
     history=[]
-    try:
-        for attempt in range(max_rewrites+1):
+    candidates=[]
+    count=max(1,min(3,int(candidate_count)))
+    for candidate_index in range(count):
+        candidate=generate(feedback)
+        try:
+            review=review_story(client,model,candidate)
+            history.append({"candidate":candidate_index+1,**review})
+            score=review.get("overall_score")
+            if score is None:
+                values=[v for v in review.get("scores",{}).values() if v is not None]
+                score=sum(values)/len(values) if values else 0.0
+            candidates.append((float(score),candidate,review))
+        except Exception as exc:
+            history.append({"candidate":candidate_index+1,
+                            "review_unavailable":type(exc).__name__+": "+str(exc)[:400],
+                            "advisory_fallback":True})
+            candidates.append((float("-inf"),candidate,None))
+
+    # Preserve generation order if every review failed; otherwise choose the
+    # candidate with the highest measured quality score.
+    scored=[item for item in candidates if item[2] is not None]
+    if scored:
+        _,story,review=max(scored,key=lambda item:item[0])
+    else:
+        _,story,review=candidates[0]
+        return story,history,feedback
+
+    for attempt in range(max(0,int(max_rewrites))):
+        if review["verdict"]=="ready":
+            break
+        feedback=coach_feedback(review)
+        story=generate(feedback)
+        try:
             review=review_story(client,model,story)
-            history.append({"attempt":attempt+1,**review})
-            if review["verdict"]=="ready" or attempt>=max_rewrites: break
-            feedback=coach_feedback(review)
-            story=generate(feedback)
-    except Exception as exc:
-        history.append({"review_unavailable":type(exc).__name__+": "+str(exc)[:400],"advisory_fallback":True})
+            history.append({"rewrite_attempt":attempt+1,**review})
+        except Exception as exc:
+            history.append({"rewrite_attempt":attempt+1,
+                            "review_unavailable":type(exc).__name__+": "+str(exc)[:400],
+                            "advisory_fallback":True})
+            break
     return story,history,feedback
 
 def self_test():
