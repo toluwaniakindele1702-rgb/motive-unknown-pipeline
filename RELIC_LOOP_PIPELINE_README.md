@@ -50,3 +50,16 @@ python relic_loop_video.py --topic "A stubborn vending machine"
 ```
 Output is written under `relic_loop_output/<run-id>/`. Do not put OAuth or
 browser-session JSON in source control or chat.
+
+
+## Enjoyability upgrades (feature branch)
+
+- **Camera language:** every still receives a locally rendered, alternating push, pull or pan; the pipeline no longer relies on the unstable camera-effect website.
+- **Sound design:** original, locally synthesized music is selected from a broad story mood (playful, mysterious, warm or emotional), kept under narration, and mixed with sparse story-aware accents. No stock-music API or external sound download is required.
+- **Captions:** sentence-aware scene captions are timed against the narration scene allocation and burned into the vertical video with a readable outline and safe lower-screen placement.
+- **Story craft:** rotating hook approaches, an early curiosity loop, a mid-story rehook and an earned payoff are evaluated before image generation. Two candidate scripts are compared and bounded rewrite coaching is applied.
+- **Visual continuity:** one canonical character description and previous-frame reference are carried through scene generation; wide, medium and close framing directions vary by beat.
+- **Media review:** Quality AI inspects sampled frames and audio when the vision service is available; local FFmpeg audio diagnostics remain available as a fallback. AI feedback is advisory, not a claim that artistic quality can be proven automatically.
+- **Offline CI:** `.github/workflows/relic-loop-quality-ci.yml` compiles the pipeline and runs local media/story smoke tests on feature-branch changes without generating or publishing a video.
+
+A real end-to-end production video still needs human review for voice performance, caption readability, music/SFX balance, image consistency and whether the story is genuinely entertaining. Metrics such as viewed-vs-swiped-away and audience retention require YouTube Analytics API authorization; do not infer them from ordinary public view counts or claim the feedback loop is active until that integration is implemented and verified.
