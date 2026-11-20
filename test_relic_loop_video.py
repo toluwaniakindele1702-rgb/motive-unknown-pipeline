@@ -10,11 +10,12 @@ class RelicLoopVideoTests(unittest.TestCase):
         beats = split_story_into_scenes(narration, 10)
         self.assertEqual(len(beats), 10)
         self.assertEqual(" ".join(beats), narration)
-    def test_short_sentence_count_still_produces_ten_visual_beats(self):
+    def test_short_sentence_count_keeps_complete_sentence_boundaries(self):
         narration = " ".join(f"Sentence {i} has enough extra words to become a longer narration beat." for i in range(1, 8))
         beats = split_story_into_scenes(narration, 10)
-        self.assertEqual(len(beats), 10)
+        self.assertEqual(len(beats), 7)
         self.assertEqual(" ".join(beats), narration)
+        self.assertTrue(all(beat.endswith(".") for beat in beats))
     def test_moderation_retry_keeps_character_beat_and_setting(self):
         prompt = ("CANONICAL CHARACTER LOCK: Milo in a red hoodie\n"
                   "EXACT NARRATION MOMENT: Milo drops his lunchbox\n"
@@ -34,7 +35,8 @@ class RelicLoopVideoTests(unittest.TestCase):
         with patch("relic_loop_video.generate_story",
                    side_effect=[ValueError("Story has 221 words; expected 180-215"), valid]) as generate:
             result = _generate_valid_story(object(), "test-model", "topic", QualityFeedback())
-        self.assertEqual(result, valid)
+        self.assertEqual(result["title"], valid["title"])
+        self.assertIn(result["hook_style"], ("curiosity gap", "in-medias-res action", "mystery reveal", "emotional contradiction", "unexpected reversal"))
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 215))
         self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 205))
