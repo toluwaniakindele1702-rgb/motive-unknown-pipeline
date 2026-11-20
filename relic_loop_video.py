@@ -327,7 +327,9 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
     video_path = run_dir / "relic_loop_video.mp4"
     actual_duration, motion_report, sfx_report, music_report, caption_report = _assemble(images, beats, audio_path, video_path)
     report["camera_motion"] = motion_report
-    report["sound_effects"] = sfx_report\n    report["background_music"] = music_report\n    report["captions"] = caption_report
+    report["sound_effects"] = sfx_report
+    report["background_music"] = music_report
+    report["captions"] = caption_report
     report["video"] = {"path": str(video_path), "duration_seconds": round(actual_duration, 2),
                        "width": WIDTH, "height": HEIGHT, "fps": 30, "codec": "h264+aac"}
     report["stages"].append({"name": "video_assembly", "status": "completed"})
