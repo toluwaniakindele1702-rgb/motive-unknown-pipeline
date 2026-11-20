@@ -304,7 +304,7 @@ def write_scene_captions(beats: Sequence[str], durations: Sequence[float], outpu
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
     entries, cursor = [], 0.0
     for idx, (beat, seconds) in enumerate(zip(beats, durations), 1):
-        clean = re.sub(r"\\s+", " ", str(beat)).strip()
+        clean = re.sub(r"\s+", " ", str(beat)).strip()
         if not clean:
             cursor += float(seconds); continue
         # Keep each caption concise and split long narration beats into readable cards.
@@ -313,10 +313,10 @@ def write_scene_captions(beats: Sequence[str], durations: Sequence[float], outpu
         span = float(seconds) / max(1, len(chunks))
         for chunk in chunks:
             start, end = cursor, cursor + span
-            entries.append(f"{len(entries)+1}\\n{stamp(start)} --> {stamp(end)}\\n{chunk}\\n")
+            entries.append(f"{len(entries)+1}\n{stamp(start)} --> {stamp(end)}\n{chunk}\n")
             cursor = end
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\\n".join(entries), encoding="utf-8")
+    output_path.write_text("\n".join(entries), encoding="utf-8")
     return {"caption_cues": len(entries), "format": "srt",
             "max_words_per_caption": 9, "synchronized_to_scene_timing": True}
