@@ -126,7 +126,8 @@ jobs:
           payload = {"failure_context": report_text + "\n\nFAILED WORKFLOW LOGS:\n" + logs[-30000:],
                      "source_files": sources}
           Path("maintenance_input.json").write_text(json.dumps(payload), encoding="utf-8")
-          PY          python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
+          PY
+          python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
       - name: Publish finished Short publicly
         id: publish
         if: success()
