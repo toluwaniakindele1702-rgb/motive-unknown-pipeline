@@ -24,6 +24,16 @@ def main():
     if isinstance(section,dict):
         token.setdefault("client_id",section.get("client_id"))
         token.setdefault("client_secret",section.get("client_secret"))
+    granted=token.get("scopes") or str(token.get("scope","")).split()
+    if ANALYTICS_SCOPE not in granted:
+        result={"status":"requires_reauthorization","reason":"The saved YouTube OAuth grant lacks yt-analytics.readonly.",
+                "needed_scope":ANALYTICS_SCOPE,
+                "metrics_not_available":["audience retention","average view duration","average view percentage",
+                                         "viewed-versus-swiped-away","subscribers gained"]}
+        OUT.parent.mkdir(parents=True,exist_ok=True)
+        OUT.write_text(json.dumps(result,indent=2),encoding="utf-8")
+        print("Analytics needs a one-time YouTube OAuth reauthorization with yt-analytics.readonly; upload remains successful.")
+        return 0
     creds=Credentials.from_authorized_user_info(token,scopes=[
         "https://www.googleapis.com/auth/youtube.readonly", ANALYTICS_SCOPE])
     if not creds.valid:
