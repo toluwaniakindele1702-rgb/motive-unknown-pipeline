@@ -36,7 +36,9 @@ class QualityFeedback:
     story_notes: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any] | None) -> "QualityFeedback":
+    def from_mapping(cls, value: Mapping[str, Any] | "QualityFeedback" | None) -> "QualityFeedback":
+        if isinstance(value, cls):
+            return value
         value = value or {}
         def strings(key: str) -> list[str]:
             raw = value.get(key, [])
