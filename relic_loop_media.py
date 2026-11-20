@@ -209,9 +209,6 @@ def build_sound_effect_track(
 
 def self_test() -> None:
     """Render a tiny moving clip and WAV offline to catch broken media wiring."""
-    filters = _run([shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-filters"], timeout=30).stdout
-    if "subtitles" not in filters:
-        raise RuntimeError("FFmpeg was built without the subtitles/libass filter required for burned-in captions")
     for index in range(5):
         name, zoom, x, y = _motion_expression(index, 30)
         assert name and zoom and x and y
@@ -236,16 +233,14 @@ def self_test() -> None:
         music = build_background_music_track([0.6, 0.6], music_path, mood="mysterious")
         assert music_path.is_file() and music_path.stat().st_size > 1000
         captions_path = root / "captions.srt"
-        captions = write_scene_captions(
-            ["A mysterious letter appeared.", "The secret was finally revealed."],
-            [0.6, 0.6], captions_path)
+        captions = write_word_level_captions([
+            {"start": 0.0, "end": 0.2, "text": "A"},
+            {"start": 0.2, "end": 0.4, "text": "secret"}
+        ], captions_path, audio_duration=0.6)
         assert captions_path.is_file() and captions["caption_cues"] == 2
+        assert captions["words_per_caption"] == 1 and not captions["burned_into_video"]
         assert "-->" in captions_path.read_text(encoding="utf-8")
     print("Relic Loop local motion/audio self-test passed")
-
-if __name__ == "__main__":
-    self_test()
-
 
 def build_background_music_track(
     durations: Sequence[float],
@@ -356,3 +351,7 @@ def write_word_level_captions(word_cues: Sequence[dict], output_path: Path,
     output_path.write_text("\n".join(entries), encoding="utf-8")
     return {"caption_cues": len(entries), "format": "srt", "words_per_caption": 1,
             "timing_source": "Edge TTS word-boundary events", "burned_into_video": False}
+
+
+if __name__ == "__main__":
+    self_test()
