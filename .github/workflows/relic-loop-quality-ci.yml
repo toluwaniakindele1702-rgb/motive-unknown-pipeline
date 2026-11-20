@@ -1,4 +1,5 @@
 name: Relic Loop creative media quality checks
+# Offline-only validation; this workflow never publishes content.
 
 on:
   push:
