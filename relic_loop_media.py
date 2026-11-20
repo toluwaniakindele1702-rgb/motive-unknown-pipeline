@@ -339,7 +339,7 @@ def write_word_level_captions(word_cues: Sequence[dict], output_path: Path,
         try:
             start = max(0.0, float(item["start"]))
             end = max(start + 0.06, float(item["end"]))
-            word = re.sub(r"\\s+", " ", str(item["text"])).strip()
+            word = re.sub(r"\s+", " ", str(item["text"])).strip()
         except (KeyError, TypeError, ValueError):
             continue
         if word:
@@ -350,9 +350,9 @@ def write_word_level_captions(word_cues: Sequence[dict], output_path: Path,
         cues = [(s, min(e, audio_duration), w) for s, e, w in cues if s < audio_duration]
     entries = []
     for index, (start, end, word) in enumerate(cues, 1):
-        entries.append(f"{index}\\n{stamp(start)} --> {stamp(end)}\\n{word}\\n")
+        entries.append(f"{index}\n{stamp(start)} --> {stamp(end)}\n{word}\n")
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\\n".join(entries), encoding="utf-8")
+    output_path.write_text("\n".join(entries), encoding="utf-8")
     return {"caption_cues": len(entries), "format": "srt", "words_per_caption": 1,
             "timing_source": "Edge TTS word-boundary events", "burned_into_video": False}
