@@ -16,7 +16,8 @@ on:
       - ".github/triggers/relic-loop-video-run.txt"
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   actions: write
 
 jobs:
@@ -128,6 +129,58 @@ jobs:
           Path("maintenance_input.json").write_text(json.dumps(payload), encoding="utf-8")
           PY
           python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
+      - name: Open review PR for sandbox-validated Maintenance AI repair
+        id: repair_eligibility
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPORT=relic_loop_output/maintenance_ai_report.json
+          if [ ! -f "$REPORT" ]; then
+            echo "No Maintenance AI report; skipping repair PR."
+            exit 0
+          fi
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("relic_loop_output/maintenance_ai_report.json").read_text())
+          allowed={"creative_ai.py","creative_ai_image_generator.py","quality_ai.py","quality_ai_media.py","maintenance_ai.py","relic_loop_video.py","test_relic_loop_video.py","test_creative_ai.py","test_creative_ai_image_generator.py","test_quality_ai.py","test_quality_ai_media.py","test_maintenance_ai.py"}
+          validation=report.get("validation") or {}
+          files=validation.get("changed_files") or []
+          eligible=(report.get("category")=="code_bug" and report.get("repairable") is True
+                    and float(report.get("confidence",0))>=0.8 and validation.get("valid") is True
+                    and isinstance(report.get("patch"),str) and report["patch"].strip()
+                    and files and set(files)<=allowed)
+          if not eligible:
+              print("Repair proposal did not meet strict PR eligibility conditions.")
+              with open(os.environ["GITHUB_OUTPUT"],"a") as f: f.write("eligible=false\n")
+              raise SystemExit(0)
+          Path("maintenance_candidate.patch").write_text(report["patch"],encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f: f.write("eligible=true\n")
+          PY
+          if [ "${{ steps.repair_eligibility.outputs.eligible }}" != "true" ]; then exit 0; fi
+          git apply --check maintenance_candidate.patch
+          git apply maintenance_candidate.patch
+          git diff --check
+          FILES=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("relic_loop_output/maintenance_ai_report.json").read_text())
+          print(" ".join(r["validation"]["changed_files"]))
+          PY
+          )
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="maintenance-ai/repair-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+          git add $FILES
+          git commit -m "Maintenance AI: validated repair proposal"
+          git push origin "$BRANCH"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+            --title "Maintenance AI repair proposal (run ${GITHUB_RUN_NUMBER})" \
+            --body "Automated proposal from Maintenance AI. Candidate sandbox validation succeeded. Review the diagnosis and diff manually; this PR is not auto-merged. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
       - name: Publish finished Short publicly
         id: publish
         if: success()
