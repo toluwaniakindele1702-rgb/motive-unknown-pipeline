@@ -1,0 +1,53 @@
+name: Relic Loop creative media quality checks
+# Offline-only validation; this workflow never publishes content.
+
+on:
+  push:
+    branches: [feature/relic-loop-new-pipeline]
+    paths:
+      - "relic_loop_video.py"
+      - "relic_loop_media.py"
+      - "creative_ai.py"
+      - "creative_ai_image_generator.py"
+      - "story_quality_gate.py"
+      - "quality_ai.py"
+      - "quality_ai_media.py"
+      - "test_*.py"
+      - ".github/workflows/relic-loop-quality-ci.yml"
+  pull_request:
+    paths:
+      - "relic_loop_video.py"
+      - "relic_loop_media.py"
+      - "creative_ai.py"
+      - "creative_ai_image_generator.py"
+      - "story_quality_gate.py"
+      - "quality_ai.py"
+      - "quality_ai_media.py"
+      - "test_*.py"
+      - ".github/workflows/relic-loop-quality-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-creative-media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install FFmpeg and Python test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          python -m pip install 'Pillow>=11,<13' 'requests>=2.32,<3' 'groq>=0.31,<1' 'edge-tts>=7,<8'
+      - name: Compile and run offline media/story tests
+        run: |
+          python -m py_compile relic_loop_video.py relic_loop_media.py creative_ai.py story_quality_gate.py quality_ai.py quality_ai_media.py relic_loop_analytics.py
+          python relic_loop_media.py
+          python creative_ai.py --self-test
+          python story_quality_gate.py
+          python -m unittest -v test_story_quality_gate.py test_relic_loop_video.py

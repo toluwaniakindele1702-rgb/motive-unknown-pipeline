@@ -1,0 +1,231 @@
+name: Relic Loop independent video production
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Optional story topic (leave blank for a fresh premise)"
+        required: false
+        type: string
+        default: ""
+  schedule:
+    - cron: "0 17 * * *"
+  push:
+    branches: [feature/relic-loop-new-pipeline]
+    paths:
+      - ".github/triggers/relic-loop-video-run.txt"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  produce-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/relic-loop-new-pipeline
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install system media tools
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo timeout 600 apt-get update
+            sudo timeout 600 apt-get install -y ffmpeg
+          else
+            ffmpeg -version | head -n 1
+          fi
+      - name: Install independent pipeline dependencies
+        env:
+          RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'groq>=0.31,<1' 'requests>=2.32,<3' 'Pillow>=11,<13' 'edge-tts>=7,<8'
+          if [ -n "$RAPHAEL_STORAGE_STATE_JSON" ]; then
+            python -m pip install 'playwright>=1.50,<2'
+            python -m playwright install chromium --with-deps
+          else
+            echo "Raphael session absent; skipping browser installation and using Cloudflare image fallback."
+          fi
+      - name: Run offline story and media checks
+        run: |
+          python -m py_compile relic_loop_video.py relic_loop_media.py creative_ai.py story_quality_gate.py
+          python relic_loop_media.py
+          python creative_ai.py --self-test
+          python story_quality_gate.py
+          python -m unittest -v test_story_quality_gate.py test_relic_loop_video.py
+      - name: Check required credentials (without printing values)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$GROQ_API_KEY" || { echo "::error::GROQ_API_KEY repository secret is missing"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID repository secret is missing"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN repository secret is missing"; exit 1; }
+      - name: Check YouTube OAuth before spending production credits
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        run: |
+          python -m pip install "google-api-python-client>=2.130,<3" "google-auth>=2.30,<3"
+          python relic_loop_youtube_publish.py --check-auth
+      - name: Restore previous Quality AI feedback
+        uses: actions/cache@v4
+        with:
+          path: relic_loop_output/latest_quality_feedback.json
+          key: relic-loop-feedback-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            relic-loop-feedback-${{ github.ref_name }}-
+      - name: Restore prior analytics history
+        uses: actions/cache@v4
+        with:
+          path: relic_loop_output/analytics_history.json
+          key: relic-loop-analytics-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            relic-loop-analytics-${{ github.ref_name }}-
+      - name: Produce video
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
+          QUALITY_AI_MODEL: ${{ vars.QUALITY_AI_MODEL || 'openai/gpt-oss-120b' }}
+          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL || 'openai/gpt-oss-120b' }}
+          RELIC_LOOP_USE_RAPHAEL: "1"
+          RELIC_LOOP_OUTPUT_DIR: "relic_loop_output"
+        run: |
+          python relic_loop_video.py --topic "${{ inputs.topic }}"
+      - name: Run Maintenance AI after a failed production step
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL || 'openai/gpt-oss-120b' }}
+        run: |
+          if [ -f relic_loop_output/maintenance_ai_report.json ]; then
+            echo "Maintenance AI already diagnosed the Python production failure."
+            exit 0
+          fi
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > maintenance_failure_logs.txt || true
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = Path("relic_loop_output/failure_report.json")
+          report_text = report.read_text(encoding="utf-8") if report.is_file() else "A production workflow step failed."
+          logs = Path("maintenance_failure_logs.txt").read_text(encoding="utf-8", errors="replace")
+          names = ["creative_ai.py", "creative_ai_image_generator.py", "quality_ai.py",
+                   "quality_ai_media.py", "maintenance_ai.py", "relic_loop_video.py",
+                   "test_relic_loop_video.py", "test_maintenance_ai.py"]
+          sources = {name: Path(name).read_text(encoding="utf-8")[:50000]
+                     for name in names if Path(name).is_file()}
+          payload = {"failure_context": report_text + "\n\nFAILED WORKFLOW LOGS:\n" + logs[-30000:],
+                     "source_files": sources}
+          Path("maintenance_input.json").write_text(json.dumps(payload), encoding="utf-8")
+          PY
+          python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
+      - name: Open review PR for sandbox-validated Maintenance AI repair
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPORT=relic_loop_output/maintenance_ai_report.json
+          if [ ! -f "$REPORT" ]; then
+            echo "No Maintenance AI report; skipping repair PR."
+            exit 0
+          fi
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("relic_loop_output/maintenance_ai_report.json").read_text())
+          allowed={"creative_ai.py","creative_ai_image_generator.py","quality_ai.py","quality_ai_media.py","maintenance_ai.py","relic_loop_video.py","test_relic_loop_video.py","test_creative_ai.py","test_creative_ai_image_generator.py","test_quality_ai.py","test_quality_ai_media.py","test_maintenance_ai.py"}
+          validation=report.get("validation") or {}
+          files=validation.get("changed_files") or []
+          eligible=(report.get("category")=="code_bug" and report.get("repairable") is True
+                    and float(report.get("confidence",0))>=0.8 and validation.get("valid") is True
+                    and isinstance(report.get("patch"),str) and report["patch"].strip()
+                    and files and set(files)<=allowed)
+          if not eligible:
+              print("Repair proposal did not meet strict PR eligibility conditions.")
+              with open(os.environ["GITHUB_OUTPUT"],"a") as f: f.write("eligible=false\n")
+              raise SystemExit(0)
+          Path("maintenance_candidate.patch").write_text(report["patch"],encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f: f.write("eligible=true\n")
+          PY
+          if [ ! -s maintenance_candidate.patch ]; then exit 0; fi
+          git apply --check maintenance_candidate.patch
+          git apply maintenance_candidate.patch
+          git diff --check
+          FILES=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("relic_loop_output/maintenance_ai_report.json").read_text())
+          print(" ".join(r["validation"]["changed_files"]))
+          PY
+          )
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="maintenance-ai/repair-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+          git add $FILES
+          git commit -m "Maintenance AI: validated repair proposal"
+          git push origin "$BRANCH"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+            --title "Maintenance AI repair proposal (run ${GITHUB_RUN_NUMBER})" \
+            --body "Automated proposal from Maintenance AI. Candidate sandbox validation succeeded. Review the diagnosis and diff manually; this PR is not auto-merged. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Publish finished Short publicly
+        id: publish
+        if: success()
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        run: |
+          VIDEO=$(find relic_loop_output -name relic_loop_video.mp4 -type f | sort | tail -n 1)
+          REPORT=$(find relic_loop_output -name run_report.json -type f | sort | tail -n 1)
+          test -n "$VIDEO" || { echo "::error::No finished MP4 found"; exit 1; }
+          test -n "$REPORT" || { echo "::error::No run report found"; exit 1; }
+          python -m pip install "google-api-python-client>=2.130,<3" "google-auth>=2.30,<3"
+          CAPTIONS=$(find relic_loop_output -name captions.srt -type f | sort | tail -n 1)
+          RELIC_LOOP_VIDEO_PATH="$VIDEO" RELIC_LOOP_REPORT_PATH="$REPORT" RELIC_LOOP_CAPTIONS_PATH="$CAPTIONS" python relic_loop_youtube_publish.py
+      - name: Collect YouTube performance and retention metrics when authorized
+        if: success() && steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        run: |
+          python relic_loop_analytics.py
+      - name: Save Quality AI feedback for the next production run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: relic_loop_output/latest_quality_feedback.json
+          key: relic-loop-feedback-${{ github.ref_name }}-${{ github.run_id }}
+      - name: Save analytics history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: relic_loop_output/analytics_history.json
+          key: relic-loop-analytics-${{ github.ref_name }}-${{ github.run_id }}
+      - name: Deactivate legacy production workflow after public upload succeeds
+        if: success() && steps.publish.outcome == 'success' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable chispa_pifia_v2.yml --repo "$GITHUB_REPOSITORY"
+      - name: Upload generated video and run report as downloadable artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relic-loop-video-${{ github.run_number }}
+          path: |
+            relic_loop_output/**
+            maintenance_input.json
+          if-no-files-found: warn
+          retention-days: 14
