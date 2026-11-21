@@ -130,7 +130,6 @@ jobs:
           PY
           python maintenance_ai.py --input maintenance_input.json --output relic_loop_output/maintenance_ai_report.json || true
       - name: Open review PR for sandbox-validated Maintenance AI repair
-        id: repair_eligibility
         if: failure()
         continue-on-error: true
         env:
@@ -159,7 +158,7 @@ jobs:
           Path("maintenance_candidate.patch").write_text(report["patch"],encoding="utf-8")
           with open(os.environ["GITHUB_OUTPUT"],"a") as f: f.write("eligible=true\n")
           PY
-          if [ "${{ steps.repair_eligibility.outputs.eligible }}" != "true" ]; then exit 0; fi
+          if [ ! -s maintenance_candidate.patch ]; then exit 0; fi
           git apply --check maintenance_candidate.patch
           git apply maintenance_candidate.patch
           git diff --check
