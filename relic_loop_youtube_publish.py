@@ -32,9 +32,9 @@ report=json.loads(report_path.read_text(encoding="utf-8")) if report_path.is_fil
 story=report.get("story",{}) if isinstance(report.get("story"),dict) else {}
 title=str(story.get("title") or "Relic Loop Short").strip()[:95]
 narration=" ".join(str(story.get("narration") or "").split())
-sentences=[s.strip() for s in __import__("re").split(r"(?<=[.!?])\\s+", narration) if s.strip()]
+sentences=[s.strip() for s in __import__("re").split(r"(?<=[.!?])\s+", narration) if s.strip()]
 summary=" ".join(sentences[:2])[:350] or "An original short story from Relic Loop."
-description=(summary+"\\n\\nFollow for more short animated stories.\\n\\n#Shorts #StickmanStory #ShortAnimation #StoryTime #RelicLoop")[:5000]
+description=(summary+"\n\nFollow for more short animated stories.\n\n#Shorts #StickmanStory #ShortAnimation #StoryTime #RelicLoop")[:5000]
 tags=["Relic Loop","short story","animated short","stickman animation","short animation","storytime","comedy","visual storytelling","YouTube Shorts"]
 body={"snippet":{"title":title,"description":description,"tags":tags,"categoryId":"23"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}
 request=service.videos().insert(part="snippet,status",body=body,media_body=MediaFileUpload(str(VIDEO),mimetype="video/mp4",chunksize=8*1024*1024,resumable=True))
