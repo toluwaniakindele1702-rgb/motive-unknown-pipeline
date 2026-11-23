@@ -9,11 +9,16 @@ on:
         type: string
         default: ""
   schedule:
-    - cron: "0 17 * * *"
+    # Nigeria time (WAT, UTC+1): 06:00, 12:00, 18:00, and 00:00 daily.
+    - cron: "0 5,11,17,23 * * *"
   push:
     branches: [feature/relic-loop-new-pipeline]
     paths:
       - ".github/triggers/relic-loop-video-run.txt"
+
+concurrency:
+  group: relic-loop-production
+  cancel-in-progress: false
 
 permissions:
   contents: write
