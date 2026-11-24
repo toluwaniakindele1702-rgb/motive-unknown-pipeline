@@ -247,6 +247,7 @@ def review_submission(
                     {"role": "user", "content": build_evaluator_prompt(payload, observations)},
                 ],
                 temperature=0.2,
+                response_format={"type": "json_object"},
                 max_completion_tokens=1400,
                 reasoning_effort="low",
                 include_reasoning=False,
