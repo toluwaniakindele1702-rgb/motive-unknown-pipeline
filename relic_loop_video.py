@@ -284,7 +284,7 @@ def produce_video(topic: str = "", previous_feedback: dict | None = None,
             except (OSError, json.JSONDecodeError):
                 previous_feedback = None
     feedback = QualityFeedback.from_mapping(previous_feedback)
-    creative_model = (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-120b")
+    creative_model = (os.getenv("CREATIVE_AI_MODEL", "").strip() or "openai/gpt-oss-20b")
     quality_model = (os.getenv("QUALITY_AI_MODEL", "").strip() or creative_model)
     def draft_story(coaching):
         return _generate_valid_story(client, creative_model, topic,
