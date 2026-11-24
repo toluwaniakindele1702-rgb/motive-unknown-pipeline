@@ -202,7 +202,7 @@ def generate_story(
             {"role": "user", "content": build_user_prompt(brief, feedback, recent_story_summaries)},
         ],
         temperature=0.85,
-        max_completion_tokens=3000,
+        max_completion_tokens=1200,
     )
     content = response.choices[0].message.content or ""
     return validate_story(parse_json_object(content), brief)
