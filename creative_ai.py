@@ -201,10 +201,19 @@ def generate_story(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_prompt(brief, feedback, recent_story_summaries)},
         ],
-        temperature=0.85,
-        max_completion_tokens=1200,
+        temperature=0.7,
+        max_completion_tokens=2500,
+        response_format={"type": "json_object"},
+        reasoning_effort="low",
+        include_reasoning=False,
     )
-    content = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    content = choice.message.content or ""
+    if not content.strip():
+        raise ValueError(
+            "Creative AI returned empty content "
+            f"(finish_reason={getattr(choice, 'finish_reason', 'unknown')}, model={model})."
+        )
     return validate_story(parse_json_object(content), brief)
 
 
