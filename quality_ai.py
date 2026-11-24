@@ -247,7 +247,7 @@ def review_submission(
                     {"role": "user", "content": build_evaluator_prompt(payload, observations)},
                 ],
                 temperature=0.2,
-                max_completion_tokens=2200,
+                max_completion_tokens=1200,
             )
             model_result = _normalise_evaluation(_json_object(response.choices[0].message.content or ""))
             # Keep deterministic evidence and append model observations; model may not erase facts.
