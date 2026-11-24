@@ -106,7 +106,7 @@ def propose_repair(failure_context: str, source_files: Mapping[str, str], client
     user = json.dumps({"failure_context": redact(str(failure_context)[:MAX_FAILURE_CONTEXT_CHARS]),
                        "source_files": snippets}, ensure_ascii=False)
     response = client.chat.completions.create(
-        model=model or os.getenv("MAINTENANCE_AI_MODEL", "openai/gpt-oss-120b"),
+        model=model or os.getenv("MAINTENANCE_AI_MODEL", "openai/gpt-oss-20b"),
         temperature=0.1, response_format={"type": "json_object"},
         max_completion_tokens=1200, reasoning_effort="low", include_reasoning=False,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
