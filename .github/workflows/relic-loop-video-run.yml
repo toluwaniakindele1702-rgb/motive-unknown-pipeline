@@ -98,8 +98,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RAPHAEL_STORAGE_STATE_JSON: ${{ secrets.RAPHAEL_STORAGE_STATE_JSON }}
-          QUALITY_AI_MODEL: ${{ vars.QUALITY_AI_MODEL || 'openai/gpt-oss-120b' }}
-          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL || 'openai/gpt-oss-120b' }}
+          QUALITY_AI_MODEL: ${{ vars.QUALITY_AI_MODEL || 'openai/gpt-oss-20b' }}
+          CREATIVE_AI_MODEL: ${{ vars.CREATIVE_AI_MODEL || 'openai/gpt-oss-20b' }}
           RELIC_LOOP_USE_RAPHAEL: "1"
           RELIC_LOOP_OUTPUT_DIR: "relic_loop_output"
         run: |
@@ -109,7 +109,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL || 'openai/gpt-oss-120b' }}
+          MAINTENANCE_AI_MODEL: ${{ vars.MAINTENANCE_AI_MODEL || 'openai/gpt-oss-20b' }}
         run: |
           if [ -f relic_loop_output/maintenance_ai_report.json ]; then
             echo "Maintenance AI already diagnosed the Python production failure."
