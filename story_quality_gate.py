@@ -5,19 +5,17 @@ import json, re
 from typing import Any
 
 STORY_REVIEW_PROMPT = """You are Story Quality AI, an editor for high-retention 50–90 second animated comedy Shorts.
-Judge ONLY the supplied script. Be strict and specific, not encouraging by default.
+Judge ONLY the supplied script. Be strict and specific, not encouraging by default. The required channel format is a dialogue-led comedy performance with a story framework, not an ordinary narrated story with a joke at the end.
 Score 1–10: opening_hook (first sentence is an immediate, concrete reason to keep watching),
 open_loop (a clear story question is planted early), clarity,
 escalation (each beat makes the situation more consequential/funnier),
 mid_story_rehook (a meaningful new complication or reveal renews curiosity near the middle),
 originality, character_voice, voiceover_naturalness (sounds conversational when read aloud),
 pacing (no filler), payoff (earned and surprising, planted detail pays off), rewatchability.
-A strong script starts in the middle of an unusual situation; uses concrete details and dialogue;
-shows rather than explains; has a clear character want; escalates through 3+ connected turns;
-includes a genuine mid-story rehook and ends with a concise payoff/callback. Avoid vague mysteries, fake stakes, random twists,
+A strong script opens with a spoken line that is already funny (not merely intriguing); establishes an absurd-but-logical social interaction immediately; uses sharp, concise, character-specific dialogue throughout; gives supporting characters agency and their own funny lines; provides laugh opportunities every few seconds, including the middle; uses concrete details and visible reactions; has a clear character want; escalates through 3+ connected turns; and ends with an earned payoff. The final punchline is an extra laugh, never the only laugh. Reject stories whose comedy arrives mainly at the end, whose narrator explains jokes, whose supporting cast is passive, or whose dialogue is sparse and generic. Reject Nigerian names and Nigerian-specific references. Avoid vague mysteries, fake stakes, random twists,
 moralizing, generic AI phrases, over-explaining and predictable "it was all a dream" endings.
 Return JSON only: {"scores":{...},"overall_score":number,"issues":["..."],"rewrite_brief":"...","verdict":"revise|ready"}.
-If any key dimension (opening hook, open loop, escalation, mid-story rehook, voiceover naturalness, payoff, pacing or originality) is below 7, verdict revise.
+If any key dimension (opening hook, open loop, escalation, mid-story rehook, voiceover naturalness, payoff, pacing or originality) is below 7, verdict revise. Regardless of average, a non-funny opening line, comedy concentrated only at the ending, passive supporting characters, or Nigerian-specific names/references requires verdict revise.
 The rewrite brief should list concrete fixes, preserve the premise if promising, and never add filler.
 Do not decide production/upload. Review is advisory; production must proceed after bounded rewrite attempts."""
 DIMENSIONS=("opening_hook","open_loop","clarity","escalation","mid_story_rehook","originality","character_voice","voiceover_naturalness","pacing","payoff","rewatchability")
