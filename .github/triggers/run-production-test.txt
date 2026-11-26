@@ -25,3 +25,5 @@ Public production run requested 2026-11-14 after fixing whitespace tokenization 
 
 
 Old pipeline public-upload validation requested 2026-11-19 — [publish-video]
+
+Preview run requested 2026-11-26 — generate video artifact for review only; do not upload to YouTube.
