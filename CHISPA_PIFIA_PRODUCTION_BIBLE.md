@@ -11,14 +11,17 @@ Produce original 50–90 second absurd-comedy Shorts with a 180–205 word spoke
 - No photorealism, 3D/Pixar look, anime, live action, stock-photo appearance, style switching, accidental duplicate protagonists, logos, captions, speech bubbles, watermarks, or deliberate readable text.
 - Image generation is not full animation. Never describe pan/zoom over a still as character animation.
 
-## Story architecture
-1. Start with the problem and a strange visual in the first 1–2 seconds.
-2. Establish a relatable goal.
-3. Make the protagonist choose a bad but understandable solution.
-4. Show a direct consequence.
-5. Escalate from that consequence; avoid disconnected random gags.
-6. Plant or preserve a detail that makes the twist feel earned.
-7. End immediately after the punchline; no moral or generic outro.
+## Story architecture — mandatory comedy format
+1. The first spoken line must itself be funny. Do not open with narration, background, a name introduction or a merely mysterious image.
+2. Build the piece as a funny social interaction (complaint, request, negotiation, argument or misunderstanding treated with dead-serious logic), not a conventional story with jokes added later.
+3. Use concise, witty character dialogue as the main comedy engine. The narrator only connects action and supplies essential context; never explains a joke.
+4. Keep the middle continuously entertaining, with distinct laugh opportunities every few seconds. The final punchline is an extra payoff, not the only laugh.
+5. Supporting characters must have their own comic voice, decisions, counterarguments and reversals. They are not silent reaction props.
+6. Give the protagonist a clear want and a flawed but understandable strategy. Their choices drive three or more distinct cause-and-effect turns.
+7. Treat the absurd situation with internally consistent logic. Vary comic mechanisms; do not repeat the same gag with new props.
+8. Plant an early detail that earns the final reversal. End immediately after the strongest final laugh; no moral or generic outro.
+9. Use internationally familiar English-language names or role labels. No Nigerian names, Nigerian cultural references, locations or slang.
+10. Never copy the approved supermarket/wife-return example's premise or beats. Reproduce only its high-level craft: immediate funny dialogue, deadpan logic, an active counterpart, escalating exchanges and a final reversal.
 
 ## Beat design
 - Target 10–12 distinct visual beats for an approximately 60-second Short.
