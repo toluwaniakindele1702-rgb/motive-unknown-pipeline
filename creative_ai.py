@@ -185,7 +185,7 @@ def build_user_prompt(
     topic = brief.topic.strip() or "Choose a fresh, specific everyday premise."
     recent = [str(x).strip() for x in recent_story_summaries if str(x).strip()][:5]
     recent_text = "\n".join("- " + x for x in recent) if recent else "No recent-story history supplied."
-    return f"""Create one original Chispa-Pifia story.
+    return f"""Create one original Chispa-Pifia COMEDY PERFORMANCE, not a conventional story.
 
 Topic or seed: {topic}
 Voiceover duration: {low_seconds}-{high_seconds} seconds.
@@ -196,10 +196,10 @@ Visual identity to preserve: {brief.visual_style}
 Quality AI feedback from previous completed videos (advisory, not a pass/fail gate):
 {(feedback or QualityFeedback()).as_prompt_context()}
 
-Avoid repeating these recent premises:
+Avoid repeating these recent comedy premises:
 {recent_text}
 
-Make the premise distinct from recent examples. Assigned hook style: {brief.hook_style or "choose the strongest of curiosity, in-medias-res, mystery, emotional or unexpected-reveal"}. The first sentence must be a concrete visual action or surprising fact, not an introduction. Establish an unanswered story question immediately, add a meaningful mid-story rehook, then deliver an earned payoff. Use connected escalation and natural spoken phrasing; write scenes, not a synopsis."""
+The first line and opening exchange must already be funny. Deliver multiple distinct laugh moments from the opening onward; do not save the comedy for the ending. Make dialogue, deadpan reactions, absurd but consistent character logic, visual gags and witty reversals carry the entertainment. Give supporting characters their own funny contributions. Keep the middle continuously entertaining, with no long setup or explanatory stretches. Finish with an additional strong reversal or callback. Do not use Nigerian names or Nigerian cultural references; choose natural internationally familiar names or omit names when unnecessary. Treat the assigned hook style ({brief.hook_style or "choose the strongest immediate comic opening"}) only as a starting device, never as a substitute for an actual joke. Write a lively, filmable comedy scene for animation, not a synopsis."""
 
 
 def generate_story(
