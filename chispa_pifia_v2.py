@@ -404,17 +404,36 @@ def main():
             concept_pack=call(client,MODEL,PREMISE_SYSTEM,
                 json.dumps({"channel":"Chispa-Pifia","recent_titles":titles[-12:] if 'titles' in locals() else [],
                             "creative_brief":user},ensure_ascii=False),4200,0.9,allow_plain_text=True)
-            # If GPT-OSS ignores the premise JSON schema and writes the story
-            # directly, salvage that narration instead of failing the run.
+            # If the concept model ignores the JSON schema, do NOT treat its
+            # raw prose as a finished story. Route it through the full story
+            # writer so STORY_SYSTEM still governs the actual narration.
             if concept_pack.get("_plain_text"):
-                candidate=normalize_writer_response(concept_pack)
+                raw_seed=norm(concept_pack.get("_plain_text"))
+                print(f"[V2 STORY] attempt {attempt}: premise JSON unavailable; routing raw concept notes through full story writer")
+                raw=call(client,MODEL,STORY_SYSTEM,
+                    json.dumps({"creative_brief":user,
+                        "selected_concept":{"title":"Recovered concept-room inspiration",
+                            "hook":"Extract the strongest immediately visual opening from the inspiration below.",
+                            "goal":"Identify one clear protagonist goal that makes the situation matter.",
+                            "obstacle":"Build one specific comic obstacle that grows from the protagonist's choices.",
+                            "beats":["Create a distinct first consequence.","Make the protagonist's attempted fix create a different problem.",
+                                    "Escalate through a new comic mechanism.","Deliver an earned callback payoff."],
+                            "payoff":"Invent a specific final reversal planted and earned by the story.",
+                            "freshness":"Use the raw output only as loose inspiration; improve or replace generic elements."},
+                        "unstructured_concept_inspiration":raw_seed,
+                        "instruction":"You MUST perform the complete story-writing task under STORY_SYSTEM. Do not treat the inspiration as a finished story and do not merely clean up or shorten it."},
+                        ensure_ascii=False),
+                    7000,0.78 if attempt==1 else 0.72,allow_plain_text=True)
+                candidate=normalize_writer_response(raw)
                 candidate,editorial,scores=review_story(client,candidate)
-                editorial["selected_premise"]="Recovered direct writer response"
+                editorial["selected_premise"]="Recovered concept inspiration routed through full story writer"
                 editorial["story_attempt"]=attempt
                 editorial["component_scores"]={"overall":scores[0],"hook":scores[1],"escalation":scores[2],"punchline":scores[3]}
                 candidates.append((candidate,editorial,scores))
-                print(f"[V2 STORY] attempt {attempt}: direct prose recovered as a valid story")
-                if editorial.get("grading_passed"): break
+                if editorial.get("grading_passed"):
+                    print(f"[V2 STORY] attempt {attempt}: routed story passed required grading")
+                    break
+                print(f"[V2 STORY] attempt {attempt}: routed story retained for candidate comparison")
                 continue
             concepts=concept_pack.get("concepts")
             if not isinstance(concepts,list) or not concepts:
