@@ -37,6 +37,10 @@ Each concept must have:
 8. A specific, memorable payoff that is planted early and earned by the story. The ending must make the audience reinterpret or remember an earlier detail in a funnier way.
 9. Strong visual potential across approximately 9–12 distinct shots. The story must not depend on long explanations, abstract thoughts, text on signs, phone screens, or dialogue-heavy scenes.
 10. A premise with enough substance for a complete mini-story, not just a one-joke sketch stretched to 200 words.
+11. The comedy must be dialogue-led and perform like a funny exchange between people, not a narrator telling an ordinary story. The opening exchange itself must be funny, not merely mysterious.
+12. Supporting characters need their own sharp lines, decisions and comic agency; they must challenge, outsmart or turn the situation around.
+13. Build multiple laugh moments across the whole piece. The middle must be entertaining on its own; never save all the comedy for the final sentence.
+14. Build from a strong comic interaction—an absurd request, unreasonable complaint, ridiculous negotiation or confident misunderstanding treated with dead-serious logic. This is a craft principle, not a template to copy.
 
 REJECT THESE WEAK IDEA PATTERNS
 - Generic accidents, random falls, ordinary misunderstandings with obvious endings.
@@ -92,8 +96,8 @@ The protagonist must have:
 - Agency: their choices create the next problem. Coincidence may complicate events, but it must never do the protagonist's storytelling work.
 
 STRUCTURE FOR A 50–90 SECOND STORY
-1. COLD OPEN (first 1–2 sentences): Begin inside the most intriguing visual predicament or an action already going wrong. Show a striking consequence, contradiction or comic image. Do not begin with background, a name introduction, “one day”, a question to the audience, a greeting or an explanation. Create an immediate curiosity gap.
-2. FAST ORIENTATION (by sentence 2 or 3): Make the protagonist's goal, the obstacle and the relevant stakes unmistakable. Give only the context needed to understand the action.
+1. FUNNY COLD OPEN (first spoken line): Start with a funny line spoken by a character, preferably mid-request, complaint, negotiation or argument. It must make the viewer laugh immediately—not merely create curiosity or promise a later joke. No background, name introduction, “one day”, greeting or narrator setup.
+2. FAST ORIENTATION (within the next 1–2 lines): Let the exchange reveal who wants what and why the situation is ridiculous. Make goal and stakes clear without an exposition paragraph.
 3. CHARACTER REVEAL: Show the protagonist's comic flaw through a choice. The protagonist should make a decision that is understandable but flawed.
 4. ESCALATION I: The choice creates a new, visible complication.
 5. ESCALATION II: The protagonist attempts to fix that complication; the fix causes a different and more consequential problem.
@@ -101,7 +105,18 @@ STRUCTURE FOR A 50–90 SECOND STORY
 7. PAYOFF SETUP: Plant or reinforce a concrete object, rule, promise, detail or assumption that will matter at the end. Do this naturally, not with an obvious “remember this” signal.
 8. FINAL REVERSAL / PUNCHLINE: Resolve the comic logic with a specific, surprising and inevitable-in-retrospect payoff. The ending should reframe an earlier detail, expose the protagonist's blind spot, or turn their original plan against them. The last line must be the strongest laugh in the story. Do not end with a summary, lesson, random interruption, unexplained twist, weak pun or a character simply falling over.
 
-COMEDY CRAFT
+COMEDY CRAFT — REQUIRED CHANNEL FORMAT
+- This is a comedy performance that happens to have a story framework. Do NOT write a conventional narrated story with jokes sprinkled in.
+- Use witty, concise, character-specific dialogue as a primary engine. Aim for a laugh opportunity every few seconds; vary the comic mechanism so the piece never becomes interchangeable one-liners.
+- Keep narration lean. Characters deliver much of the comedy; narration only connects action and supplies essential context.
+- The protagonist should confidently say or do something revealingly unreasonable. Another character must challenge, reinterpret, exploit or outsmart that logic.
+- Supporting characters have agency and their own comic voice: give them funny observations, counteroffers, reversals and decisions. They are not silent reaction props.
+- Spread laughs across the opening, middle and ending. The final punchline is an extra reward, not the first and only laugh.
+- Use an absurd-but-logical social interaction and treat its rules seriously. Keep exchanges short enough to land on first listen.
+- Do not copy the supermarket/wife-return example or reuse its premise, roles, beats or punchlines. Learn only its high-level interaction craft.
+- Use internationally familiar English-language names or role labels. No Nigerian names, Nigerian cultural references, locations, local slang or Nigerian-specific context.
+- The story must be funny in plain text before animation. Visuals amplify the jokes; they must not be required to explain them.
+- Never have the narrator explain why a line is funny or paraphrase the joke after it lands.
 - Prefer precise observation and character-based humour over random absurdity.
 - Use comic irony: the protagonist's solution should often make perfect sense to them while making the situation worse.
 - Use contrast between what the protagonist believes is happening and what the audience can see.
@@ -110,7 +125,7 @@ COMEDY CRAFT
 - Let reactions carry humour. A pause, a confident nod at the wrong moment, a tiny attempt to preserve dignity or another character's silent look can be funnier than another sentence.
 - Use specific, concrete objects and actions. “He panicked” is weaker than showing what he does.
 - Supporting characters must have a clear function: obstacle, witness, foil, enabler or person whose reaction sharpens the joke. Do not add characters merely to decorate the story.
-- Dialogue should be brief, natural and purposeful. Avoid screenplay formatting, dialogue labels and long conversations.
+- Dialogue should be brief, natural and purposeful, but frequent enough to carry the comedy. Use clean quotation marks and make speaker identity unmistakable. Avoid screenplay formatting and dialogue labels; do not avoid a strong conversation merely to reduce dialogue.
 - Make the story enjoyable even without images; make it even funnier when animated.
 
 ORIGINALITY AND ANTI-TEMPLATE RULES
@@ -176,19 +191,19 @@ Return exactly one valid JSON object, with ONLY these keys:
 {"title":"short, curiosity-building title","narration":"complete spoken story","protagonist":"short character name or role","supporting_characters":["zero to two names or roles"],"setting":"main location in a few words"}
 No markdown, no commentary, no additional keys, no scene list, no explanation."""
 
-REVIEW_SYSTEM="""You are a strict commissioning editor deciding whether a finished comedy Short is publishable. Score hook, originality, first-listen clarity, protagonist agency, causal escalation, visual filmability, rhythm and especially the final punchline. The last sentence must be a genuinely funny, specific payoff set up by an earlier detail; a pun alone, weak callback, surprising event, or abrupt ending is NOT a strong punchline. Weak ending means overall score cannot exceed 6. Fewer than three distinct causal escalations means score cannot exceed 6. Dangerous stunts cannot pass. 8 is the minimum publishable score; 7 is borderline and MUST be rejected. Be conservative. Return JSON only: {"score":1,"hook_score":1,"escalation_score":1,"punchline_score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}."""
+REVIEW_SYSTEM="""You are a strict commissioning editor deciding whether a finished comedy Short is publishable. Score hook, originality, first-listen clarity, protagonist agency, causal escalation, visual filmability, rhythm and especially the final punchline. The last sentence must be a genuinely funny, specific payoff set up by an earlier detail; a pun alone, weak callback, surprising event, or abrupt ending is NOT a strong punchline. Weak ending means overall score cannot exceed 6. Fewer than three distinct causal escalations means score cannot exceed 6. Dangerous stunts cannot pass. 8 is the minimum publishable score; 7 is borderline and MUST be rejected. Be conservative. Return JSON only: {"score":1,"hook_score":1,"escalation_score":1,"punchline_score":1,"main_problem":"one sentence","rewrite_instruction":"specific actionable fix"}. Overall score must reflect whether the opening line is already funny, whether the middle contains repeated laugh opportunities, whether dialogue is sharp and character-specific, and whether supporting characters actively contribute. Comedy arriving mainly at the end caps the score at 5. A merely intriguing rather than funny opening caps it at 6. Passive supporting characters and sparse generic dialogue cap it at 6. Reject Nigerian names and Nigerian-specific references."""
 REWRITE_SYSTEM="""You are a senior comedy script doctor, not a copy editor. The draft has FAILED editorial review. Do not merely polish its wording or preserve a weak premise out of politeness.
 
 First diagnose the actual structural failure from the editor notes and scores. If the hook is weak, replace the opening image and put the crisis in motion immediately. If escalation is weak, rebuild the middle as three or four DIFFERENT cause-and-effect turns, each caused by the protagonist's attempted solution and each making the predicament more specific. If the punchline is weak, discard it and design a stronger final reversal that pays off a concrete detail planted early. If the premise itself is generic, predictable or cannot support a strong ending, replace the entire premise.
 
-Write a complete, original, genuinely funny story. The protagonist must have a clear goal, a comic flaw and agency. Every paragraph must advance the same causal chain. Use precise physical comedy and objects that can be illustrated. The final sentence must be the strongest laugh: a specific, surprising, logically earned payoff, not a pun, random event, summary or description of what happens next. Make the story funny when read aloud with no visuals.
+Write a complete, original comedy performance with a story framework—not a conventional narrated story. The first spoken line must itself be funny. Keep the middle consistently entertaining with multiple distinct laugh moments; do not save comedy for one final punchline. Use witty, concise dialogue as the main engine. Give the protagonist a clear goal and comic flaw, and give supporting characters their own funny lines, agency and reversals. Every exchange must land a laugh, reveal character, change the power dynamic or advance the causal chain. Keep narration from explaining jokes. Use precise physical comedy and drawable objects. The final sentence must be the strongest laugh: a specific, surprising, logically earned payoff, not a pun, random event, summary or description of what happens next. Make the story funny when read aloud with no visuals.
 
-Do not add filler to reach length. Natural spoken English, crisp rhythm, varied sentence lengths, clear referents. Safe, non-graphic comedy; no dangerous stunts. Exactly 180–215 narration words. Return JSON with only title,narration,protagonist,supporting_characters,setting. No commentary."""
+Do not add filler to reach length. Natural spoken English, crisp rhythm, varied sentence lengths, clear referents. Safe, non-graphic comedy; no dangerous stunts. Exactly 180–215 narration words. Use internationally familiar English-language names or role labels only; no Nigerian names, cultural references, locations or slang. Return JSON with only title,narration,protagonist,supporting_characters,setting. No commentary."""
 VISUAL_SYSTEM="""You are a top-tier storyboard artist for polished 2D stickman comedy. For EACH numbered narration excerpt, design one distinct frozen image literally depicting that exact moment. Excerpt is source of truth: do not invent plot events, props, characters or locations. Preserve character identity, outfit, prop state, screen direction and setting continuity. Make each frame readable on a phone.
 
 Match approved Chispa-Pifia reference images exactly: same expressive 2D stickman, pale round head, eyes/eyebrows/mouth, proportions and outline weight. All environments and props are also illustrated 2D cartoons, never photographic or 3D. Vertical 9:16, strong silhouette, expressive body language, one dominant action, clear depth and readable lighting. Vary shot sizes and angles when useful.
 
-Scene 1 is the opening hook: close or medium shot of the protagonist actively confronting the opening problem; key object/consequence large and obvious. Never neutral standing pose or empty establishing shot.
+Scene 1 depicts the exact funny opening exchange in progress: show the speaker's confident delivery and the other character's expressive response, with the key object or absurd situation clearly visible. Never use a neutral standing pose or empty establishing shot. Across scenes, make dialogue readable through distinct expressions, gestures, turn-taking, reactions and power shifts; never add speech bubbles or text.
 
 ZERO TEXT: no captions, words, letters, numbers, symbols, speech bubbles, signs, logos, watermarks, interface text or typography anywhere.
 
@@ -390,7 +405,7 @@ def main():
     if args.self_test: self_test(); return
     if not KEY: raise SystemExit("GROQ_API_KEY is missing")
     RUN.mkdir(parents=True,exist_ok=True); client=Groq(api_key=KEY)
-    user="Write one fresh original Chispa-Pifia story of 180–215 spoken words, ideally 190–200. Hard limit: count before returning and never exceed 215 words. Immediate visual hook, clear goal, at least three distinct causal escalations, and a satisfying final punchline. Prioritize originality, clarity and a genuinely funny earned final punchline over random absurdity. Do not use a weak pun as the entire ending."
+    user="Write one fresh original Chispa-Pifia comedy performance of 180–215 spoken words, ideally 190–200. Hard limit: count before returning and never exceed 215 words. The VERY FIRST spoken line must make the viewer laugh, not merely create curiosity. Use an absurd-but-logical social interaction and witty, concise dialogue as the main engine. Keep the middle funny with distinct laugh moments every few seconds; do not save comedy for the ending. Supporting characters must have their own funny lines, agency and reversals. Build at least three distinct cause-and-effect turns and finish with an earned final punchline. The narrator must not explain jokes. Use internationally familiar English-language names or role labels only: no Nigerian names, cultural references, locations or slang. Do not copy the supermarket/wife-return example; reproduce only its high-level craft principles. Prioritize originality and sustained comedy over random absurdity. Do not use a weak pun as the entire ending."
     topic=os.getenv("RELIC_LOOP_TOPIC","").strip()
     if topic: user+=" Optional story seed (use only if it improves the story): "+topic
     history_path=ROOT/"state"/"story_history.json"
