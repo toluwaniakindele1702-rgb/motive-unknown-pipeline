@@ -5,3 +5,5 @@ Auth preflight path fix test #2
 Feedback object compatibility fix test
 
 Preview run requested 2026-11-27: validate consistent 180-215 word range, performed dialogue voiceover, render MP4 and upload artifact only; public YouTube publishing disabled by default.
+
+Preview rerun requested 2026-11-27: regression test now expects the consistent 180-215 word range; run offline checks, generate MP4, upload artifact only, do not publish publicly.
