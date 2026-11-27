@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from relic_loop_video import split_story_into_scenes, _duration, _safe_moderation_retry_prompt, _generate_valid_story
+from relic_loop_video import split_story_into_scenes, _duration, _safe_moderation_retry_prompt, _generate_valid_story, _estimated_word_timings
 from creative_ai import QualityFeedback
 from relic_loop_media import write_word_level_captions
 
@@ -64,6 +64,20 @@ class RelicLoopVideoTests(unittest.TestCase):
             self.assertIn("00:00:00,000 --> 00:00:00,200", content)
             self.assertIn("Hello", content)
             self.assertIn("there!", content)
+
+    def test_estimated_word_timings_cover_audio_when_boundaries_are_missing(self):
+        cues = _estimated_word_timings("Hello there, this is dialogue.", 2.0)
+        self.assertEqual([cue["text"] for cue in cues],
+                         ["Hello", "there,", "this", "is", "dialogue."])
+        self.assertAlmostEqual(cues[0]["start"], 0.0)
+        self.assertAlmostEqual(cues[-1]["end"], 2.0)
+        self.assertTrue(all(cue["end"] > cue["start"] for cue in cues))
+        self.assertTrue(all(cues[i]["end"] <= cues[i + 1]["start"] + 1e-9
+                            for i in range(len(cues) - 1)))
+
+    def test_estimated_word_timings_reject_empty_or_invalid_audio(self):
+        self.assertEqual(_estimated_word_timings("some words", 0), [])
+        self.assertEqual(_estimated_word_timings("", 1.0), [])
 
     def test_duration_rejects_zero(self):
         fake = type("P", (), {"stdout":"0"})()
