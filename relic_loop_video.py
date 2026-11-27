@@ -311,9 +311,8 @@ def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedb
     """Retry out-of-range drafts with progressively tighter word-count instructions."""
     last_error = None
     hook_style = HOOK_STYLES[(int(time.strftime("%j")) + len(topic or "")) % len(HOOK_STYLES)]
-    # Keep one source of truth for the story length. Narrowing the range on
-    # retries made valid 196-215 word scripts fail after the first attempt.
-    target_words = (180, 215)
+    # Story length is a minimum only. Never reject a coherent draft for being long.
+    target_words = (180, 0)
     for attempt in range(3):
         brief = CreativeBrief(topic=topic, hook_style=hook_style,
                               duration_seconds=(50, 90), target_words=target_words)
@@ -322,11 +321,11 @@ def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedb
             story["hook_style"] = hook_style
             return story
         except ValueError as exc:
-            if "words; expected" not in str(exc):
+            if "words; minimum is" not in str(exc):
                 raise
             last_error = exc
-            print(f"[CREATIVE AI] Draft outside {target_words[0]}-{target_words[1]} words; requesting a fresh draft ({attempt + 1}/3)")
-    raise ValueError(f"Creative AI could not produce a story within 180-215 words after three attempts: {last_error}")
+            print(f"[CREATIVE AI] Draft below {target_words[0]} words; requesting a fresh draft ({attempt + 1}/3)")
+    raise ValueError(f"Creative AI could not produce a story of at least 180 words after three attempts: {last_error}")
 
 
 def produce_video(topic: str = "", previous_feedback: dict | None = None,
