@@ -154,10 +154,10 @@ def image_provider(prompt: str, refs=None) -> bytes:
 
 def _estimated_word_timings(text: str, duration: float) -> list[dict]:
     """Build conservative caption timings when Edge TTS omits WordBoundary events."""
-    words = re.findall(r"\\S+", text)
+    words = re.findall(r"\S+", text)
     if not words or duration <= 0:
         return []
-    weights = [max(1, len(re.sub(r"[^\\w']", "", word))) for word in words]
+    weights = [max(1, len(re.sub(r"[^\w']", "", word))) for word in words]
     total = sum(weights)
     cursor = 0.0
     cues = []
