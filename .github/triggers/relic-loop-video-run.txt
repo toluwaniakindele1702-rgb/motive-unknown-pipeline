@@ -3,3 +3,5 @@ Run Relic Loop with the upgraded story hook, escalation, rewrite coaching, and p
 Auth preflight path fix test #2
 
 Feedback object compatibility fix test
+
+Preview run requested 2026-11-27: validate consistent 180-215 word range, performed dialogue voiceover, render MP4 and upload artifact only; public YouTube publishing disabled by default.
