@@ -209,28 +209,72 @@ def generate_story(
     feedback: QualityFeedback | None = None,
     recent_story_summaries: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Call an OpenAI-compatible Groq client and return a validated story."""
+    """Generate a complete story, retrying only when Groq truncates its completion.
+
+    Reasoning models can spend a substantial part of the completion budget on
+    internal reasoning. A 2,500-token cap can therefore be exhausted before the
+    JSON document is emitted, even though the requested story is modest.
+    Increase the budget progressively on truncation; this is independent of the
+    story's word-count rule (180 minimum, no maximum).
+    """
     brief = brief or CreativeBrief()
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_prompt(brief, feedback, recent_story_summaries)},
-        ],
-        temperature=0.7,
-        max_completion_tokens=2500,
-        response_format={"type": "json_object"},
-        reasoning_effort="low",
-        include_reasoning=False,
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": build_user_prompt(brief, feedback, recent_story_summaries)},
+    ]
+    last_error: Exception | None = None
+    for token_budget in (8192, 16384, 32768):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_completion_tokens=token_budget,
+                response_format={"type": "json_object"},
+                reasoning_effort="low",
+                include_reasoning=False,
+            )
+        except Exception as exc:
+            message = str(exc).lower()
+            # Retry only explicit completion-budget/length failures. Authentication,
+            # rate-limit and unrelated API errors should remain visible immediately.
+            if "max completion tokens" in message or "maximum completion tokens" in message or "length limit" in message:
+                last_error = exc
+                print(f"[CREATIVE AI] Groq hit its completion limit at {token_budget} tokens; retrying with a larger budget")
+                continue
+            raise
+
+        choice = response.choices[0]
+        finish_reason = str(getattr(choice, "finish_reason", "") or "").lower()
+        content = choice.message.content or ""
+        if finish_reason in {"length", "max_tokens"}:
+            last_error = ValueError(f"Groq truncated the story at {token_budget} completion tokens")
+            print(f"[CREATIVE AI] Story response was truncated at {token_budget} tokens; retrying with a larger budget")
+            continue
+        if not content.strip():
+            raise ValueError(
+                "Creative AI returned empty content "
+                f"(finish_reason={finish_reason or 'unknown'}, model={model})."
+            )
+        try:
+            return validate_story(parse_json_object(content), brief)
+        except (ValueError, json.JSONDecodeError) as exc:
+            # An incomplete JSON document is another common symptom of a cut-off
+            # completion. Do not mask genuine schema/length errors from a complete reply.
+            incomplete = any(term in str(exc).lower() for term in (
+                "no json object", "unterminated", "expecting value", "expecting ',' delimiter",
+                "expecting property name", "end of",
+            ))
+            if incomplete:
+                last_error = exc
+                print(f"[CREATIVE AI] Groq returned incomplete JSON at {token_budget} tokens; retrying")
+                continue
+            raise
+
+    raise RuntimeError(
+        "Creative AI could not obtain a complete story after increasing Groq's "
+        f"completion budget to 32768 tokens: {last_error}"
     )
-    choice = response.choices[0]
-    content = choice.message.content or ""
-    if not content.strip():
-        raise ValueError(
-            "Creative AI returned empty content "
-            f"(finish_reason={getattr(choice, 'finish_reason', 'unknown')}, model={model})."
-        )
-    return validate_story(parse_json_object(content), brief)
 
 
 def build_scene_continuity_directive(
