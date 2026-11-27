@@ -30,17 +30,24 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertIn("everyday situation", generic)
         self.assertNotIn("Milo drops his lunchbox", generic)
 
-    def test_overlength_story_is_retried_without_loosening_word_limit(self):
-        valid = {"title": "A Story", "narration": " ".join(["word"] * 210),
+    def test_long_story_is_accepted_without_maximum(self):
+        valid = {"title": "A Story", "narration": " ".join(["word"] * 249),
                  "protagonist": "Milo", "supporting_characters": [], "setting": "A shop"}
-        with patch("relic_loop_video.generate_story",
-                   side_effect=[ValueError("Story has 221 words; expected 180-215"), valid]) as generate:
+        with patch("relic_loop_video.generate_story", return_value=valid) as generate:
             result = _generate_valid_story(object(), "test-model", "topic", QualityFeedback())
         self.assertEqual(result["title"], valid["title"])
-        self.assertIn(result["hook_style"], ("curiosity gap", "in-medias-res action", "mystery reveal", "emotional contradiction", "unexpected reversal"))
+        self.assertEqual(generate.call_count, 1)
+        self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 0))
+
+    def test_underlength_story_is_retried(self):
+        valid = {"title": "A Story", "narration": " ".join(["word"] * 190),
+                 "protagonist": "Milo", "supporting_characters": [], "setting": "A shop"}
+        with patch("relic_loop_video.generate_story",
+                   side_effect=[ValueError("Story has 170 words; minimum is 180"), valid]) as generate:
+            result = _generate_valid_story(object(), "test-model", "topic", QualityFeedback())
+        self.assertEqual(result["title"], valid["title"])
         self.assertEqual(generate.call_count, 2)
-        self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 215))
-        self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 215))
+        self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 0))
 
 
     def test_word_level_captions_are_sidecar_and_not_burned_in(self):
