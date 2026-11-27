@@ -35,15 +35,15 @@ class CreativeAITests(unittest.TestCase):
         self.assertEqual(word_count(story["narration"]), 190)
         self.assertEqual(story["supporting_characters"], ["A neighbour", "Extra"])
 
-    def test_accepts_updated_215_word_ceiling(self):
-        narration = " ".join(f"word{i}" for i in range(215))
-        story = validate_story({"title": "At the limit", "narration": narration})
-        self.assertEqual(word_count(story["narration"]), 215)
+    def test_accepts_long_story_without_any_maximum(self):
+        narration = " ".join(f"word{i}" for i in range(249))
+        story = validate_story({"title": "Long complete story", "narration": narration})
+        self.assertEqual(word_count(story["narration"]), 249)
 
-    def test_rejects_above_updated_word_ceiling(self):
-        narration = " ".join(f"word{i}" for i in range(216))
-        with self.assertRaises(ValueError):
-            validate_story({"title": "Over the limit", "narration": narration})
+    def test_prompt_specifies_minimum_and_no_maximum(self):
+        prompt = build_user_prompt(CreativeBrief())
+        self.assertIn("at least 180 words", prompt)
+        self.assertIn("NO maximum word count", prompt)
 
     def test_rejects_invalid_length(self):
         with self.assertRaises(ValueError):
