@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from creative_ai import (
     CreativeBrief, QualityFeedback, build_scene_continuity_directive,
@@ -51,6 +53,40 @@ class CreativeAITests(unittest.TestCase):
 
     def test_json_parser(self):
         self.assertEqual(parse_json_object('prefix {"score": 7} suffix'), {"score": 7})
+
+
+    def test_generate_story_retries_when_groq_truncates_completion(self):
+        story_json = {
+            "title": "A complete story",
+            "narration": " ".join(["word"] * 190),
+            "protagonist": "Milo",
+            "supporting_characters": [],
+            "setting": "A shop",
+        }
+        truncated = SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="length", message=SimpleNamespace(content='{"title":')
+        )])
+        complete = SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="stop", message=SimpleNamespace(
+                content=__import__("json").dumps(story_json)
+            )
+        )])
+        client = Mock()
+        client.chat.completions.create.side_effect = [truncated, complete]
+        from creative_ai import generate_story
+        result = generate_story(client, "test-model", CreativeBrief())
+        self.assertEqual(result["title"], "A complete story")
+        calls = client.chat.completions.create.call_args_list
+        self.assertEqual(calls[0].kwargs["max_completion_tokens"], 8192)
+        self.assertEqual(calls[1].kwargs["max_completion_tokens"], 16384)
+
+    def test_generate_story_does_not_retry_unrelated_groq_errors(self):
+        client = Mock()
+        client.chat.completions.create.side_effect = RuntimeError("authentication failed")
+        from creative_ai import generate_story
+        with self.assertRaisesRegex(RuntimeError, "authentication failed"):
+            generate_story(client, "test-model", CreativeBrief())
+        self.assertEqual(client.chat.completions.create.call_count, 1)
 
     def test_scene_continuity_directive(self):
         directive = build_scene_continuity_directive("Milo, red scarf", "library", "book stays in left hand")
