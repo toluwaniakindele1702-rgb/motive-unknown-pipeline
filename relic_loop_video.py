@@ -152,6 +152,22 @@ def image_provider(prompt: str, refs=None) -> bytes:
     print("[IMAGE PROVIDER] Cloudflare generated an accepted image")
     return blob
 
+def _estimated_word_timings(text: str, duration: float) -> list[dict]:
+    """Build conservative caption timings when Edge TTS omits WordBoundary events."""
+    words = re.findall(r"\\S+", text)
+    if not words or duration <= 0:
+        return []
+    weights = [max(1, len(re.sub(r"[^\\w']", "", word))) for word in words]
+    total = sum(weights)
+    cursor = 0.0
+    cues = []
+    for index, (word, weight) in enumerate(zip(words, weights)):
+        end = duration if index == len(words) - 1 else cursor + duration * weight / total
+        cues.append({"start": cursor, "end": end, "text": word})
+        cursor = end
+    return cues
+
+
 async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
     """Create a performed voice track: narrator for prose, alternating character
     voices for quoted dialogue, with word timings kept on the combined timeline."""
@@ -206,6 +222,7 @@ async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
             last_error = None
             segment_cues: list[dict] = []
             used_voice = requested_voice
+            segment_duration = 0.0
             for voice in voice_candidates:
                 try:
                     communicate = edge_tts.Communicate(segment_text, voice, rate=rate, pitch=pitch)
@@ -216,13 +233,41 @@ async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
                                 audio_file.write(event["data"])
                             elif event.get("type") == "WordBoundary":
                                 offset = float(event.get("offset", 0)) / 10_000_000
-                                duration = float(event.get("duration", 0)) / 10_000_000
-                                segment_cues.append({"start": offset, "end": offset + duration,
+                                boundary_duration = float(event.get("duration", 0)) / 10_000_000
+                                segment_cues.append({"start": offset, "end": offset + boundary_duration,
                                                      "text": event.get("text", "")})
-                    if chunk.is_file() and chunk.stat().st_size >= 2000 and segment_cues:
-                        used_voice = voice
-                        break
-                    raise RuntimeError("TTS segment returned no usable audio or word timings")
+
+                    # Some Edge TTS responses contain valid audio but omit WordBoundary
+                    # events. Captions are not allowed to invalidate an otherwise good
+                    # audio segment, so validate the media independently and estimate
+                    # word timings from its measured duration when necessary.
+                    audio_valid = chunk.is_file() and chunk.stat().st_size >= 512
+                    if audio_valid:
+                        try:
+                            segment_duration = _duration(chunk)
+                        except Exception:
+                            audio_valid = False
+                    if not audio_valid:
+                        if chunk.exists():
+                            chunk.unlink()
+                        # Retry the same voice through Edge TTS's save path. This
+                        # handles intermittent empty stream responses without silently
+                        # accepting a zero-byte segment.
+                        communicate = edge_tts.Communicate(segment_text, voice, rate=rate, pitch=pitch)
+                        await communicate.save(str(chunk))
+                        audio_valid = chunk.is_file() and chunk.stat().st_size >= 512
+                        if audio_valid:
+                            try:
+                                segment_duration = _duration(chunk)
+                            except Exception:
+                                audio_valid = False
+                    if not audio_valid:
+                        raise RuntimeError("TTS returned no decodable audio for this segment")
+                    if not segment_cues:
+                        segment_cues = _estimated_word_timings(segment_text, segment_duration)
+                        print(f"[VOICE] Edge TTS omitted word timings for segment {index + 1}; using measured-duration caption timings")
+                    used_voice = voice
+                    break
                 except Exception as exc:
                     last_error = exc
                     if chunk.exists():
@@ -240,9 +285,14 @@ async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
             else:
                 selected = chunk
             duration = _duration(selected)
+            # Stream offsets are authoritative when present. Estimated cues are
+            # clamped to the measured segment duration to prevent caption overflow.
             for cue in segment_cues:
-                word_cues.append({"start": cursor + cue["start"],
-                                  "end": cursor + cue["end"], "text": cue["text"]})
+                start = max(0.0, min(float(cue["start"]), duration))
+                end = max(start, min(float(cue["end"]), duration))
+                if end > start:
+                    word_cues.append({"start": cursor + start,
+                                      "end": cursor + end, "text": cue["text"]})
             cursor += duration
             voice_sequence.append(used_voice)
             concat_lines.append("file '" + str(selected.resolve()).replace("'", "'\\''") + "'")
