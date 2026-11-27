@@ -153,7 +153,8 @@ def image_provider(prompt: str, refs=None) -> bytes:
     return blob
 
 async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
-    """Synthesize narration and capture exact word-boundary timestamps from Edge TTS."""
+    """Create a performed voice track: narrator for prose, alternating character
+    voices for quoted dialogue, with word timings kept on the combined timeline."""
     import sys
     original_path = list(sys.path)
     sys.path[:] = [entry for entry in sys.path if Path(entry or ".").resolve() != ROOT]
@@ -161,36 +162,104 @@ async def _synthesize_voice(text: str, target: Path) -> tuple[str, list[dict]]:
         import edge_tts
     finally:
         sys.path[:] = original_path
-    preferred_voice = os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-AndrewNeural").strip()
-    rate = os.getenv("RELIC_LOOP_TTS_RATE", "+2%")
-    pitch = os.getenv("RELIC_LOOP_TTS_PITCH", "+0Hz")
-    voices = [preferred_voice] + (["en-US-GuyNeural"] if preferred_voice != "en-US-GuyNeural" else [])
-    last_error = None
-    for voice in voices:
-        try:
-            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-            word_cues = []
-            with open(target, "wb") as audio_file:
-                async for event in communicate.stream():
-                    if event.get("type") == "audio":
-                        audio_file.write(event["data"])
-                    elif event.get("type") == "WordBoundary":
-                        offset = float(event.get("offset", 0)) / 10_000_000
-                        duration = float(event.get("duration", 0)) / 10_000_000
-                        word_cues.append({"start": offset, "end": offset + duration,
-                                          "text": event.get("text", "")})
-            if not target.is_file() or target.stat().st_size < 5000:
-                raise RuntimeError("Edge TTS did not produce a usable narration track")
-            if not word_cues:
-                raise RuntimeError("Edge TTS produced no word-boundary events; cannot guarantee word-level caption sync")
-            print(f"[VOICE] narration generated with {voice}; captured {len(word_cues)} word timings")
-            return voice, word_cues
-        except Exception as exc:
-            last_error = exc
-            if target.exists(): target.unlink()
-            print(f"[VOICE] {voice} unavailable; trying fallback: {type(exc).__name__}: {exc}")
-    raise RuntimeError(f"All configured Edge TTS voices failed: {last_error}")
 
+    preferred_voice = os.getenv("RELIC_LOOP_TTS_VOICE", "en-US-AndrewNeural").strip()
+    rate = os.getenv("RELIC_LOOP_TTS_RATE", "+0%")
+    pitch = os.getenv("RELIC_LOOP_TTS_PITCH", "+0Hz")
+    dialogue_voices = [
+        os.getenv("RELIC_LOOP_DIALOGUE_VOICE_A", "en-US-JennyNeural").strip(),
+        os.getenv("RELIC_LOOP_DIALOGUE_VOICE_B", "en-US-GuyNeural").strip(),
+    ]
+
+    # Preserve every character and punctuation mark. Quoted dialogue is performed
+    # separately so it no longer gets flattened into the narrator's single read.
+    pieces = re.split(r'(["“][^"”]+["”])', text)
+    segments: list[tuple[str, str]] = []
+    dialogue_index = 0
+    for piece in pieces:
+        clean = piece.strip()
+        if not clean:
+            continue
+        quoted = ((clean.startswith('"') and clean.endswith('"')) or
+                  (clean.startswith('“') and clean.endswith('”')))
+        spoken = clean[1:-1].strip() if quoted else clean
+        if spoken:
+            voice = dialogue_voices[dialogue_index % len(dialogue_voices)] if quoted else preferred_voice
+            if quoted:
+                dialogue_index += 1
+            segments.append((spoken, voice))
+    if not segments:
+        raise ValueError("Voice synthesis received no speakable text")
+
+    word_cues: list[dict] = []
+    voice_sequence: list[str] = []
+    cursor = 0.0
+    with tempfile.TemporaryDirectory(prefix="relic-loop-voice-") as folder:
+        root = Path(folder)
+        concat_lines: list[str] = []
+        for index, (segment_text, requested_voice) in enumerate(segments):
+            chunk = root / f"segment_{index:03d}.mp3"
+            padded = root / f"segment_{index:03d}_padded.mp3"
+            voice_candidates = [requested_voice]
+            if requested_voice != preferred_voice:
+                voice_candidates.append(preferred_voice)
+            last_error = None
+            segment_cues: list[dict] = []
+            used_voice = requested_voice
+            for voice in voice_candidates:
+                try:
+                    communicate = edge_tts.Communicate(segment_text, voice, rate=rate, pitch=pitch)
+                    segment_cues = []
+                    with open(chunk, "wb") as audio_file:
+                        async for event in communicate.stream():
+                            if event.get("type") == "audio":
+                                audio_file.write(event["data"])
+                            elif event.get("type") == "WordBoundary":
+                                offset = float(event.get("offset", 0)) / 10_000_000
+                                duration = float(event.get("duration", 0)) / 10_000_000
+                                segment_cues.append({"start": offset, "end": offset + duration,
+                                                     "text": event.get("text", "")})
+                    if chunk.is_file() and chunk.stat().st_size >= 2000 and segment_cues:
+                        used_voice = voice
+                        break
+                    raise RuntimeError("TTS segment returned no usable audio or word timings")
+                except Exception as exc:
+                    last_error = exc
+                    if chunk.exists():
+                        chunk.unlink()
+            else:
+                raise RuntimeError(f"TTS failed for a narration/dialogue segment: {last_error}")
+
+            # Add a short breath after each segment. The added duration is included
+            # in the next segment's word-boundary offsets.
+            if index < len(segments) - 1:
+                _run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                      "-i", str(chunk), "-af", "apad=pad_dur=0.16",
+                      "-c:a", "libmp3lame", "-q:a", "3", str(padded)], timeout=60)
+                selected = padded
+            else:
+                selected = chunk
+            duration = _duration(selected)
+            for cue in segment_cues:
+                word_cues.append({"start": cursor + cue["start"],
+                                  "end": cursor + cue["end"], "text": cue["text"]})
+            cursor += duration
+            voice_sequence.append(used_voice)
+            concat_lines.append("file '" + str(selected.resolve()).replace("'", "'\\''") + "'")
+
+        concat_file = root / "segments.txt"
+        concat_file.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+        _run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+              "-f", "concat", "-safe", "0", "-i", str(concat_file),
+              "-c:a", "libmp3lame", "-q:a", "3", str(target)], timeout=180)
+
+    if not target.is_file() or target.stat().st_size < 5000:
+        raise RuntimeError("Performed TTS did not produce a usable narration track")
+    if not word_cues:
+        raise RuntimeError("Performed TTS produced no word-boundary events")
+    unique_voices = list(dict.fromkeys(voice_sequence))
+    print(f"[VOICE] performed narration generated across {len(segments)} segments; voices: {', '.join(unique_voices)}")
+    return ", ".join(unique_voices), word_cues
 
 def _duration(path: Path) -> float:
     raw = _run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -242,7 +311,10 @@ def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedb
     """Retry out-of-range drafts with progressively tighter word-count instructions."""
     last_error = None
     hook_style = HOOK_STYLES[(int(time.strftime("%j")) + len(topic or "")) % len(HOOK_STYLES)]
-    for target_words in ((180, 215), (180, 205), (180, 195)):
+    # Keep one source of truth for the story length. Narrowing the range on
+    # retries made valid 196-215 word scripts fail after the first attempt.
+    target_words = (180, 215)
+    for attempt in range(3):
         brief = CreativeBrief(topic=topic, hook_style=hook_style,
                               duration_seconds=(50, 90), target_words=target_words)
         try:
@@ -253,7 +325,7 @@ def _generate_valid_story(client, model: str, topic: str, feedback: QualityFeedb
             if "words; expected" not in str(exc):
                 raise
             last_error = exc
-            print(f"[CREATIVE AI] Draft outside {target_words[0]}-{target_words[1]} words; requesting a tighter rewrite")
+            print(f"[CREATIVE AI] Draft outside {target_words[0]}-{target_words[1]} words; requesting a fresh draft ({attempt + 1}/3)")
     raise ValueError(f"Creative AI could not produce a story within 180-215 words after three attempts: {last_error}")
 
 
