@@ -8,11 +8,16 @@ on:
         required: false
         type: string
         default: ""
+      publish:
+        description: "Publish the finished Short publicly (default: preview artifact only)"
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Nigeria time (WAT, UTC+1): 06:00, 12:00, 18:00, and 00:00 daily.
     - cron: "0 5,11,17,23 * * *"
   push:
-    branches: [feature/relic-loop-new-pipeline]
+    branches: [main, feature/relic-loop-new-pipeline]
     paths:
       - ".github/triggers/relic-loop-video-run.txt"
 
@@ -185,7 +190,7 @@ jobs:
 
       - name: Publish finished Short publicly
         id: publish
-        if: success()
+        if: success() && inputs.publish == true
         env:
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
