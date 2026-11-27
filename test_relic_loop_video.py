@@ -31,7 +31,7 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertNotIn("Milo drops his lunchbox", generic)
 
     def test_overlength_story_is_retried_without_loosening_word_limit(self):
-        valid = {"title": "A Story", "narration": " ".join(["word"] * 190),
+        valid = {"title": "A Story", "narration": " ".join(["word"] * 210),
                  "protagonist": "Milo", "supporting_characters": [], "setting": "A shop"}
         with patch("relic_loop_video.generate_story",
                    side_effect=[ValueError("Story has 221 words; expected 180-215"), valid]) as generate:
@@ -40,7 +40,7 @@ class RelicLoopVideoTests(unittest.TestCase):
         self.assertIn(result["hook_style"], ("curiosity gap", "in-medias-res action", "mystery reveal", "emotional contradiction", "unexpected reversal"))
         self.assertEqual(generate.call_count, 2)
         self.assertEqual(generate.call_args_list[0].args[2].target_words, (180, 215))
-        self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 205))
+        self.assertEqual(generate.call_args_list[1].args[2].target_words, (180, 215))
 
 
     def test_word_level_captions_are_sidecar_and_not_burned_in(self):
