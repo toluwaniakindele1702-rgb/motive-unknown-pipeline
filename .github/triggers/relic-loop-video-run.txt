@@ -9,3 +9,5 @@ Preview run requested 2026-11-27: validate consistent 180-215 word range, perfor
 Preview rerun requested 2026-11-27: regression test now expects the consistent 180-215 word range; run offline checks, generate MP4, upload artifact only, do not publish publicly.
 
 Preview rerun requested 2026-11-27: enforce a minimum of 180 narration words only; no upper word-count limit. Verify offline tests, generate MP4 and upload artifact only; do not publish publicly.
+
+Fix Groq completion truncation: adaptive 8192/16384/32768-token retries; run Creative AI regression tests.
