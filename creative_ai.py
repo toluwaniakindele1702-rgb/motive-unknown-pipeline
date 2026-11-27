@@ -17,7 +17,7 @@ class CreativeBrief:
     topic: str = ""
     hook_style: str = ""
     duration_seconds: tuple[int, int] = (50, 90)
-    target_words: tuple[int, int] = (180, 215)
+    target_words: tuple[int, int] = (180, 0)
     protagonist: str = "one expressive 2D stickman"
     visual_style: str = (
         "consistent expressive 2D stickman cartoon; pale round head, simple "
@@ -130,7 +130,7 @@ If the answer to any key question is no, discard or rewrite the weak material. D
 VOICEOVER AND VIDEO:
 Write for a lively performed comedy scene, not a single narrator reading every line in the same tone. Put every spoken dialogue line in quotation marks; keep narration outside quotation marks. Make each dialogue turn a short, complete spoken line, with clear speaker attribution established naturally in the surrounding text. Use distinct character personalities and conversational rhythm; the production voice system will perform quoted dialogue separately from narration. Include occasional concise reaction beats and punctuation that supports natural pauses, but do not add stage directions that the audience must hear. Avoid dense narration and complicated staging. Every visual gag must be understandable instantly on a phone screen. Keep character identities, props and locations consistent. Safe for a broad audience; no graphic violence, sexual content or dangerous instructions.
 
-Create one complete comedy for a 50–90 second Short, using 180–215 narration words. Prioritise laugh density and natural dialogue over plot complexity. The comedy should feel like a funny scene viewers stumbled into, not a conventional short story.
+Create one complete comedy for a 50–90 second Short, using at least 180 narration words. There is no maximum word count. Prioritise a coherent, complete and entertaining story; never cut the story off just to fit a word ceiling. Prioritise laugh density and natural dialogue over plot complexity. The comedy should feel like a funny scene viewers stumbled into, not a conventional short story.
 
 Return ONLY valid JSON with exactly these keys:
 {"title":"...","narration":"...","protagonist":"...","supporting_characters":["..."],"setting":"..."}
@@ -165,9 +165,9 @@ def validate_story(value: Mapping[str, Any], brief: CreativeBrief | None = None)
     if not story["title"]:
         raise ValueError("Creative AI story is missing a title")
     count = word_count(story["narration"])
-    low, high = brief.target_words
-    if not low <= count <= high:
-        raise ValueError(f"Story has {count} words; expected {low}-{high}")
+    low, _ = brief.target_words
+    if count < low:
+        raise ValueError(f"Story has {count} words; minimum is {low}")
     supporting = story["supporting_characters"]
     if not isinstance(supporting, list):
         supporting = []
@@ -181,7 +181,7 @@ def build_user_prompt(
     recent_story_summaries: Sequence[str] = (),
 ) -> str:
     low_seconds, high_seconds = brief.duration_seconds
-    low_words, high_words = brief.target_words
+    low_words, _ = brief.target_words
     topic = brief.topic.strip() or "Choose a fresh, specific everyday premise."
     recent = [str(x).strip() for x in recent_story_summaries if str(x).strip()][:5]
     recent_text = "\n".join("- " + x for x in recent) if recent else "No recent-story history supplied."
@@ -189,7 +189,7 @@ def build_user_prompt(
 
 Topic or seed: {topic}
 Voiceover duration: {low_seconds}-{high_seconds} seconds.
-Narration length: {low_words}-{high_words} words.
+Narration length: at least {low_words} words. There is NO maximum word count. Do not shorten a complete, coherent story merely to meet an upper limit.
 Protagonist: {brief.protagonist}
 Visual identity to preserve: {brief.visual_style}
 
